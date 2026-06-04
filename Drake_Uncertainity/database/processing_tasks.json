@@ -1,0 +1,116 @@
+{
+  "tasks": {
+    "569e666c-129e-4fcd-a5fa-b413fb44dba2": {
+      "status": "completed",
+      "progress": 100,
+      "message": "LAS file processed successfully.",
+      "file_name": "660810-D-4H.las",
+      "user_email": "ajaybevara1@gmail.com",
+      "analysis_id": "3f30c3ae-9551-4edd-a4d1-a2732dae3232"
+    },
+    "73b13cf0-93e8-4b4c-85e2-468f611aacaf": {
+      "status": "queued",
+      "progress": 5,
+      "message": "File uploaded. Waiting to start parsing...",
+      "file_name": "660810-C-4H.las",
+      "user_email": "ajaybevara1@gmail.com",
+      "analysis_id": null
+    },
+    "d4e2d197-e9dc-4910-a066-8208f458dbfa": {
+      "status": "completed",
+      "progress": 100,
+      "message": "LAS file processed successfully.",
+      "file_name": "dado2.las",
+      "user_email": "ajaybevara1@gmail.com",
+      "analysis_id": "523fe3ea-28e5-4278-bf10-fd368eb4d991"
+    },
+    "0254b1b9-6638-4254-b00d-0cf59b54df60": {
+      "status": "completed",
+      "progress": 100,
+      "message": "LAS file processed successfully.",
+      "file_name": "dado6.las",
+      "user_email": "ajaybevara1@gmail.com",
+      "analysis_id": "5e5a4969-dffc-4d04-ba03-3386c96f607d"
+    },
+    "4a27f544-de54-4ad6-afe3-e7c4c3ed5bbc": {
+      "status": "completed",
+      "progress": 100,
+      "message": "LAS file processed successfully.",
+      "file_name": "dado2.las",
+      "user_email": "ajaybevara1@gmail.com",
+      "analysis_id": "b3baf719-1124-4ed8-8140-4be75286e808"
+    },
+    "74a92b0c-eed8-4e4d-a5a7-6de6d34155ac": {
+      "status": "completed",
+      "progress": 100,
+      "message": "LAS file processed successfully.",
+      "file_name": "dado2.las",
+      "user_email": "ajaybevara1@gmail.com",
+      "analysis_id": "47f4f44b-31f4-4042-80ab-2ec1c62bfb36"
+    },
+    "3946bb9b-d9b5-4ff6-8c3e-9ce8bc9fd836": {
+      "status": "completed",
+      "progress": 100,
+      "message": "LAS file processed successfully.",
+      "file_name": "660810-C-4H.las",
+      "user_email": "ajaybevara1@gmail.com",
+      "analysis_id": "72ef24c8-bb7a-4851-a153-731436773666"
+    },
+    "1122ed71-f6fe-475c-aaa6-9efc9d0af7ab": {
+      "status": "completed",
+      "progress": 100,
+      "message": "LAS file processed successfully.",
+      "file_name": "660810-C-4H.las",
+      "user_email": "ajaybevara1@gmail.com",
+      "analysis_id": "3e0169dd-11b1-411f-8e34-2f70f5f4a0ce"
+    },
+    "ace5dddb-8448-4709-8c05-442f2cc6e3bf": {
+      "status": "completed",
+      "progress": 100,
+      "message": "LAS file processed successfully.",
+      "file_name": "dado2.las",
+      "user_email": "ajaybevara1@gmail.com",
+      "analysis_id": "631b9344-6141-4a3d-8c65-0170b1e125e9"
+    },
+    "41581497-d433-4e64-8c7b-e9ea77691d64": {
+      "status": "completed",
+      "progress": 100,
+      "message": "LAS file processed successfully.",
+      "file_name": "dado2.las",
+      "user_email": "ajaybevara1@gmail.com",
+      "analysis_id": "90cac13a-ce0d-448e-9cfb-c2f4be4206bc"
+    },
+    "073d53b9-b031-4bfe-bf4d-03aa022d00a8": {
+      "status": "queued",
+      "progress": 5,
+      "message": "File uploaded. Waiting to start parsing...",
+      "file_name": "dado2.las",
+      "user_email": "guest@drakeai.local",
+      "analysis_id": null
+    },
+    "198d3f0d-8317-4818-aa48-3906282ac385": {
+      "status": "completed",
+      "progress": 100,
+      "message": "LAS file processed successfully.",
+      "file_name": "dado2.las",
+      "user_email": "guest@drakeai.local",
+      "analysis_id": "bb8da273-2a82-436a-b4c9-f4994b5b86e7"
+    },
+    "2a0ef9ad-2b02-4ffa-834d-8c47ec8b4949": {
+      "status": "completed",
+      "progress": 100,
+      "message": "LAS file processed successfully.",
+      "file_name": "dado2.las",
+      "user_email": "guest@drakeai.local",
+      "analysis_id": "0f073ec1-49b7-4856-94a4-467e586ae87f"
+    },
+    "c8ce0a11-8f73-4e7d-8092-66263877f7d5": {
+      "status": "completed",
+      "progress": 100,
+      "message": "LAS file processed successfully.",
+      "file_name": "dado2.las",
+      "user_email": "guest@drakeai.local",
+      "analysis_id": "cd74a77f-034f-4116-8c08-0c261300ab2b"
+    }
+  }
+}

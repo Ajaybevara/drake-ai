@@ -1,0 +1,10 @@
+Flask
+lasio
+pandas
+numpy
+openpyxl
+plotly
+scikit-learn
+
+scipy
+xgboost

@@ -1,0 +1,103 @@
+version: "3.9"
+
+services:
+  # ── PostgreSQL ──────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: drakeai_postgres
+    environment:
+      POSTGRES_DB: drakeai
+      POSTGRES_USER: drakeai
+      POSTGRES_PASSWORD: drakeai_secret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drakeai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ──────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: drakeai_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # ── MinIO (S3-compatible file storage) ─────────
+  minio:
+    image: minio/minio:latest
+    container_name: drakeai_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: drakeai_minio
+      MINIO_ROOT_PASSWORD: drakeai_minio_secret
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # ── Backend (FastAPI) ──────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: drakeai_backend
+    environment:
+      DATABASE_URL: postgresql://drakeai:drakeai_secret@postgres:5432/drakeai
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: drakeai_minio
+      MINIO_SECRET_KEY: drakeai_minio_secret
+      MINIO_BUCKET: drakeai-files
+      SECRET_KEY: super-secret-jwt-key-change-in-production
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 1440
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - ./backend:/app
+      - upload_data:/app/uploads
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: >
+      sh -c "alembic upgrade head &&
+             python -c 'from app.core.seed import seed_db; seed_db()' &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  # ── Frontend (React + Vite) ────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: drakeai_frontend
+    environment:
+      VITE_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  upload_data:
