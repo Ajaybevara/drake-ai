@@ -113,6 +113,10 @@ export const seismicApi = {
     freq_high?: number
     gain?: number
     sample_interval_ms?: number
+    workflow?: string
+    dimension?: string
+    dl_epochs?: number
+    dl_batch?: number
   }) => api.post('/seismic/inspect', params),
   lowFrequencyEnhancement: (params: {
     file_name: string
@@ -121,6 +125,10 @@ export const seismicApi = {
     freq_high?: number
     gain?: number
     sample_interval_ms?: number
+    workflow?: string
+    dimension?: string
+    dl_epochs?: number
+    dl_batch?: number
   }) => api.post('/seismic/low-frequency-enhancement', params),
 }
 

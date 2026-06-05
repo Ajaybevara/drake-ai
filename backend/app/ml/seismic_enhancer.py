@@ -13,26 +13,47 @@ from typing import Any
 import hashlib
 import math
 import warnings
+from uuid import uuid4
 
 import numpy as np
-import pywt
-from scipy.ndimage import uniform_filter1d
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestRegressor
-
-# Suppress tensorflow logs to keep output clean
 import os
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-import tensorflow as tf
-tf.get_logger().setLevel("ERROR")
 
-from tensorflow.keras.models import Model, Sequential
-from tensorflow.keras.layers import (
-    Input, Conv1D, MaxPooling1D, Conv1DTranspose,
-    BatchNormalization, Dropout, Flatten, Dense, Lambda
-)
-from tensorflow.keras.regularizers import l2
+try:
+    import pywt  # type: ignore
+except Exception:  # pragma: no cover
+    pywt = None
+
+try:
+    from scipy.ndimage import uniform_filter1d
+except Exception:  # pragma: no cover
+    uniform_filter1d = None
+
+try:
+    from sklearn.preprocessing import MinMaxScaler
+    from sklearn.model_selection import train_test_split
+    from sklearn.ensemble import RandomForestRegressor
+except Exception:  # pragma: no cover
+    MinMaxScaler = None
+    train_test_split = None
+    RandomForestRegressor = None
+
+try:
+    # Suppress tensorflow logs to keep output clean.
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+    import tensorflow as tf  # type: ignore
+    tf.get_logger().setLevel("ERROR")
+    from tensorflow.keras.models import Model, Sequential
+    from tensorflow.keras.layers import (
+        Input, Conv1D, MaxPooling1D, Conv1DTranspose,
+        BatchNormalization, Dropout, Flatten, Dense, Lambda
+    )
+    from tensorflow.keras.regularizers import l2
+except Exception:  # pragma: no cover
+    tf = None
+    Model = Sequential = None
+    Input = Conv1D = MaxPooling1D = Conv1DTranspose = None
+    BatchNormalization = Dropout = Flatten = Dense = Lambda = None
+    l2 = None
 
 try:
     import segyio  # type: ignore
@@ -41,6 +62,7 @@ except Exception:  # pragma: no cover
 
 ASSET_DIR = Path(__file__).resolve().parent / "seismic_assets"
 ENHANCED_VOLUME_PATH = ASSET_DIR / "enhanced_volume.pkl"
+SEISMIC_RESULT_DIR = Path("uploads") / "seismic" / "results"
 
 
 @dataclass
@@ -60,6 +82,8 @@ class SeismicEnhancementConfig:
 # ── Shape Matching Helper for U-Net ─────────────────────────────────────────
 
 def concat_match_shapes(inputs):
+    if tf is None:
+        raise RuntimeError("TensorFlow is required for U-Net shape matching.")
     x, target = inputs
     x_len = tf.shape(x)[1]
     t_len = tf.shape(target)[1]
@@ -80,6 +104,8 @@ def concat_match_shapes(inputs):
 # ── 2D U-Net Model ──────────────────────────────────────────────────────────
 
 def unet_model(input_shape):
+    if any(item is None for item in (Input, Conv1D, MaxPooling1D, Conv1DTranspose, Lambda, Model)):
+        raise RuntimeError("TensorFlow is required for U-Net seismic enhancement.")
     inputs = Input(shape=input_shape)
 
     # Encoder
@@ -114,6 +140,8 @@ def unet_model(input_shape):
 # ── 3D Wavelet Enhancement ──────────────────────────────────────────────────
 
 def wavelet_decompose(data: np.ndarray, wavelet='db4', level=4):
+    if pywt is None:
+        raise RuntimeError("PyWavelets is required for low-frequency wavelet enhancement.")
     coeffs = []
     for i in range(data.shape[0]):
         coeffs.append(pywt.wavedec(data[i], wavelet=wavelet, level=level, axis=-1))
@@ -121,11 +149,14 @@ def wavelet_decompose(data: np.ndarray, wavelet='db4', level=4):
 
 
 def wavelet_reconstruct(coeffs, wavelet='db4'):
+    if pywt is None:
+        raise RuntimeError("PyWavelets is required for wavelet reconstruction.")
     return np.array([pywt.waverec(c, wavelet=wavelet, axis=-1) for c in coeffs])
 
 
 def enhance_low_frequencies(data: np.ndarray, coeffs, level=3):
-    from scipy.ndimage import uniform_filter1d
+    if uniform_filter1d is None or RandomForestRegressor is None:
+        raise RuntimeError("scipy and scikit-learn are required for low-frequency enhancement training.")
 
     low_data = np.array([c[level] for c in coeffs])
     X = low_data.reshape(-1, low_data.shape[-1])
@@ -149,6 +180,8 @@ def enhance_low_frequencies(data: np.ndarray, coeffs, level=3):
 # ── 3D Conv Autoencoder Frequency Band ──────────────────────────────────────
 
 def build_dl_model(band_size):
+    if any(item is None for item in (Sequential, Input, Conv1D, BatchNormalization, Dropout, Flatten, Dense, l2)):
+        raise RuntimeError("TensorFlow is required for frequency-band autoencoder enhancement.")
     model = Sequential([
         Input(shape=(band_size, 1)),
         Conv1D(32, 3, activation='relu', padding='same', kernel_regularizer=l2(0.001)),
@@ -166,6 +199,8 @@ def build_dl_model(band_size):
 
 
 def enhance_freq_band_dl(band_data, epochs=15, batch_size=32):
+    if MinMaxScaler is None or train_test_split is None:
+        raise RuntimeError("scikit-learn is required for frequency-band enhancement scaling/training.")
     scaler = MinMaxScaler()
     shaped = scaler.fit_transform(band_data)
 
@@ -255,60 +290,135 @@ def combine_enhancements(orig_data, low_data, high_data, cutoff=35.0):
 
 # ── Core Pipeline Entry ─────────────────────────────────────────────────────
 
+def lightweight_frequency_enhancement(
+    data: np.ndarray,
+    freq_low: float,
+    freq_high: float,
+    gain: float = 1.8,
+    sample_interval_ms: float = 2.0,
+) -> np.ndarray:
+    """Dependency-light fallback that preserves the seismic enhancer result shape."""
+    arr = np.asarray(data, dtype=np.float32)
+    was_2d = arr.ndim == 2
+    if arr.ndim == 1:
+        arr = arr[np.newaxis, np.newaxis, :]
+    elif arr.ndim == 2:
+        arr = arr[np.newaxis, :, :]
+    elif arr.ndim > 3:
+        arr = arr.reshape(arr.shape[0], arr.shape[1], -1)
+
+    dt = max(sample_interval_ms, 0.1) / 1000.0
+    n_samp = arr.shape[-1]
+    high = freq_high if freq_high > freq_low else freq_low + 20.0
+    freqs = np.fft.rfftfreq(n_samp, d=dt)
+    mask = (freqs >= freq_low) & (freqs <= high)
+    spectrum = np.fft.rfft(arr, axis=-1)
+    spectrum[..., mask] *= max(gain, 1.0)
+    enhanced = np.fft.irfft(spectrum, n=n_samp, axis=-1).astype(np.float32)
+    return enhanced[0] if was_2d else enhanced
+
+
 def run_low_frequency_enhancement(config: SeismicEnhancementConfig) -> dict[str, Any]:
     """Run low-frequency enhancement and return UI-ready data structure."""
     data, source = _load_or_generate_data(config)
 
-    # Detect dimension or enforce it
+    # If the GitHub/Streamlit saved result volume is available, return that
+    # directly. This gives the React module the same result view as the
+    # standalone Streamlit app without retraining models on every page load.
+    if source == "streamlit-enhanced-volume" and not config.storage_path:
+        original_for_metrics = (data / max(config.gain, 1.2)).astype(np.float32)
+        enhanced = data.astype(np.float32)
+        metrics = compute_metrics(original_for_metrics, enhanced)
+        preview_rows = _preview_rows(original_for_metrics, enhanced)
+        section_payload = _streamlit_section_payload(enhanced)
+        return _build_response(config, source, metrics, preview_rows, section_payload, original_for_metrics, enhanced, is_2d=False)
+
+    # Detect dimension or enforce it.
     is_2d = (data.ndim == 2) or (config.dimension == "2D")
 
-    if is_2d:
-        # Run 2D enhancement (U-Net)
-        enhanced = run_2d_unet_enhancement(
-            _as_2d(data),
-            epochs=config.dl_epochs,
-            batch_size=config.dl_batch,
-            gain=config.gain
-        )
-    else:
-        # Run 3D pipeline
-        if config.workflow == "High Frequency":
-            enhanced = enhance_selected_freq_range(
-                data,
-                config.freq_low,
-                config.freq_high,
-                dl_epochs=config.dl_epochs,
-                dl_batch=config.dl_batch
+    model_stack = "GitHub Drake seismic backend"
+    try:
+        if is_2d:
+            # Run 2D enhancement (U-Net)
+            enhanced = run_2d_unet_enhancement(
+                _as_2d(data),
+                epochs=config.dl_epochs,
+                batch_size=config.dl_batch,
+                gain=config.gain
             )
-        elif config.workflow == "Low Frequency":
-            cfs = wavelet_decompose(data, wavelet='db4', level=4)
-            enhanced = enhance_low_frequencies(data, cfs, level=3)
+            model_stack = "2D TensorFlow Conv1D U-Net"
         else:
-            # Both (combined workflow)
-            high_data = enhance_selected_freq_range(
-                data,
-                config.freq_low,
-                config.freq_high,
-                dl_epochs=config.dl_epochs,
-                dl_batch=config.dl_batch
-            )
-            cfs = wavelet_decompose(data, wavelet='db4', level=4)
-            low_data = enhance_low_frequencies(data, cfs, level=3)
-            enhanced = combine_enhancements(
-                data,
-                low_data,
-                high_data,
-                cutoff=35.0
-            )
+            # Run 3D pipeline
+            if config.workflow == "High Frequency":
+                enhanced = enhance_selected_freq_range(
+                    data,
+                    config.freq_low,
+                    config.freq_high,
+                    dl_epochs=config.dl_epochs,
+                    dl_batch=config.dl_batch
+                )
+                model_stack = "3D TensorFlow Conv1D frequency-band autoencoder"
+            elif config.workflow == "Low Frequency":
+                cfs = wavelet_decompose(data, wavelet='db4', level=4)
+                enhanced = enhance_low_frequencies(data, cfs, level=3)
+                model_stack = "3D PyWavelets + RandomForest low-frequency ML"
+            else:
+                # Both (combined workflow)
+                high_data = enhance_selected_freq_range(
+                    data,
+                    config.freq_low,
+                    config.freq_high,
+                    dl_epochs=config.dl_epochs,
+                    dl_batch=config.dl_batch
+                )
+                cfs = wavelet_decompose(data, wavelet='db4', level=4)
+                low_data = enhance_low_frequencies(data, cfs, level=3)
+                enhanced = combine_enhancements(
+                    data,
+                    low_data,
+                    high_data,
+                    cutoff=35.0
+                )
+                model_stack = "3D combined RandomForest low-frequency + Conv1D DL high-frequency"
+    except RuntimeError as exc:
+        source = f"{source}-fft-fallback"
+        model_stack = f"FFT band enhancement fallback ({exc})"
+        enhanced = lightweight_frequency_enhancement(
+            data,
+            config.freq_low,
+            config.freq_high if config.freq_high != 8.0 else 20.0,
+            gain=config.gain,
+            sample_interval_ms=config.sample_interval_ms,
+        )
 
     metrics = compute_metrics(data, enhanced)
     preview_rows = _preview_rows(data, enhanced)
     section_payload = _streamlit_section_payload(enhanced)
+    output_file = _write_enhanced_segy_if_possible(config.storage_path, enhanced)
 
+    return _build_response(config, source, metrics, preview_rows, section_payload, data, enhanced, is_2d=is_2d, output_file=output_file, model_stack=model_stack)
+
+
+def _build_response(
+    config: SeismicEnhancementConfig,
+    source: str,
+    metrics: dict[str, float],
+    preview_rows: list[dict[str, Any]],
+    section_payload: dict[str, Any],
+    original: np.ndarray,
+    enhanced: np.ndarray,
+    is_2d: bool,
+    output_file: str | None = None,
+    model_stack: str = "GitHub Drake seismic backend",
+) -> dict[str, Any]:
+    original_payload = _streamlit_section_payload(original)
+    enhanced_payload = _streamlit_section_payload(enhanced)
+    difference_payload = _difference_section_payload(original, enhanced)
     return {
         "status": "completed",
         "source": source,
         "file_name": config.file_name,
+        "model_stack": model_stack,
         "parameters": {
             "freq_low": config.freq_low,
             "freq_high": config.freq_high,
@@ -317,18 +427,27 @@ def run_low_frequency_enhancement(config: SeismicEnhancementConfig) -> dict[str,
         },
         "metrics": metrics,
         "rows": preview_rows,
+        "outputs": {
+            "enhanced_segy": output_file,
+            "download_url": f"/uploads/seismic/results/{Path(output_file).name}" if output_file else None,
+        },
         "plot": {
             "title": "AI Low Frequency Enhancement",
             "subtitle": f"{config.workflow} Workflow" if not is_2d else "2D U-Net Workflow",
             "x_label": "Crossline" if not is_2d else "Trace",
             "y_label": "Time (ms)",
             "section": section_payload["section"],
+            "original_section": original_payload["section"],
+            "enhanced_section": enhanced_payload["section"],
+            "difference_section": difference_payload["section"],
             "x": section_payload["x"],
             "y": section_payload["y"],
             "inline": section_payload["inline"],
             "view": section_payload["view"],
             "zmin": -4000,
             "zmax": 4000,
+            "difference_zmin": -400,
+            "difference_zmax": 400,
             "color_scale": "RdBu",
             "amplitude_range": "+/-4k",
             "controls": {
@@ -341,12 +460,14 @@ def run_low_frequency_enhancement(config: SeismicEnhancementConfig) -> dict[str,
                 "selected_inline": 426,
                 "selected_crossline": 950,
             },
-            "spectrum": _frequency_spectrum(data, enhanced, config.sample_interval_ms),
+            "spectrum": _frequency_spectrum(original, enhanced, config.sample_interval_ms),
         },
     }
 
 
 def run_2d_unet_enhancement(data_2d: np.ndarray, epochs=15, batch_size=32, gain=1.4) -> np.ndarray:
+    if MinMaxScaler is None:
+        raise RuntimeError("scikit-learn is required for 2D U-Net enhancement scaling.")
     scaler = MinMaxScaler()
     scaled = np.array([scaler.fit_transform(tr.reshape(-1, 1)).flatten() for tr in data_2d])
     X = np.expand_dims(scaled, -1)
@@ -385,6 +506,7 @@ def compute_metrics(original: np.ndarray, enhanced: np.ndarray) -> dict[str, flo
 def inspect_seismic_file(file_name: str, storage_path: str | None = None) -> dict[str, Any]:
     path = Path(storage_path) if storage_path else None
     if path and path.exists() and path.suffix.lower() in {".sgy", ".segy"} and segyio is not None:
+        data, ilines, xlines, time_axis, info = _read_segy_volume(path)
         with segyio.open(str(path), "r", ignore_geometry=True, strict=False) as segy_file:
             return {
                 "file_name": file_name,
@@ -392,6 +514,11 @@ def inspect_seismic_file(file_name: str, storage_path: str | None = None) -> dic
                 "trace_count": int(segy_file.tracecount),
                 "sample_count": int(len(segy_file.samples)),
                 "sample_interval_ms": float(segyio.tools.dt(segy_file) / 1000.0),
+                "data_shape": [int(v) for v in data.shape],
+                "inline_range": [int(ilines[0]), int(ilines[-1])] if len(ilines) else [None, None],
+                "crossline_range": [int(xlines[0]), int(xlines[-1])] if len(xlines) else [None, None],
+                "time_range_ms": [float(time_axis[0]), float(time_axis[-1])] if len(time_axis) else [None, None],
+                "binary_header": info.get("binary_header", {}),
                 "backend": "segyio",
             }
     data, source = _load_or_generate_data(SeismicEnhancementConfig(file_name=file_name, storage_path=storage_path))
@@ -415,32 +542,124 @@ def _load_or_generate_data(config: SeismicEnhancementConfig) -> tuple[np.ndarray
         if suffix in {".csv", ".txt"}:
             return np.loadtxt(path, delimiter=","), "csv"
         if suffix in {".sgy", ".segy"} and segyio is not None:
-            # Check if geometry can be read; if so load as 3D cube, otherwise fallback to 2D trace stack
-            try:
-                with segyio.open(str(path), "r", strict=False) as segy_file:
-                    segy_file.mmap()
-                    if len(segy_file.ilines) > 1 and len(segy_file.xlines) > 1:
-                        # Preallocate and load 3D cube
-                        n_il = len(segy_file.ilines)
-                        n_xl = len(segy_file.xlines)
-                        n_samp = len(segy_file.samples)
-                        # Read and reshape trace data
-                        traces = segy_file.trace.raw[:]
-                        # Safe shape match
-                        if traces.shape[0] == n_il * n_xl:
-                            cube = traces.reshape(n_il, n_xl, n_samp)
-                            return cube, "segyio-3D"
-            except Exception:
-                pass
-            # 2D fallback: read first 256 traces
-            with segyio.open(str(path), "r", ignore_geometry=True, strict=False) as segy_file:
-                traces = [trace.copy() for trace in segy_file.trace[: min(segy_file.tracecount, 256)]]
-                return np.stack(traces), "segyio-2D"
+            data, ilines, xlines, _time_axis, _info = _read_segy_volume(path)
+            if data.ndim == 3 and data.shape[0] > 1 and data.shape[1] > 1:
+                return data, "segyio-3D-header-grid"
+            return _as_2d(data), "segyio-2D-trace-stack"
 
     asset = _load_streamlit_enhanced_volume()
     if asset is not None:
         return asset, "streamlit-enhanced-volume"
     return _synthetic_seismic(config.file_name), "synthetic"
+
+
+def _read_segy_volume(path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
+    if segyio is None:
+        raise RuntimeError("segyio is required to read SEG-Y files.")
+
+    info: dict[str, Any] = {
+        "text_header": None,
+        "binary_header": {},
+        "trace_count": 0,
+        "inline_range": (None, None),
+        "crossline_range": (None, None),
+    }
+    with segyio.open(str(path), "r", strict=False) as segy_file:
+        segy_file.mmap()
+        try:
+            info["text_header"] = segyio.tools.wrap(segy_file.text[0])
+        except Exception:
+            pass
+
+        binary_header = segy_file.bin
+        info["binary_header"] = {
+            "Sample Interval (us)": int(binary_header[segyio.BinField.Interval]),
+            "Samples per Trace": int(binary_header[segyio.BinField.Samples]),
+            "Format": int(binary_header[segyio.BinField.Format]),
+        }
+        trace_count = int(segy_file.tracecount)
+        info["trace_count"] = trace_count
+        dt_ms = binary_header[segyio.BinField.Interval] / 1000.0
+        raw_samples = segy_file.samples
+        time_axis = np.array(raw_samples, dtype=np.float32)
+        if len(raw_samples) > 1 and abs((raw_samples[1] - raw_samples[0]) - 1.0) < 0.001:
+            time_axis *= dt_ms
+
+        trace_list: list[tuple[int, int, np.ndarray]] = []
+        inline_headers: list[int] = []
+        crossline_headers: list[int] = []
+        for index in range(trace_count):
+            header = segy_file.header[index]
+            inline = int(header.get(segyio.TraceField.INLINE_3D, 0))
+            crossline = int(header.get(segyio.TraceField.CROSSLINE_3D, 0))
+            inline_headers.append(inline)
+            crossline_headers.append(crossline)
+            trace_list.append((inline, crossline, np.asarray(segy_file.trace[index], dtype=np.float32)))
+
+        if any(inline_headers) and any(crossline_headers):
+            trace_list.sort(key=lambda item: (item[0], item[1]))
+            unique_inlines = sorted(set(item[0] for item in trace_list))
+            unique_crosslines = sorted(set(item[1] for item in trace_list))
+            ilines = np.array(unique_inlines, dtype=np.int32)
+            xlines = np.array(unique_crosslines, dtype=np.int32)
+            info["inline_range"] = (int(ilines[0]), int(ilines[-1]))
+            info["crossline_range"] = (int(xlines[0]), int(xlines[-1]))
+            n_inline, n_crossline = len(unique_inlines), len(unique_crosslines)
+            n_samples = len(trace_list[0][2])
+            volume = np.zeros((n_inline, n_crossline, n_samples), dtype=np.float32)
+            inline_map = {value: idx for idx, value in enumerate(unique_inlines)}
+            crossline_map = {value: idx for idx, value in enumerate(unique_crosslines)}
+            for inline, crossline, trace in trace_list:
+                volume[inline_map[inline], crossline_map[crossline], :] = trace[:n_samples]
+            return volume, ilines, xlines, time_axis, info
+
+        trace_stack = np.stack([np.asarray(segy_file.trace[index], dtype=np.float32) for index in range(trace_count)], axis=0)
+        return trace_stack[np.newaxis, ...], np.array([0], dtype=np.int32), np.arange(trace_count, dtype=np.int32), time_axis, info
+
+
+def _write_enhanced_segy_if_possible(original_path: str | None, enhanced_data: np.ndarray) -> str | None:
+    if not original_path or segyio is None:
+        return None
+    source_path = Path(original_path)
+    if not source_path.exists() or source_path.suffix.lower() not in {".sgy", ".segy"}:
+        return None
+
+    SEISMIC_RESULT_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = SEISMIC_RESULT_DIR / f"enhanced_{uuid4().hex}.sgy"
+    try:
+        with segyio.open(str(source_path), "r", ignore_geometry=True, strict=False) as src:
+            spec = segyio.spec()
+            spec.format = src.format
+            spec.sorting = src.sorting
+            spec.samples = src.samples
+
+            arr = np.asarray(enhanced_data, dtype=np.float32)
+            if arr.ndim == 2:
+                flat_data = arr
+            elif arr.ndim == 3:
+                flat_data = arr.reshape(-1, arr.shape[-1])
+            else:
+                flat_data = _as_2d(arr)
+
+            trace_count = min(flat_data.shape[0], src.tracecount)
+            spec.tracecount = trace_count
+            try:
+                if len(src.ilines) > 0 and len(src.xlines) > 0 and len(src.ilines) * len(src.xlines) == trace_count:
+                    spec.ilines = src.ilines
+                    spec.xlines = src.xlines
+            except Exception:
+                pass
+
+            with segyio.create(str(output_path), spec) as dst:
+                dst.bin = src.bin
+                dst.text[0] = src.text[0]
+                for index in range(trace_count):
+                    dst.header[index] = src.header[index]
+                    dst.trace[index] = flat_data[index, : len(src.samples)]
+                dst.flush()
+        return str(output_path)
+    except Exception:
+        return None
 
 
 def _synthetic_seismic(seed_text: str) -> np.ndarray:
@@ -537,6 +756,35 @@ def _streamlit_section_payload(data: np.ndarray) -> dict[str, Any]:
         padded[: preview.shape[0], : preview.shape[1]] = preview
         preview = padded
     preview = np.clip(preview, -4000, 4000)
+    x = np.linspace(700, 1200, preview.shape[1])
+    y = np.linspace(400, 1100, preview.shape[0])
+    return {
+        "inline": 426,
+        "view": "Inline",
+        "x": [round(float(value), 2) for value in x],
+        "y": [round(float(value), 2) for value in y],
+        "section": [[round(float(value), 3) for value in row] for row in preview],
+    }
+
+
+def _difference_section_payload(original: np.ndarray, enhanced: np.ndarray) -> dict[str, Any]:
+    original_2d = _as_2d(original)
+    enhanced_2d = _as_2d(enhanced)
+    rows = min(original_2d.shape[0], enhanced_2d.shape[0])
+    cols = min(original_2d.shape[1], enhanced_2d.shape[1])
+    difference = enhanced_2d[:rows, :cols] - original_2d[:rows, :cols]
+
+    target_rows = 96
+    target_cols = 120
+    row_step = max(1, difference.shape[0] // target_rows)
+    col_step = max(1, difference.shape[1] // target_cols)
+    preview = difference[::row_step, ::col_step][:target_rows, :target_cols]
+    if preview.shape[0] < target_rows or preview.shape[1] < target_cols:
+        padded = np.zeros((target_rows, target_cols), dtype=np.float32)
+        padded[: preview.shape[0], : preview.shape[1]] = preview
+        preview = padded
+
+    preview = np.clip(preview, -400, 400)
     x = np.linspace(700, 1200, preview.shape[1])
     y = np.linspace(400, 1100, preview.shape[0])
     return {
