@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import FileUploadPanel from '../components/petrophysics/FileUploadPanel'
 import { useStore } from '../store'
 import { curvesApi, filesApi } from '../services/api'
+import StraightBar from '../components/petrophysics/StraightBar'
 
 export default function LogViewerPage() {
   const activeWell = useStore((state) => state.activeWell)
@@ -44,6 +45,7 @@ export default function LogViewerPage() {
         <div style={{ height: 340, padding: 22, borderRadius: 20, background: '#FFFFFF', border: '1px solid #E2E8F0' }}>
           <FileUploadPanel />
         </div>
+          <StraightBar />
 
         <div style={{ padding: 22, borderRadius: 20, background: '#FFFFFF', border: '1px solid #E2E8F0' }}>
           <div style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', marginBottom: 16 }}>Well Details From Uploaded LAS</div>

@@ -99,6 +99,21 @@ export const petrophysicsApi = {
 
 // Seismic
 export const seismicApi = {
+  uploadFile: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post('/seismic/files/upload', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  inspect: (params: {
+    file_name: string
+    storage_path?: string
+    freq_low?: number
+    freq_high?: number
+    gain?: number
+    sample_interval_ms?: number
+  }) => api.post('/seismic/inspect', params),
   lowFrequencyEnhancement: (params: {
     file_name: string
     storage_path?: string
