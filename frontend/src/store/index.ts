@@ -49,8 +49,10 @@ export interface ProjectFile {
   size: number
   uploadedAt: string
   status: ProjectFileStatus
-  category: 'las' | 'reports' | 'images' | 'tables' | 'digitizer'
+  category: 'las' | 'reports' | 'images' | 'tables' | 'digitizer' | 'seismic'
   compatibility: string[]
+  storagePath?: string
+  backendReady?: boolean
 }
 
 export interface LocalProject {
@@ -83,6 +85,7 @@ const writeLocalProjects = (projects: LocalProject[]) => {
 const classifyProjectFile = (file: File): Pick<ProjectFile, 'category' | 'compatibility' | 'status'> => {
   const name = file.name.toLowerCase()
   if (name.endsWith('.las')) return { category: 'las', compatibility: ['Petrophysics', 'CCUS'], status: 'Parsed' }
+  if (name.endsWith('.sgy') || name.endsWith('.segy') || name.endsWith('.npy')) return { category: 'seismic', compatibility: ['Seismic'], status: 'Ready' }
   if (name.endsWith('.pdf') || name.endsWith('.doc') || name.endsWith('.docx')) return { category: 'reports', compatibility: ['CCUS', 'Digitizer', 'Reports'], status: 'Ready' }
   if (name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.webp') || name.endsWith('.tif') || name.endsWith('.tiff')) return { category: 'images', compatibility: ['Digitizer'], status: 'Ready' }
   if (name.endsWith('.csv') || name.endsWith('.xls') || name.endsWith('.xlsx')) return { category: 'tables', compatibility: ['Production', 'CCUS', 'Reports'], status: 'Ready' }
@@ -135,7 +138,9 @@ interface AppState {
   createLocalProject: (name: string) => LocalProject
   openLocalProject: (id: string) => void
   addProjectFiles: (projectId: string, files: File[]) => void
+  addProjectFileRecords: (projectId: string, files: ProjectFile[]) => void
   deleteProjectFile: (projectId: string, fileId: string) => void
+  importLocalProject: (project: LocalProject) => LocalProject
   updateProjectModuleState: (projectId: string, moduleKey: string, patch: Record<string, any>) => void
   addProjectOutput: (projectId: string, output: { module: string; name: string; type: string }) => void
 }
@@ -267,6 +272,24 @@ export const useStore = create<AppState>((set) => ({
     writeLocalProjects(localProjects)
     return { localProjects, activeLocalProject }
   }),
+  addProjectFileRecords: (projectId, files) => set((state) => {
+    const now = new Date().toISOString()
+    const records = files.map(file => ({ ...file, projectId, uploadedAt: file.uploadedAt || now }))
+    const localProjects = state.localProjects.map(project => {
+      if (project.id !== projectId) return project
+      return {
+        ...project,
+        files: [...records, ...project.files],
+        activity: [
+          { id: `activity-${Date.now()}`, text: `${records.length} file(s) copied to local project storage`, createdAt: now },
+          ...project.activity,
+        ],
+      }
+    })
+    const activeLocalProject = localProjects.find(project => project.id === projectId) || state.activeLocalProject
+    writeLocalProjects(localProjects)
+    return { localProjects, activeLocalProject }
+  }),
   deleteProjectFile: (projectId, fileId) => set((state) => {
     const localProjects = state.localProjects.map(project =>
       project.id === projectId ? { ...project, files: project.files.filter(file => file.id !== fileId) } : project
@@ -275,6 +298,29 @@ export const useStore = create<AppState>((set) => ({
     writeLocalProjects(localProjects)
     return { localProjects, activeLocalProject }
   }),
+  importLocalProject: (incomingProject) => {
+    const now = new Date().toISOString()
+    const project: LocalProject = {
+      ...incomingProject,
+      id: incomingProject.id || `project-${Date.now()}`,
+      lastOpenedAt: now,
+      files: incomingProject.files || [],
+      selectedWells: incomingProject.selectedWells || [],
+      moduleState: incomingProject.moduleState || {},
+      outputs: incomingProject.outputs || [],
+      activity: [
+        { id: `activity-${Date.now()}`, text: `Project ${incomingProject.name} opened from local storage`, createdAt: now },
+        ...(incomingProject.activity || []),
+      ],
+    }
+    set((state) => {
+      const localProjects = [project, ...state.localProjects.filter(item => item.id !== project.id)]
+      writeLocalProjects(localProjects)
+      localStorage.setItem(ACTIVE_LOCAL_PROJECT_KEY, project.id)
+      return { localProjects, activeLocalProject: project }
+    })
+    return project
+  },
   updateProjectModuleState: (projectId, moduleKey, patch) => set((state) => {
     const localProjects = state.localProjects.map(project => {
       if (project.id !== projectId) return project

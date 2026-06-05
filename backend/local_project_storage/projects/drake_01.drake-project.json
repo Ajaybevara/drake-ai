@@ -1,0 +1,21 @@
+{
+  "schema": "drake-ai-project-package/v1",
+  "savedAt": "2026-06-04T11:58:47.121Z",
+  "project": {
+    "id": "project-1780574327121",
+    "name": "drake_01",
+    "createdAt": "2026-06-04T11:58:47.121Z",
+    "lastOpenedAt": "2026-06-04T11:58:47.121Z",
+    "files": [],
+    "selectedWells": [],
+    "moduleState": {},
+    "outputs": [],
+    "activity": [
+      {
+        "id": "activity-1780574327121",
+        "text": "Project drake_01 created",
+        "createdAt": "2026-06-04T11:58:47.121Z"
+      }
+    ]
+  }
+}

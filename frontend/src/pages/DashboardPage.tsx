@@ -2,10 +2,12 @@ import { useState } from 'react'
 import type React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Activity, Bot, Database, FolderPlus, Gauge, Layers, Waves } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { useStore } from '../store'
 import CreateProjectModal from '../components/project/CreateProjectModal'
 import ProjectCard from '../components/project/ProjectCard'
 import ModuleCard from '../components/project/ModuleCard'
+import { localProjectsApi } from '../services/api'
 
 export default function DashboardPage() {
   const navigate = useNavigate()
@@ -14,8 +16,14 @@ export default function DashboardPage() {
   const totalFiles = localProjects.reduce((sum, project) => sum + project.files.length, 0)
   const totalOutputs = localProjects.reduce((sum, project) => sum + project.outputs.length, 0)
 
-  const createProject = (name: string) => {
+  const createProject = async (name: string, locationKey = 'workspace') => {
     const project = createLocalProject(name)
+    try {
+      await localProjectsApi.save({ location_key: locationKey, project })
+      toast.success(`Created and saved ${name}`)
+    } catch {
+      toast.success(`Created ${name} in browser project list`)
+    }
     setCreateOpen(false)
     navigate(`/projects/${project.id}`)
   }

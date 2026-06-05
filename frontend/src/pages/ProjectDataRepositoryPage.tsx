@@ -8,6 +8,7 @@ import FileTable from '../components/project/FileTable'
 
 const GROUPS = [
   { key: 'las', title: 'Well Logs / LAS' },
+  { key: 'seismic', title: 'Seismic Inputs / SGY, SEGY, NPY' },
   { key: 'reports', title: 'Reports / PDF & Word' },
   { key: 'images', title: 'Images' },
   { key: 'tables', title: 'Excel / CSV' },

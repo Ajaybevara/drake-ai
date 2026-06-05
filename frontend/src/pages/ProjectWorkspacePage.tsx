@@ -1,14 +1,16 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import type React from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Activity, Bot, Database, FileUp, Gauge, Leaf, LineChart, ScanLine, Waves } from 'lucide-react'
 import { useStore } from '../store'
 import ModuleCard from '../components/project/ModuleCard'
 import StatusBadge from '../components/project/StatusBadge'
+import LocalProjectStorageModal from '../components/project/LocalProjectStorageModal'
 
 export default function ProjectWorkspacePage() {
   const { projectId } = useParams()
   const navigate = useNavigate()
+  const [saveStorageOpen, setSaveStorageOpen] = useState(false)
   const { localProjects, activeLocalProject, openLocalProject } = useStore()
   const project = localProjects.find(item => item.id === projectId) || activeLocalProject
 
@@ -24,11 +26,13 @@ export default function ProjectWorkspacePage() {
     las: project.files.filter(file => file.category === 'las').length,
     reports: project.files.filter(file => file.category === 'reports').length,
     tables: project.files.filter(file => file.category === 'tables').length,
+    seismic: project.files.filter(file => file.category === 'seismic').length,
     digitizer: project.files.filter(file => file.category === 'images' || file.category === 'digitizer').length,
   }
 
   return (
     <div style={page}>
+      <LocalProjectStorageModal mode="save" open={saveStorageOpen} project={project} onClose={() => setSaveStorageOpen(false)} />
       <section style={hero}>
         <div>
           <div style={eyebrow}>Active Project Workspace</div>
@@ -37,6 +41,7 @@ export default function ProjectWorkspacePage() {
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button onClick={() => navigate(`/projects/${project.id}/data`)} style={primaryButton}><FileUp size={17} /> Upload Files</button>
+          <button onClick={() => setSaveStorageOpen(true)} style={secondaryButton}>Save Project</button>
           <button onClick={() => navigate(`/projects/${project.id}/reports`)} style={secondaryButton}>Download Package</button>
         </div>
       </section>
@@ -54,10 +59,10 @@ export default function ProjectWorkspacePage() {
           <h2 style={{ margin: 0, fontSize: 22 }}>Project Data Repository Summary</h2>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12 }}>
-          {['Well Logs / LAS', 'Reports / PDF & Word', 'Images', 'Excel / CSV', 'Digitization Inputs'].map((label, index) => (
+          {['Well Logs / LAS', 'Seismic Inputs', 'Reports / PDF & Word', 'Images', 'Excel / CSV', 'Digitization Inputs'].map((label, index) => (
             <div key={label} style={{ padding: 14, borderRadius: 12, background: '#08111F', border: '1px solid #1E293B' }}>
               <div style={{ color: '#94A3B8', fontSize: 12 }}>{label}</div>
-              <div style={{ color: '#F8FAFC', fontSize: 24, fontWeight: 900, marginTop: 6 }}>{[counts.las, counts.reports, project.files.filter(f => f.category === 'images').length, counts.tables, counts.digitizer][index]}</div>
+              <div style={{ color: '#F8FAFC', fontSize: 24, fontWeight: 900, marginTop: 6 }}>{[counts.las, counts.seismic, counts.reports, project.files.filter(f => f.category === 'images').length, counts.tables, counts.digitizer][index]}</div>
             </div>
           ))}
         </div>

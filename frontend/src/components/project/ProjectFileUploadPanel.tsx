@@ -2,15 +2,32 @@ import { UploadCloud } from 'lucide-react'
 import { useRef } from 'react'
 import { useStore } from '../../store'
 import toast from 'react-hot-toast'
+import { localProjectsApi } from '../../services/api'
 
 export default function ProjectFileUploadPanel({ projectId }: { projectId: string }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const addProjectFiles = useStore(s => s.addProjectFiles)
+  const addProjectFileRecords = useStore(s => s.addProjectFileRecords)
 
-  const upload = (files: FileList | null) => {
+  const upload = async (files: FileList | null) => {
     if (!files?.length) return
-    addProjectFiles(projectId, Array.from(files))
-    toast.success(`${files.length} file(s) added to project repository`)
+    const fileList = Array.from(files)
+    try {
+      const uploaded = await Promise.all(fileList.map(async (file) => {
+        const response = await localProjectsApi.uploadFile(file)
+        return {
+          id: `file-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          projectId,
+          uploadedAt: new Date().toISOString(),
+          ...response.data,
+        }
+      }))
+      addProjectFileRecords(projectId, uploaded)
+      toast.success(`${files.length} file(s) copied to local project storage`)
+    } catch {
+      addProjectFiles(projectId, fileList)
+      toast.success(`${files.length} file(s) added as browser metadata`)
+    }
   }
 
   return (
@@ -32,7 +49,7 @@ export default function ProjectFileUploadPanel({ projectId }: { projectId: strin
           <button style={{ marginTop: 14, padding: '10px 16px', borderRadius: 9, border: '1px solid rgba(239,68,68,.45)', background: 'linear-gradient(135deg,#EF4444,#B91C1C)', color: '#fff', cursor: 'pointer', fontWeight: 900 }}>Browse Files</button>
         </div>
       </div>
-      <input ref={inputRef} type="file" multiple accept=".las,.pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,.tif,.tiff,.csv,.xls,.xlsx" onChange={event => upload(event.target.files)} style={{ display: 'none' }} />
+      <input ref={inputRef} type="file" multiple accept=".las,.sgy,.segy,.npy,.pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,.tif,.tiff,.csv,.xls,.xlsx" onChange={event => upload(event.target.files)} style={{ display: 'none' }} />
     </div>
   )
 }

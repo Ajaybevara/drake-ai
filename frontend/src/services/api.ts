@@ -97,4 +97,28 @@ export const petrophysicsApi = {
   uncertainty: (wellId: number, params?: any) => api.post(`/petrophysics/well/${wellId}/uncertainty`, params || {}),
 }
 
+// Seismic
+export const seismicApi = {
+  lowFrequencyEnhancement: (params: {
+    file_name: string
+    storage_path?: string
+    freq_low?: number
+    freq_high?: number
+    gain?: number
+    sample_interval_ms?: number
+  }) => api.post('/seismic/low-frequency-enhancement', params),
+}
+
+export const localProjectsApi = {
+  locations: () => api.get('/local-projects/locations'),
+  save: (data: { location_key: string; project: any; file_name?: string }) => api.post('/local-projects/save', data),
+  list: (locationKey: string) => api.get(`/local-projects/list?location_key=${encodeURIComponent(locationKey)}`),
+  open: (path: string) => api.post('/local-projects/open', { path }),
+  uploadFile: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post('/local-projects/files/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+}
+
 export default api
