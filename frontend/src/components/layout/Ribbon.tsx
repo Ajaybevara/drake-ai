@@ -7,6 +7,7 @@ export default function Ribbon() {
   const { setActiveTab, theme } = useStore()
   const navigate = useNavigate()
   const isLight = theme === 'light'
+  const [showWellInfo, setShowWellInfo] = useState(false)
 
   const Dropdown = ({ label, items }: any) => {
     const [open, setOpen] = useState(false)
@@ -34,7 +35,7 @@ export default function Ribbon() {
             }
             setOpen(current => !current)
           }}
-          style={{ padding: '8px 10px', borderRadius: 6, background: '#0E1622', border: '1px solid #223047', color: '#E2E8F0', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+          style={{ padding: '8px 10px', borderRadius: 6, background: isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${isLight ? '#CBD5E1' : '#223047'}`, color: isLight ? '#0F172A' : '#E2E8F0', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
         >
           {label} <i className="fas fa-caret-down" style={{ marginLeft: 8, fontSize: 11 }}></i>
         </button>
@@ -72,7 +73,6 @@ export default function Ribbon() {
           { label: 'Export UI Mockup', icon: 'fas fa-file-export', onClick: () => toast.success('Export panel opened') },
         ]} />
         <Dropdown label="Well" items={[
-          { label: 'Well Info', icon: 'fas fa-info-circle', onClick: () => toast('Well information UI') },
           { label: 'Well Logs', icon: 'fas fa-file-lines', onClick: () => { setActiveTab('Log Viewer'); navigate('/petrophysics/log-visualization') } },
         ]} />
         <Dropdown label="Plotting" items={[
@@ -81,7 +81,23 @@ export default function Ribbon() {
         ]} />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', paddingRight: 12 }}>
-        <RibbonBtn icon="fas fa-robot" label="AI Assistant" onClick={() => navigate('/digitizer/drake-slm-gpt')} />
+        <RibbonBtn icon="fas fa-info-circle" label="Well Information" onClick={() => setShowWellInfo(!showWellInfo)} />
+
+        {showWellInfo && (
+          <div style={{ position: 'fixed', top: 115, right: 20, zIndex: 9999, background: isLight ? '#FFFFFF' : '#0B111A', borderRadius: 12, border: `1px solid ${isLight ? '#CBD5E1' : '#1F2A3A'}`, width: 350, padding: 20, boxShadow: '0 10px 40px rgba(0,0,0,0.3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ margin: 0, fontSize: 16, color: isLight ? '#0F172A' : '#F8FAFC' }}>Well Information</h2>
+              <button onClick={() => setShowWellInfo(false)} style={{ background: 'transparent', border: 'none', color: isLight ? '#64748B' : '#94A3B8', cursor: 'pointer', fontSize: 14 }}><i className="fas fa-times"></i></button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, color: isLight ? '#334155' : '#CBD5E1', fontSize: 13 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `1px solid ${isLight ? '#F1F5F9' : '#1E293B'}`, paddingBottom: 6 }}><span>Well Name</span><strong style={{ color: isLight ? '#0F172A' : '#F8FAFC' }}>Volve-15/9-F-1C</strong></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `1px solid ${isLight ? '#F1F5F9' : '#1E293B'}`, paddingBottom: 6 }}><span>Field</span><strong style={{ color: isLight ? '#0F172A' : '#F8FAFC' }}>Volve</strong></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `1px solid ${isLight ? '#F1F5F9' : '#1E293B'}`, paddingBottom: 6 }}><span>Operator</span><strong style={{ color: isLight ? '#0F172A' : '#F8FAFC' }}>Equinor</strong></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `1px solid ${isLight ? '#F1F5F9' : '#1E293B'}`, paddingBottom: 6 }}><span>Status</span><strong style={{ color: isLight ? '#0F172A' : '#F8FAFC' }}>Producing</strong></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `1px solid ${isLight ? '#F1F5F9' : '#1E293B'}`, paddingBottom: 6 }}><span>Total Depth</span><strong style={{ color: isLight ? '#0F172A' : '#F8FAFC' }}>3,540 m</strong></div>
+            </div>
+          </div>
+        )}
       </div>
       <input type="file" id="global-file-upload" style={{ display: 'none' }} multiple onChange={(event) => {
         if (event.target.files?.length) toast.success(`Selected ${event.target.files.length} UI file(s)`)

@@ -104,7 +104,7 @@ export default function UncertaintyAnalysisPage() {
         <div style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', marginBottom: 6 }}>Configuration</div>
         <p style={{ margin: '0 0 18px', color: '#64748B' }}>Select uncertainty method and values. P10/P50/P90 curves are computed from uploaded LAS prediction results.</p>
         <div style={{ display: 'grid', gap: 18, gridTemplateColumns: '1fr 1fr' }}>
-          <div style={{ padding: 18, borderRadius: 16, background: '#F8FAFC', border: '1px solid #BFDBFE' }}>
+          <div style={{ padding: 18, borderRadius: 16, background: '#F8FAFC', border: '1px solid #FCA5A5' }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: '#0369A1', marginBottom: 14 }}>Porosity Uncertainty</div>
             <label style={{ color: '#334155', fontWeight: 700 }}>Uncertainty Method
               <select value={phiMethod} onChange={(event) => setPhiMethod(event.target.value as 'percent' | 'fixed')} style={{ width: '100%', marginTop: 6, padding: 12, borderRadius: 10, border: '1px solid #CBD5E1' }}>
@@ -190,7 +190,7 @@ export default function UncertaintyAnalysisPage() {
             <div style={{ fontWeight: 700, color: '#0F172A', marginBottom: 14 }}>Available Logs</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {(data?.available_logs || []).slice(0, 14).map((log: string) => (
-                <span key={log} style={{ padding: '6px 10px', borderRadius: 999, background: '#EFF6FF', color: '#1D4ED8', fontSize: 12, fontWeight: 700 }}>{log}</span>
+                <span key={log} style={{ padding: '6px 10px', borderRadius: 999, background: '#FFEBEE', color: '#9B1B1B', fontSize: 12, fontWeight: 700 }}>{log}</span>
               ))}
               {!data?.available_logs?.length && <span style={{ color: '#64748B' }}>No active well logs found.</span>}
             </div>
@@ -285,7 +285,7 @@ export default function UncertaintyAnalysisPage() {
                     <td style={{ padding: '11px 14px', color: '#0F172A' }}>{index + 1}</td>
                     <td style={{ padding: '11px 14px', color: '#0F172A', fontWeight: 800 }}>{formatValue(row.DEPTH, 2)}</td>
                     <td style={{ padding: '11px 14px', color: '#15803D' }}>{formatValue(row.PHI_P10, 5)}</td>
-                    <td style={{ padding: '11px 14px', color: '#1D4ED8', fontWeight: 800 }}>{formatValue(row.PHI_P50, 5)}</td>
+                    <td style={{ padding: '11px 14px', color: '#9B1B1B', fontWeight: 800 }}>{formatValue(row.PHI_P50, 5)}</td>
                     <td style={{ padding: '11px 14px', color: '#E11D48' }}>{formatValue(row.PHI_P90, 5)}</td>
                     <td style={{ padding: '11px 14px', color: '#854D0E' }}>{formatValue(row.PHI_UNCERTAINTY_SPREAD, 5)}</td>
                   </tr>

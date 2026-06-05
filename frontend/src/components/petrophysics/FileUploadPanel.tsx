@@ -36,12 +36,12 @@ export default function FileUploadPanel() {
   })
 
   return (
-    <div {...getRootProps()} style={{ flex: 1, border: `2px dashed ${isDragActive ? '#1D4ED8' : isLight ? '#94A3B8' : '#29415E'}`, borderRadius: 6, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: 'pointer', transition: 'all .2s', background: isDragActive ? 'rgba(29,78,216,.12)' : isLight ? '#F8FAFC' : '#0B111A', padding: 8 }}>
+    <div {...getRootProps()} style={{ flex: 1, border: `2px dashed ${isDragActive ? '#9B1B1B' : isLight ? '#94A3B8' : '#29415E'}`, borderRadius: 6, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: 'pointer', transition: 'all .2s', background: isDragActive ? 'rgba(155,27,27,.12)' : isLight ? '#F8FAFC' : '#0B111A', padding: 8 }}>
       <input {...getInputProps()} />
-      <i className="fas fa-cloud-upload-alt" style={{ fontSize: 24, color: isDragActive ? '#1D4ED8' : '#388E3C' }}></i>
+      <i className="fas fa-cloud-upload-alt" style={{ fontSize: 24, color: isDragActive ? '#9B1B1B' : '#388E3C' }}></i>
       <p style={{ fontSize: 10.5, color: isLight ? '#0F172A' : '#E2E8F0', textAlign: 'center', lineHeight: 1.4 }}>Drag & Drop files here</p>
       <p style={{ fontSize: 10, color: isLight ? '#64748B' : '#7B8798' }}>or</p>
-      <button type="button" style={{ background: isLight ? '#DBEAFE' : '#1E1314', color: isLight ? '#1D4ED8' : '#FFEBEE', border: `1px solid ${isLight ? '#93C5FD' : '#3A2324'}`, borderRadius: 5, padding: '5px 12px', fontSize: 10.5, cursor: 'pointer', fontFamily: 'DM Sans,sans-serif', fontWeight: 600 }}>Browse Files</button>
+      <button type="button" style={{ background: isLight ? '#FCD3D3' : '#1E1314', color: isLight ? '#9B1B1B' : '#FFEBEE', border: `1px solid ${isLight ? '#F87171' : '#3A2324'}`, borderRadius: 5, padding: '5px 12px', fontSize: 10.5, cursor: 'pointer', fontFamily: 'DM Sans,sans-serif', fontWeight: 600 }}>Browse Files</button>
       <small style={{ fontSize: 9, color: isLight ? '#64748B' : '#95A3B8', textAlign: 'center' }}>LAS, DLIS, LIS, TIFF,<br/>PDF, CSV, XLSX</small>
     </div>
   )

@@ -165,52 +165,7 @@ export default function Sidebar() {
 
 
 
-      {/* Wells */}
-      <div style={{ padding: '6px 0', borderBottom: `1px solid ${isLight ? '#CBD5E1' : '#1E293B'}` }}>
-        <SectionHeader id="wells" label="Wells" rightElement={<span style={{ fontSize: 7.5, color: '#475569' }}>{activeProject?.name}</span>} />
-        {openSections.wells && (
-          <div>
-            <div style={{ padding: '0 12px 8px 12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginBottom: 6, marginTop: 4 }}>
-                  <button onClick={() => setActiveListTab('wells')} style={{ flex: 1, padding: '6px 0', textAlign: 'center', borderRadius: 6, fontSize: 13, color: activeListTab === 'wells' ? '#F8FAFC' : '#94A3B8', background: activeListTab === 'wells' ? '#142033' : 'transparent', border: activeListTab === 'wells' ? '1px solid #26364F' : '1px solid transparent', cursor: 'pointer', fontFamily: 'DM Sans,sans-serif', fontWeight: 700 }}>Wells</button>
-                  <button onClick={() => setActiveListTab('templates')} style={{ flex: 1, padding: '6px 0', textAlign: 'center', borderRadius: 6, fontSize: 13, color: activeListTab === 'templates' ? '#F8FAFC' : '#94A3B8', background: activeListTab === 'templates' ? '#142033' : 'transparent', border: activeListTab === 'templates' ? '1px solid #26364F' : '1px solid transparent', cursor: 'pointer', fontFamily: 'DM Sans,sans-serif', fontWeight: 700 }}>Templates</button>
-                </div>
-            </div>
-            {activeListTab === 'wells' && filteredWells.map(w => (
-              <div key={w.id} onClick={() => selectWell(w)} style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '8px 14px', cursor: 'pointer', fontSize: 13,
-                color: w.id === activeWell?.id ? '#F8FAFC' : '#AAB6C6',
-                background: w.id === activeWell?.id ? '#2b0b0b' : 'transparent',
-                borderLeft: w.id === activeWell?.id ? '3px solid #DA2626' : '3px solid transparent',
-                fontWeight: w.id === activeWell?.id ? 700 : 600, transition: 'all .12s',
-              }}>
-                <i className="fas fa-circle-dot" style={{ fontSize: 12 }}></i>
-                <span style={{ flex: 1, fontWeight: 700 }}>{w.name}</span>
-                <div style={{ width: 9, height: 9, borderRadius: '50%', background: STATUS_COLORS[w.status] || '#64748B', flexShrink: 0, boxShadow: STATUS_COLORS[w.status] === '#10B981' ? '0 0 5px #10B981' : 'none' }}></div>
-              </div>
-            ))}
 
-            {activeListTab === 'templates' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '6px 6px 12px 8px' }}>
-                <div style={{ fontSize: 12, color: isLight ? '#334155' : '#CBD5E1', fontWeight: 700 }}>Template History</div>
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: 6, background: isLight ? '#F8FAFC' : '#07101A', border: `1px solid ${isLight ? '#E2E8F0' : '#223047'}`, fontSize: 12 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 6, background: 'linear-gradient(135deg,#DA2626,#9B1B1B)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700 }}>T</div>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: 13 }}>Template v{4 - i}</div>
-                        <div style={{ fontSize: 11, color: isLight ? '#64748B' : '#95A3B8' }}>By System • {['2h','1d','3d','1w'][i]} ago</div>
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 11, color: isLight ? '#0F172A' : '#E2E8F0' }}>Applied • {['3','7','12','20'][i]} wells</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
 
       {/* Navigation */}
       <div style={{ padding: '6px 0', borderBottom: '1px solid #1E293B' }}>

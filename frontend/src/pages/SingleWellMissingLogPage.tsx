@@ -68,7 +68,7 @@ export default function SingleWellMissingLogPage() {
               <div style={{ fontSize: 11, fontWeight: 700, color: '#2563EB', textTransform: 'uppercase', letterSpacing: 1 }}>Step 1</div>
               <h2 style={{ margin: '8px 0 0', fontSize: 20, color: '#0F172A' }}>Select a well and upload logs</h2>
             </div>
-            <div style={{ padding: '8px 12px', background: '#EFF6FF', borderRadius: 12, color: '#0F172A', fontSize: 12, fontWeight: 600 }}>
+            <div style={{ padding: '8px 12px', background: '#FFEBEE', borderRadius: 12, color: '#0F172A', fontSize: 12, fontWeight: 600 }}>
               Active well: {activeWell?.name || 'None selected'}
             </div>
           </div>

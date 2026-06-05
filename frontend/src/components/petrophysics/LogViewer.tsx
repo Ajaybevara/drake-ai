@@ -26,7 +26,7 @@ type CurveTrack = CurveMeta & {
 const TRACK_PREFS = [
   { keys: ['GR', 'GRD', 'GRS', 'CGR', 'SGR'], label: 'GR', color: '#FACC15', unit: 'API', log: false },
   { keys: ['RT', 'RESD', 'ILD', 'LLD', 'AT90', 'RDEP'], label: 'Resistivity', color: '#FB7185', unit: 'ohm.m', log: true },
-  { keys: ['RHOB', 'RHOZ', 'DEN', 'ZDEN'], label: 'RHOB', color: '#93C5FD', unit: 'g/cc', log: false },
+  { keys: ['RHOB', 'RHOZ', 'DEN', 'ZDEN'], label: 'RHOB', color: '#F87171', unit: 'g/cc', log: false },
   { keys: ['NPHI', 'NPHIS', 'NPHISS', 'TNPH', 'NPL'], label: 'NPHI', color: '#3B82F6', unit: 'fraction', log: false },
   { keys: ['DT', 'DTP', 'DTC', 'DTCO', 'AC', 'SONIC'], label: 'DT', color: '#FB923C', unit: 'us/ft', log: false },
 ]
@@ -162,7 +162,7 @@ export default function LogViewer() {
           <div style={{ fontWeight: 700, color: '#0F172A', marginBottom: 12 }}>Available Logs</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {curves.map((curve) => (
-              <span key={curve.id} style={{ padding: '7px 11px', borderRadius: 999, background: selectedMetas.some((item) => item.id === curve.id) ? '#DBEAFE' : '#F8FAFC', border: '1px solid #BFDBFE', color: '#1D4ED8', fontSize: 12, fontWeight: 700 }}>
+              <span key={curve.id} style={{ padding: '7px 11px', borderRadius: 999, background: selectedMetas.some((item) => item.id === curve.id) ? '#FCD3D3' : '#F8FAFC', border: '1px solid #FCA5A5', color: '#9B1B1B', fontSize: 12, fontWeight: 700 }}>
                 {curve.mnemonic}
               </span>
             ))}
@@ -199,7 +199,7 @@ export default function LogViewer() {
 
           {tracks.map((track, index) => {
             const pref = TRACK_PREFS.find((item) => item.keys.some((key) => track.mnemonic.toUpperCase().includes(key)))
-            const color = pref?.color || ['#22C55E', '#FB7185', '#93C5FD', '#3B82F6', '#FB923C'][index % 5]
+            const color = pref?.color || ['#22C55E', '#FB7185', '#F87171', '#3B82F6', '#FB923C'][index % 5]
             const logScale = pref?.log || /RT|ILD|LLD|RES/i.test(track.mnemonic)
             return (
               <div key={track.id} style={{ height, borderRight: '1px solid #334155', position: 'relative', backgroundImage: 'linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.07) 1px, transparent 1px)', backgroundSize: '100% 80px, 50px 100%' }}>

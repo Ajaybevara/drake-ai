@@ -41,7 +41,7 @@ const router = createBrowserRouter([
       { path: 'petrophysics/missing-log-prediction', element: <UIOnlyModulePage title="Missing Log Prediction" kind="logs" accent="#8B5CF6" /> },
       { path: 'petrophysics/ai-facies-classification', element: <UIOnlyModulePage title="AI Facies Classification" kind="logs" accent="#F59E0B" /> },
       { path: 'petrophysics/ai-formation-tops', element: <UIOnlyModulePage title="AI Formation Tops" kind="logs" accent="#10B981" /> },
-      { path: 'petrophysics/ai-parameter-prediction', element: <UIOnlyModulePage title="AI Parameter Prediction" kind="logs" accent="#38BDF8" /> },
+      { path: 'petrophysics/ai-parameter-prediction', element: <UIOnlyModulePage title="AI Parameter Prediction" kind="logs" accent="#DA2626" /> },
       { path: 'petrophysics/ai-uncertainty', element: <UIOnlyModulePage title="AI Uncertainty" kind="logs" accent="#EF4444" /> },
       { path: 'petrophysics/auto-splicer', element: <UIOnlyModulePage title="Auto Splicer" kind="logs" accent="#10B981" /> },
       { path: 'petrophysics/crossplot', element: <UIOnlyModulePage title="Crossplot" kind="logs" accent="#A78BFA" /> },
@@ -50,12 +50,12 @@ const router = createBrowserRouter([
       { path: 'seismic/frequency-enhancer', element: <UIOnlyModulePage title="Seismic Frequency Enhancer" kind="seismic" accent="#8B5CF6" /> },
 
       { path: 'production/optimization', element: <UIOnlyModulePage title="Production Optimization" kind="production" accent="#10B981" /> },
-      { path: 'production/ai-artificial-lift', element: <UIOnlyModulePage title="AI Artificial Lift" kind="production" accent="#38BDF8" /> },
+      { path: 'production/ai-artificial-lift', element: <UIOnlyModulePage title="AI Artificial Lift" kind="production" accent="#DA2626" /> },
 
       { path: 'ccus/ai-preliminary-screening', element: <UIOnlyModulePage title="AI Preliminary Screening Using Well Logs" kind="ccus" accent="#10B981" /> },
 
       { path: 'digitizer/drake-slm-gpt', element: <UIOnlyModulePage title="Drake SLM/GPT" kind="digitizer" accent="#EF4444" /> },
-      { path: 'digitizer/drake-ocr', element: <UIOnlyModulePage title="Drake OCR" kind="digitizer" accent="#38BDF8" /> },
+      { path: 'digitizer/drake-ocr', element: <UIOnlyModulePage title="Drake OCR" kind="digitizer" accent="#DA2626" /> },
 
       { path: '*', element: <Navigate to="/" replace /> },
     ],

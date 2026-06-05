@@ -22,7 +22,7 @@ export default function MissingLogAIPage() {
               <div style={{ fontSize: 11, color: '#2563EB', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Step 1</div>
               <h2 style={{ margin: '8px 0 0', color: '#0F172A' }}>Upload Well Log Files</h2>
             </div>
-            <div style={{ padding: '8px 12px', borderRadius: 12, background: '#EFF6FF', color: '#0F172A', fontWeight: 700 }}>
+            <div style={{ padding: '8px 12px', borderRadius: 12, background: '#FFEBEE', color: '#0F172A', fontWeight: 700 }}>
               Active well: {activeWell?.name || 'None selected'}
             </div>
           </div>

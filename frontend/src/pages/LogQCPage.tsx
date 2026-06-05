@@ -149,8 +149,8 @@ export default function LogQCPage() {
                 style={{
                   padding: '9px 13px',
                   borderRadius: 999,
-                  border: `1px solid ${active ? COLORS[index % COLORS.length] : '#BFDBFE'}`,
-                  background: active ? '#EFF6FF' : '#FFFFFF',
+                  border: `1px solid ${active ? COLORS[index % COLORS.length] : '#FCA5A5'}`,
+                  background: active ? '#FFEBEE' : '#FFFFFF',
                   color: active ? COLORS[index % COLORS.length] : '#2563EB',
                   fontSize: 12,
                   fontWeight: 800,

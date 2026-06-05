@@ -121,7 +121,7 @@ export default function PorosityPermeabilityPage() {
         <div style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', marginBottom: 6 }}>Configuration</div>
         <p style={{ margin: '0 0 18px', color: '#64748B' }}>Enter values and click Calculate to show the first five AI prediction rows from the uploaded LAS file.</p>
         <div style={{ display: 'grid', gap: 18, gridTemplateColumns: '1fr 1fr' }}>
-          <div style={{ padding: 18, borderRadius: 16, background: '#F8FAFC', border: '1px solid #BFDBFE' }}>
+          <div style={{ padding: 18, borderRadius: 16, background: '#F8FAFC', border: '1px solid #FCA5A5' }}>
             <div style={{ fontWeight: 800, color: '#0369A1', marginBottom: 14 }}>Porosity Prediction</div>
             <div style={{ display: 'grid', gap: 10, gridTemplateColumns: '1fr 1fr' }}>
               <label style={{ color: '#334155', fontWeight: 700 }}>Fixed ±<input value={phiFixed} onChange={(e) => setPhiFixed(e.target.value)} style={{ width: '100%', marginTop: 6, padding: 12, borderRadius: 10, border: '1px solid #CBD5E1' }} /></label>

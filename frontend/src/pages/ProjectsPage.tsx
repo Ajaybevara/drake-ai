@@ -23,9 +23,9 @@ export default function ProjectsPage() {
 }
 
 const page: React.CSSProperties = { padding: 28, minHeight: '100%', overflow: 'auto', background: 'linear-gradient(135deg,#050B14,#07111F 52%,#0B1628)', color: '#F8FAFC' }
-const eyebrow: React.CSSProperties = { color: '#38BDF8', letterSpacing: 4, textTransform: 'uppercase', fontSize: 12, fontWeight: 900 }
+const eyebrow: React.CSSProperties = { color: '#DA2626', letterSpacing: 4, textTransform: 'uppercase', fontSize: 12, fontWeight: 900 }
 const title: React.CSSProperties = { margin: '8px 0', fontSize: 34 }
 const muted: React.CSSProperties = { margin: 0, color: '#94A3B8', lineHeight: 1.55 }
 const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(250px,1fr))', gap: 16, marginTop: 22 }
 const card: React.CSSProperties = { padding: 18, borderRadius: 16, border: '1px solid #1E293B', background: 'linear-gradient(180deg,rgba(15,23,42,.94),rgba(7,17,31,.96))', color: '#F8FAFC' }
-const icon: React.CSSProperties = { width: 44, height: 44, borderRadius: 12, background: 'rgba(56,189,248,.14)', border: '1px solid rgba(56,189,248,.35)', display: 'grid', placeItems: 'center', color: '#38BDF8' }
+const icon: React.CSSProperties = { width: 44, height: 44, borderRadius: 12, background: 'rgba(218,38,38,.14)', border: '1px solid rgba(218,38,38,.35)', display: 'grid', placeItems: 'center', color: '#DA2626' }

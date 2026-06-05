@@ -21,7 +21,7 @@ export default function DashboardPage() {
         <h2 style={{ margin: 0, fontSize: 22 }}>Workspace Overview</h2>
         <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 14 }}>
           {['Well intelligence', 'Seismic enhancement', 'Production optimization', 'CCUS screening', 'OCR and SLM/GPT'].map(item => (
-            <div key={item} style={miniCard}><Database size={17} color="#38BDF8" /><span>{item}</span></div>
+            <div key={item} style={miniCard}><Database size={17} color="#DA2626" /><span>{item}</span></div>
           ))}
         </div>
       </section>
@@ -30,12 +30,12 @@ export default function DashboardPage() {
 }
 
 function Stat({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
-  return <div style={stat}><div style={{ color: '#38BDF8' }}>{icon}</div><div><div style={statLabel}>{label}</div><div style={statValue}>{value}</div></div></div>
+  return <div style={stat}><div style={{ color: '#DA2626' }}>{icon}</div><div><div style={statLabel}>{label}</div><div style={statValue}>{value}</div></div></div>
 }
 
 const page: React.CSSProperties = { padding: 28, minHeight: '100%', overflow: 'auto', background: 'linear-gradient(135deg,#050B14,#07111F 52%,#0B1628)', color: '#F8FAFC' }
 const hero: React.CSSProperties = { padding: 26, borderRadius: 18, border: '1px solid #1E293B', background: 'linear-gradient(135deg,rgba(15,23,42,.92),rgba(7,17,31,.82))', boxShadow: '0 24px 70px rgba(0,0,0,.28)' }
-const eyebrow: React.CSSProperties = { color: '#38BDF8', letterSpacing: 4, textTransform: 'uppercase', fontSize: 12, fontWeight: 900 }
+const eyebrow: React.CSSProperties = { color: '#DA2626', letterSpacing: 4, textTransform: 'uppercase', fontSize: 12, fontWeight: 900 }
 const title: React.CSSProperties = { margin: '8px 0', fontSize: 36, lineHeight: 1.08 }
 const muted: React.CSSProperties = { margin: 0, color: '#94A3B8', lineHeight: 1.6 }
 const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 16, marginTop: 18 }

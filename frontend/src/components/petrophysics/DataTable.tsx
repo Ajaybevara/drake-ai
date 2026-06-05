@@ -1,7 +1,7 @@
 import { useStore } from '../../store'
 
 const TYPE_STYLES: Record<string, { bg: string; color: string }> = {
-  LAS:  { bg: 'rgba(59,130,246,.16)', color: '#93C5FD' },
+  LAS:  { bg: 'rgba(59,130,246,.16)', color: '#F87171' },
   DLIS: { bg: 'rgba(139,92,246,.16)', color: '#C4B5FD' },
   TIFF: { bg: 'rgba(245,158,11,.15)', color: '#FBBF24' },
   PDF:  { bg: 'rgba(239,68,68,.14)', color: '#FCA5A5' },
@@ -32,7 +32,7 @@ export default function DataTable() {
         {files.map(f => {
           const style = TYPE_STYLES[f.file_type] || { bg: '#13243A', color: '#AAB6C6' }
           return (
-            <tr key={f.id} style={{ cursor: 'pointer' }} onMouseEnter={e => (e.currentTarget as any).style.background = isLight ? '#EFF6FF' : '#101927'} onMouseLeave={e => (e.currentTarget as any).style.background = ''}>
+            <tr key={f.id} style={{ cursor: 'pointer' }} onMouseEnter={e => (e.currentTarget as any).style.background = isLight ? '#FFEBEE' : '#101927'} onMouseLeave={e => (e.currentTarget as any).style.background = ''}>
               <td style={{ padding: '5px 10px', fontSize: 11, borderBottom: `1px solid ${isLight ? '#E2E8F0' : '#162235'}`, color: isLight ? '#0F172A' : '#E2E8F0', whiteSpace: 'nowrap' }}>{f.filename}</td>
               <td style={{ padding: '5px 10px', fontSize: 11, borderBottom: `1px solid ${isLight ? '#E2E8F0' : '#162235'}` }}>
                 <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, textTransform: 'uppercase', background: style.bg, color: style.color }}>{f.file_type}</span>

@@ -109,7 +109,7 @@ export default function LogViewerPage() {
         {curves.length ? (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {curves.map((curve: any) => (
-              <span key={curve.id} style={{ padding: '8px 12px', borderRadius: 999, background: '#DBEAFE', color: '#1D4ED8', border: '1px solid #BFDBFE', fontSize: 12, fontWeight: 800 }}>
+              <span key={curve.id} style={{ padding: '8px 12px', borderRadius: 999, background: '#FCD3D3', color: '#9B1B1B', border: '1px solid #FCA5A5', fontSize: 12, fontWeight: 800 }}>
                 {curve.mnemonic}{curve.unit ? ` (${curve.unit})` : ''}
               </span>
             ))}
