@@ -4,15 +4,15 @@ import toast from 'react-hot-toast'
 import { useStore } from '../../store'
 
 const NAV_ITEMS = [
-  { label: 'Petrophysics', path: '/petrophysics/log-viewer' },
-  { label: 'Seismic', path: '/analytics/seismic' },
-  { label: 'Production', path: '/analytics/production' },
-  { label: 'CCUS', path: '/analytics/ccus' },
-  { label: 'Drake AI Digitizer', path: '/analytics/ai-assistant' },
+  { label: 'Petrophysics', path: '/petrophysics/log-visualization' },
+  { label: 'Seismic', path: '/seismic/frequency-enhancer' },
+  { label: 'Production', path: '/production/optimization' },
+  { label: 'CCUS', path: '/ccus/ai-preliminary-screening' },
+  { label: 'Drake AI Digitizer', path: '/digitizer/drake-slm-gpt' },
 ]
 
 export default function TopBar() {
-  const { user, logout, theme, toggleTheme, activeLocalProject } = useStore()
+  const { user, logout, theme, toggleTheme } = useStore()
   const [profileOpen, setProfileOpen] = useState(false)
   const profileRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
@@ -36,17 +36,11 @@ export default function TopBar() {
 
   const isActive = (item: { label: string; path: string }) => {
     if (item.label === 'Petrophysics') return location.pathname.startsWith('/petrophysics') || location.pathname.includes('/petrophysics') || location.pathname === '/'
-    return location.pathname === item.path || location.pathname.includes(item.path.replace('/analytics/', '/'))
-  }
-
-  const resolvePath = (item: { label: string; path: string }) => {
-    if (!activeLocalProject) return item.path
-    if (item.label === 'Petrophysics') return `/projects/${activeLocalProject.id}/petrophysics`
-    if (item.label === 'Seismic') return `/projects/${activeLocalProject.id}/seismic`
-    if (item.label === 'Production') return `/projects/${activeLocalProject.id}/production`
-    if (item.label === 'CCUS') return `/projects/${activeLocalProject.id}/ccus`
-    if (item.label === 'Drake AI Digitizer') return `/projects/${activeLocalProject.id}/digitizer`
-    return item.path
+    if (item.label === 'Seismic') return location.pathname.startsWith('/seismic')
+    if (item.label === 'Production') return location.pathname.startsWith('/production')
+    if (item.label === 'CCUS') return location.pathname.startsWith('/ccus')
+    if (item.label === 'Drake AI Digitizer') return location.pathname.startsWith('/digitizer')
+    return location.pathname === item.path
   }
 
   return (
@@ -57,7 +51,7 @@ export default function TopBar() {
           return (
             <button
               key={item.label}
-              onClick={() => navigate(resolvePath(item))}
+              onClick={() => navigate(item.path)}
               style={{
                 padding: '10px 16px',
                 fontSize: 14,

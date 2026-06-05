@@ -1,29 +1,25 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { authApi } from '../services/api'
 import { useStore } from '../store'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('admin@drakeai.com')
   const [password, setPassword] = useState('Drake@2024')
-  const [loading, setLoading] = useState(false)
   const setAuth = useStore(s => s.setAuth)
   const navigate = useNavigate()
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
-    try {
-      const res = await authApi.login(email, password)
-      setAuth(res.data.user, res.data.access_token)
-      toast.success('Welcome to Drake AI!')
-      navigate('/')
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Login failed')
-    } finally {
-      setLoading(false)
-    }
+    setAuth({
+      id: 1,
+      email,
+      full_name: 'Malleswar Y',
+      role: 'admin',
+      avatar_initials: 'MY',
+    }, 'ui-only-token')
+    toast.success('Welcome to Drake AI UI')
+    navigate('/')
   }
 
   return (
@@ -53,10 +49,10 @@ export default function LoginPage() {
             />
           </div>
           <button
-            type="submit" disabled={loading}
-            style={{ background: loading ? '#7F1D1D' : 'linear-gradient(135deg,#D32F2F,#388E3C)', color: '#fff', border: 'none', borderRadius: 8, padding: '11px', fontSize: 14, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer', fontFamily: 'Rajdhani,sans-serif', letterSpacing: 1, marginTop: 8 }}
+            type="submit"
+            style={{ background: 'linear-gradient(135deg,#D32F2F,#388E3C)', color: '#fff', border: 'none', borderRadius: 8, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'Rajdhani,sans-serif', letterSpacing: 1, marginTop: 8 }}
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            Sign In
           </button>
         </form>
 

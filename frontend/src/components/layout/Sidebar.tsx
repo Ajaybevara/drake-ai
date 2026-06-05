@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useStore } from '../../store'
-import { projectsApi, wellsApi, curvesApi, filesApi, aiApi } from '../../services/api'
-import toast from 'react-hot-toast'
 
 const STATUS_COLORS: Record<string, string> = {
   'Completed': '#10B981',
@@ -19,39 +17,39 @@ const NAV_ITEMS = [
 ]
 
 const PETROPHYSICS_ITEMS = [
-  { label: 'Upload LAS', path: '/petrophysics/log-viewer', icon: 'fas fa-cloud-upload-alt' },
-  { label: 'AI Visualization', path: '/petrophysics/log-qc', icon: 'fas fa-chart-line', sub: true },
-  { label: 'Missing Log AI', path: '/petrophysics/missing-log-ai', icon: 'fas fa-brain', sub: true },
-  { label: 'Facies Classification', path: '/petrophysics/facies-classification', icon: 'fas fa-layer-group', sub: true },
-  { label: 'AI Prediction', path: '/petrophysics/porosity-permeability', icon: 'fas fa-brain', sub: true },
-  { label: 'AI Uncertainty', path: '/petrophysics/water-saturation', icon: 'fas fa-chart-area', sub: true },
-  { label: 'Auto Splice', path: '/petrophysics/auto-splice', icon: 'fas fa-code-branch', sub: true },
+  { label: 'Log Visualization', path: '/petrophysics/log-visualization', icon: 'fas fa-chart-line', sub: true },
+  { label: 'Missing Log Prediction', path: '/petrophysics/missing-log-prediction', icon: 'fas fa-brain', sub: true },
+  { label: 'AI Facies Classification', path: '/petrophysics/ai-facies-classification', icon: 'fas fa-layer-group', sub: true },
+  { label: 'AI Formation Tops', path: '/petrophysics/ai-formation-tops', icon: 'fas fa-map-signs', sub: true },
+  { label: 'AI Parameter Prediction', path: '/petrophysics/ai-parameter-prediction', icon: 'fas fa-gauge-high', sub: true },
+  { label: 'AI Uncertainty', path: '/petrophysics/ai-uncertainty', icon: 'fas fa-chart-area', sub: true },
+  { label: 'Auto Splicer', path: '/petrophysics/auto-splicer', icon: 'fas fa-code-branch', sub: true },
+  { label: 'Crossplot', path: '/petrophysics/crossplot', icon: 'fas fa-project-diagram', sub: true },
+  { label: 'Histogram', path: '/petrophysics/histogram', icon: 'fas fa-chart-column', sub: true },
 ]
 
 const SEISMIC_ITEMS = [
-  { label: 'Seismic Overview', path: '/analytics/seismic', icon: 'fas fa-wave-square' },
-  { label: 'Seismic QC', path: '/analytics/seismic', icon: 'fas fa-bolt', sub: true },
+  { label: 'Seismic Frequency Enhancer', path: '/seismic/frequency-enhancer', icon: 'fas fa-wave-square', sub: true },
 ]
 
 const PRODUCTION_ITEMS = [
-  { label: 'Production Overview', path: '/analytics/production', icon: 'fas fa-industry' },
-  { label: 'Production Trends', path: '/analytics/production', icon: 'fas fa-chart-line', sub: true },
+  { label: 'Production Optimization', path: '/production/optimization', icon: 'fas fa-chart-line', sub: true },
+  { label: 'AI Artificial Lift', path: '/production/ai-artificial-lift', icon: 'fas fa-oil-well', sub: true },
 ]
 
 const CCUS_ITEMS = [
-  { label: 'CCUS Overview', path: '/analytics/ccus', icon: 'fas fa-leaf' },
-  { label: 'Carbon Reports', path: '/analytics/ccus', icon: 'fas fa-file-alt', sub: true },
+  { label: 'AI Preliminary Screening Using Well Logs', path: '/ccus/ai-preliminary-screening', icon: 'fas fa-leaf', sub: true },
 ]
 
 const DRAKE_AI_ITEMS = [
-  { label: 'Drake AI Assistant', path: '/analytics/ai-assistant', icon: 'fas fa-robot' },
-  { label: 'Digitizer', path: '/analytics/ai-assistant', icon: 'fas fa-magic', sub: true },
+  { label: 'Drake SLM/GPT', path: '/digitizer/drake-slm-gpt', icon: 'fas fa-robot', sub: true },
+  { label: 'Drake OCR', path: '/digitizer/drake-ocr', icon: 'fas fa-file-lines', sub: true },
 ]
 
 export default function Sidebar() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { projects, activeProject, setActiveProject, wells, setWells, activeWell, setActiveWell, setCurves, setFiles, setAIJobs, sidebarCollapsed, toggleSidebar, theme, activeLocalProject } = useStore()
+  const { activeProject, wells, activeWell, setActiveWell, sidebarCollapsed, toggleSidebar, theme } = useStore()
   const isLight = theme === 'light'
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -72,44 +70,8 @@ export default function Sidebar() {
   const [isResizing, setIsResizing] = useState(false)
   const [activeListTab, setActiveListTab] = useState<'wells' | 'templates'>('wells')
 
-  const selectProject = async (p: any) => {
-    setActiveProject(p)
-    try {
-      const res = await wellsApi.list(p.id)
-      setWells(res.data)
-      if (res.data.length > 0) await selectWell(res.data[0])
-      toast.success(`Opened ${p.name}`)
-    } catch {
-      toast.error('Failed to load project wells')
-    }
-  }
-
-  const createProject = async () => {
-    try {
-      const name = `New Study ${projects.length + 1}`
-      const res = await projectsApi.create({ name, description: 'Created from Drake AI workspace' })
-      setActiveProject(res.data)
-      setWells([])
-      toast.success(`Created ${name}`)
-    } catch {
-      toast('New project API is unavailable in this build')
-    }
-  }
-
-  const selectWell = async (w: any) => {
+  const selectWell = (w: any) => {
     setActiveWell(w)
-    try {
-      const [curves, files, jobs] = await Promise.all([
-        curvesApi.list(w.id),
-        filesApi.list(w.id),
-        aiApi.list(w.id),
-      ])
-      setCurves(curves.data)
-      setFiles(files.data)
-      setAIJobs(jobs.data)
-    } catch {
-      // ignore load errors for now
-    }
   }
 
   const NavItem = ({ icon, label, path, sub }: { icon: string; label: string; path: string; sub?: boolean }) => {
@@ -132,20 +94,6 @@ export default function Sidebar() {
   }
 
   const resolvePath = (label: string, path: string) => {
-    if (!activeLocalProject) return path
-    if (label === 'Project Data Repository') return `/projects/${activeLocalProject.id}/data`
-    if (label === 'Reports / Exports') return `/projects/${activeLocalProject.id}/reports`
-    if (label === 'Upload LAS') return `/projects/${activeLocalProject.id}/petrophysics/log-viewer`
-    if (label === 'AI Visualization') return `/projects/${activeLocalProject.id}/petrophysics/log-qc`
-    if (label === 'Missing Log AI') return `/projects/${activeLocalProject.id}/petrophysics/missing-log-prediction`
-    if (label === 'Facies Classification') return `/projects/${activeLocalProject.id}/petrophysics/facies-classification`
-    if (label === 'AI Prediction') return `/projects/${activeLocalProject.id}/petrophysics/porosity-permeability`
-    if (label === 'AI Uncertainty') return `/projects/${activeLocalProject.id}/petrophysics/water-saturation`
-    if (label === 'Auto Splice') return `/projects/${activeLocalProject.id}/petrophysics/auto-splice`
-    if (path === '/analytics/seismic') return `/projects/${activeLocalProject.id}/seismic`
-    if (path === '/analytics/production') return `/projects/${activeLocalProject.id}/production`
-    if (path === '/analytics/ccus') return `/projects/${activeLocalProject.id}/ccus`
-    if (label === 'Digitizer' || label === 'Drake AI Assistant') return `/projects/${activeLocalProject.id}/digitizer`
     return path
   }
 
@@ -159,10 +107,10 @@ export default function Sidebar() {
   )
 
   const activeTopSection = location.pathname.startsWith('/petrophysics') || location.pathname.includes('/petrophysics') || location.pathname === '/' ? 'petrophysics'
-    : location.pathname.startsWith('/analytics/seismic') || location.pathname.includes('/seismic') ? 'seismic'
-    : location.pathname.startsWith('/analytics/production') || location.pathname.includes('/production') ? 'production'
-    : location.pathname.startsWith('/analytics/ccus') || location.pathname.includes('/ccus') ? 'ccus'
-    : location.pathname.startsWith('/analytics/ai-assistant') || location.pathname.includes('/digitizer') ? 'drake_ai'
+    : location.pathname.startsWith('/seismic') ? 'seismic'
+    : location.pathname.startsWith('/production') ? 'production'
+    : location.pathname.startsWith('/ccus') ? 'ccus'
+    : location.pathname.startsWith('/digitizer') ? 'drake_ai'
     : 'petrophysics'
 
   const sectionGroups = [

@@ -8,7 +8,7 @@ import os
 from app.core.config import settings
 from app.core.database import engine, Base
 from app.core.seed import seed_db
-from app.api import auth, projects, wells, curves, files, ai_jobs, reports, gpt, petrophysics, seismic, local_projects
+from app.api import auth, projects, wells, curves, files, ai_jobs, reports, gpt, petrophysics
 
 
 @asynccontextmanager
@@ -58,8 +58,6 @@ app.include_router(ai_jobs.router,  prefix="/api/ai",       tags=["AI Jobs"])
 app.include_router(reports.router,  prefix="/api/reports",  tags=["Reports"])
 app.include_router(gpt.router,      prefix="/api/gpt",      tags=["Drake GPT"])
 app.include_router(petrophysics.router, prefix="/api/petrophysics", tags=["Petrophysics"])
-app.include_router(seismic.router,  prefix="/api/seismic",  tags=["Seismic"])
-app.include_router(local_projects.router, prefix="/api/local-projects", tags=["Local Projects"])
 
 
 @app.get("/api/health", tags=["Health"])

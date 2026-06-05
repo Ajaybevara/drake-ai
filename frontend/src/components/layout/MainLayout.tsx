@@ -1,45 +1,35 @@
 import { useEffect } from 'react'
-import toast from 'react-hot-toast'
 import { useStore } from '../../store'
-import { projectsApi, wellsApi, curvesApi, filesApi, aiApi } from '../../services/api'
 import TopBar from './TopBar'
 import Ribbon from './Ribbon'
 import Sidebar from './Sidebar'
 import Workspace from './Workspace'
-import RightPanel from './RightPanel'
+import FloatingChatbot from './FloatingChatbot'
 
 export default function MainLayout() {
-  const { activeProject, activeWell, setProjects, setActiveProject, setWells, setActiveWell, setCurves, setFiles, setAIJobs, theme } = useStore()
+  const { setProjects, setActiveProject, setWells, setActiveWell, setCurves, setFiles, setAIJobs, theme } = useStore()
   const isLight = theme === 'light'
 
-  // Load projects on mount
   useEffect(() => {
-    projectsApi.list().then(res => {
-      const projects = res.data
-      setProjects(projects)
-      if (projects.length > 0) {
-        setActiveProject(projects[0])
-      }
-    }).catch(() => toast.error('Failed to load projects'))
+    const project = { id: 1, name: 'Permian Basin Study', well_count: 5 }
+    const wells = [
+      { id: 1, project_id: 1, name: 'SMITH_12H', api_number: '42-123-45678', field: 'Red Canyon', county: 'Lea', state: 'New Mexico', kb_elevation: 3455, total_depth: 12842, depth_uom: 'ft', status: 'Completed', curve_count: 28, file_count: 4, formation_tops: [], qc_score: 92, reservoir_zones: [{ name: 'A' }] },
+      { id: 2, project_id: 1, name: 'JONES_07H', api_number: '42-223-45678', field: 'Red Canyon', county: 'Lea', state: 'New Mexico', kb_elevation: 3388, total_depth: 11940, depth_uom: 'ft', status: 'Active', curve_count: 24, file_count: 3, formation_tops: [], qc_score: 88, reservoir_zones: [] },
+      { id: 3, project_id: 1, name: 'BROWN_15H', api_number: '42-323-45678', field: 'South Barrow', county: 'North Slope', state: 'Alaska', kb_elevation: 2540, total_depth: 10310, depth_uom: 'ft', status: 'QC Required', curve_count: 21, file_count: 2, formation_tops: [], qc_score: 76, reservoir_zones: [] },
+    ]
+    setProjects([project])
+    setActiveProject(project)
+    setWells(wells as any)
+    setActiveWell(wells[0] as any)
+    setCurves([
+      { id: 1, well_id: 1, mnemonic: 'GR', unit: 'API', null_count: 0, is_predicted: false },
+      { id: 2, well_id: 1, mnemonic: 'RHOB', unit: 'g/cc', null_count: 0, is_predicted: false },
+      { id: 3, well_id: 1, mnemonic: 'NPHI', unit: 'v/v', null_count: 0, is_predicted: false },
+      { id: 4, well_id: 1, mnemonic: 'RT', unit: 'ohm.m', null_count: 0, is_predicted: false },
+    ] as any)
+    setFiles([])
+    setAIJobs([])
   }, [])
-
-  // Load wells when project changes
-  useEffect(() => {
-    if (!activeProject) return
-    wellsApi.list(activeProject.id).then(res => {
-      const wells = res.data
-      setWells(wells)
-      if (wells.length > 0) setActiveWell(wells[0])
-    }).catch(() => {})
-  }, [activeProject?.id])
-
-  // Load curves + files + AI jobs when well changes
-  useEffect(() => {
-    if (!activeWell) return
-    curvesApi.list(activeWell.id).then(res => setCurves(res.data)).catch(() => {})
-    filesApi.list(activeWell.id).then(res => setFiles(res.data)).catch(() => {})
-    aiApi.list(activeWell.id).then(res => setAIJobs(res.data)).catch(() => {})
-  }, [activeWell?.id])
 
   return (
     <div data-theme={theme} style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: isLight ? '#EEF2F7' : '#070B12' }}>
@@ -49,9 +39,9 @@ export default function MainLayout() {
         <Ribbon />
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
           <Workspace />
-          <RightPanel />
         </div>
       </div>
+      <FloatingChatbot />
     </div>
   )
 }
