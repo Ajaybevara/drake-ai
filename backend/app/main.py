@@ -5,10 +5,12 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import os
 
-from app.core.config import settings
-from app.core.database import engine, Base
-from app.core.seed import seed_db
-from app.api import auth, projects, wells, curves, files, ai_jobs, reports, gpt, petrophysics, seismic
+from backend.app.core.config import settings
+from backend.app.core.database import engine, Base
+from backend.app.core.seed import seed_db
+from backend.app.api import auth, projects, wells, curves, files, ai_jobs, reports, gpt, petrophysics, seismic
+from backend.ccus.router import router as ccus_router
+
 
 
 @asynccontextmanager
@@ -59,6 +61,7 @@ app.include_router(reports.router,  prefix="/api/reports",  tags=["Reports"])
 app.include_router(gpt.router,      prefix="/api/gpt",      tags=["Drake GPT"])
 app.include_router(petrophysics.router, prefix="/api/petrophysics", tags=["Petrophysics"])
 app.include_router(seismic.router, prefix="/api/seismic", tags=["Seismic"])
+app.include_router(ccus_router)
 
 
 @app.get("/api/health", tags=["Health"])

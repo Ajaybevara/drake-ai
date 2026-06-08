@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from app.main import app
-from app.core.database import Base, get_db
+from backend.app.core.database import Base, get_db
 
 # Use an in-memory SQLite database for isolated tests and persist it across connections
 SQLALCHEMY_TEST_URL = "sqlite:///:memory:"

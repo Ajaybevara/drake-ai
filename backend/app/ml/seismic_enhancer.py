@@ -77,6 +77,11 @@ class SeismicEnhancementConfig:
     dimension: str = "3D"
     dl_epochs: int = 15
     dl_batch: int = 32
+    view: str = "Inline"
+    selected_inline: int = 426
+    selected_crossline: int = 950
+    amplitude_range: str = "+/-4k"
+    color_scale: str = "RdBu"
 
 
 # ── Shape Matching Helper for U-Net ─────────────────────────────────────────
@@ -330,7 +335,7 @@ def run_low_frequency_enhancement(config: SeismicEnhancementConfig) -> dict[str,
         enhanced = data.astype(np.float32)
         metrics = compute_metrics(original_for_metrics, enhanced)
         preview_rows = _preview_rows(original_for_metrics, enhanced)
-        section_payload = _streamlit_section_payload(enhanced)
+        section_payload = _seismic_section_payload(enhanced, config)
         return _build_response(config, source, metrics, preview_rows, section_payload, original_for_metrics, enhanced, is_2d=False)
 
     # Detect dimension or enforce it.
@@ -393,7 +398,7 @@ def run_low_frequency_enhancement(config: SeismicEnhancementConfig) -> dict[str,
 
     metrics = compute_metrics(data, enhanced)
     preview_rows = _preview_rows(data, enhanced)
-    section_payload = _streamlit_section_payload(enhanced)
+    section_payload = _seismic_section_payload(enhanced, config)
     output_file = _write_enhanced_segy_if_possible(config.storage_path, enhanced)
 
     return _build_response(config, source, metrics, preview_rows, section_payload, data, enhanced, is_2d=is_2d, output_file=output_file, model_stack=model_stack)
@@ -411,9 +416,9 @@ def _build_response(
     output_file: str | None = None,
     model_stack: str = "GitHub Drake seismic backend",
 ) -> dict[str, Any]:
-    original_payload = _streamlit_section_payload(original)
-    enhanced_payload = _streamlit_section_payload(enhanced)
-    difference_payload = _difference_section_payload(original, enhanced)
+    original_payload = _seismic_section_payload(original, config)
+    enhanced_payload = _seismic_section_payload(enhanced, config)
+    difference_payload = _difference_section_payload(original, enhanced, config)
     return {
         "status": "completed",
         "source": source,
@@ -443,13 +448,14 @@ def _build_response(
             "x": section_payload["x"],
             "y": section_payload["y"],
             "inline": section_payload["inline"],
+            "crossline": section_payload["crossline"],
             "view": section_payload["view"],
             "zmin": -4000,
             "zmax": 4000,
             "difference_zmin": -400,
             "difference_zmax": 400,
-            "color_scale": "RdBu",
-            "amplitude_range": "+/-4k",
+            "color_scale": config.color_scale,
+            "amplitude_range": config.amplitude_range,
             "controls": {
                 "data_dimension": "2D" if is_2d else "3D",
                 "low_frequency_hz": config.freq_low,
@@ -457,8 +463,8 @@ def _build_response(
                 "workflow": config.workflow,
                 "inline_range": [200, 650],
                 "crossline_range": [700, 1200],
-                "selected_inline": 426,
-                "selected_crossline": 950,
+                "selected_inline": config.selected_inline,
+                "selected_crossline": config.selected_crossline,
             },
             "spectrum": _frequency_spectrum(original, enhanced, config.sample_interval_ms),
         },
@@ -744,8 +750,8 @@ def _section_preview(data: np.ndarray) -> list[list[float]]:
     return [[round(float(value), 5) for value in row] for row in preview]
 
 
-def _streamlit_section_payload(data: np.ndarray) -> dict[str, Any]:
-    section = _as_2d(data)
+def _seismic_section_payload(data: np.ndarray, config: SeismicEnhancementConfig) -> dict[str, Any]:
+    section = _select_display_section(data, config)
     target_rows = 96
     target_cols = 120
     row_step = max(1, section.shape[0] // target_rows)
@@ -759,17 +765,18 @@ def _streamlit_section_payload(data: np.ndarray) -> dict[str, Any]:
     x = np.linspace(700, 1200, preview.shape[1])
     y = np.linspace(400, 1100, preview.shape[0])
     return {
-        "inline": 426,
-        "view": "Inline",
+        "inline": config.selected_inline,
+        "crossline": config.selected_crossline,
+        "view": _normalized_view(config.view),
         "x": [round(float(value), 2) for value in x],
         "y": [round(float(value), 2) for value in y],
         "section": [[round(float(value), 3) for value in row] for row in preview],
     }
 
 
-def _difference_section_payload(original: np.ndarray, enhanced: np.ndarray) -> dict[str, Any]:
-    original_2d = _as_2d(original)
-    enhanced_2d = _as_2d(enhanced)
+def _difference_section_payload(original: np.ndarray, enhanced: np.ndarray, config: SeismicEnhancementConfig) -> dict[str, Any]:
+    original_2d = _select_display_section(original, config)
+    enhanced_2d = _select_display_section(enhanced, config)
     rows = min(original_2d.shape[0], enhanced_2d.shape[0])
     cols = min(original_2d.shape[1], enhanced_2d.shape[1])
     difference = enhanced_2d[:rows, :cols] - original_2d[:rows, :cols]
@@ -788,12 +795,42 @@ def _difference_section_payload(original: np.ndarray, enhanced: np.ndarray) -> d
     x = np.linspace(700, 1200, preview.shape[1])
     y = np.linspace(400, 1100, preview.shape[0])
     return {
-        "inline": 426,
-        "view": "Inline",
+        "inline": config.selected_inline,
+        "crossline": config.selected_crossline,
+        "view": _normalized_view(config.view),
         "x": [round(float(value), 2) for value in x],
         "y": [round(float(value), 2) for value in y],
         "section": [[round(float(value), 3) for value in row] for row in preview],
     }
+
+
+def _normalized_view(view: str | None) -> str:
+    return "Crossline" if str(view or "").lower().startswith("cross") else "Inline"
+
+
+def _nearest_index(values: np.ndarray, requested: int, fallback_size: int) -> int:
+    if values.size:
+        return int(np.argmin(np.abs(values.astype(float) - float(requested))))
+    return max(0, min(fallback_size - 1, fallback_size // 2))
+
+
+def _select_display_section(data: np.ndarray, config: SeismicEnhancementConfig) -> np.ndarray:
+    arr = np.asarray(data, dtype=np.float32)
+    view = _normalized_view(config.view)
+    if arr.ndim == 3:
+        if view == "Crossline":
+            idx = int(round((config.selected_crossline - 700) / max(1, 1200 - 700) * (arr.shape[1] - 1)))
+            idx = max(0, min(arr.shape[1] - 1, idx))
+            section = arr[:, idx, :]
+        else:
+            idx = int(round((config.selected_inline - 200) / max(1, 650 - 200) * (arr.shape[0] - 1)))
+            idx = max(0, min(arr.shape[0] - 1, idx))
+            section = arr[idx, :, :]
+    else:
+        section = _as_2d(arr)
+
+    # Plotly heatmap expects rows as the vertical time axis and columns as traces/crosslines.
+    return np.asarray(section, dtype=np.float32).T
 
 
 def _frequency_spectrum(original: np.ndarray, enhanced: np.ndarray, sample_interval_ms: float) -> list[dict[str, float]]:

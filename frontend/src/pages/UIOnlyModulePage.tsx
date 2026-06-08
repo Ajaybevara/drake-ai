@@ -2,7 +2,7 @@ import { useStore } from '../store'
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
-import { seismicApi } from '../services/api'
+import { ccusApi, seismicApi } from '../services/api'
 
 interface Props {
   title: string
@@ -17,8 +17,11 @@ export default function UIOnlyModulePage({ title, subtitle = DEFAULT_SUBTITLE, a
   const { theme } = useStore()
   const isLight = theme === 'light'
   const isSeismicEnhancer = kind === 'seismic' && title.toLowerCase().includes('frequency enhancer')
+  const isCcusScreening = kind === 'ccus' && title.toLowerCase().includes('preliminary screening')
   const displaySubtitle = isSeismicEnhancer
     ? 'Fetched from the integrated GitHub seismic backend: SEG-Y 3D low-frequency enhancement with inline/crossline/time visualization.'
+    : isCcusScreening
+      ? 'Integrated CCUS GitHub screening workflow: LAS parsing, curve mapping, CO2 candidate zones, log viewer, and Excel export.'
     : subtitle
 
   const cards = kind === 'seismic'
@@ -52,6 +55,8 @@ export default function UIOnlyModulePage({ title, subtitle = DEFAULT_SUBTITLE, a
 
       {isSeismicEnhancer ? (
         <SeismicEnhancerPanel accent={accent} isLight={isLight} />
+      ) : isCcusScreening ? (
+        <CcusScreeningPanel accent={accent} isLight={isLight} />
       ) : (
 
         <section style={gridStyle}>
@@ -75,6 +80,271 @@ export default function UIOnlyModulePage({ title, subtitle = DEFAULT_SUBTITLE, a
   )
 }
 
+function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
+  const [session, setSession] = useState<any>(null)
+  const [mapping, setMapping] = useState<Record<string, string>>({})
+  const [params, setParams] = useState({
+    gr_clean: '',
+    gr_shale: '',
+    matrix_density: 2.65,
+    fluid_density: 1.0,
+    phie_cutoff: 0.10,
+    vsh_cutoff: 0.30,
+    perm_cutoff: 15,
+    min_thickness: 10,
+    depth_top: '',
+    depth_base: '',
+  })
+  const [selectedCurves, setSelectedCurves] = useState(['GR', 'VSH', 'PHIE', 'PERM_MD'])
+  const [result, setResult] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
+
+  const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
+  const border = isLight ? '#E2E8F0' : '#1E293B'
+  const text = isLight ? '#0F172A' : '#F8FAFC'
+  const muted = isLight ? '#64748B' : '#94A3B8'
+
+  const hydrateSession = (data: any) => {
+    setSession(data)
+    setMapping({
+      GR: data.mapping?.GR || '',
+      RHOB: data.mapping?.RHOB || '',
+      NPHI: data.mapping?.NPHI || '',
+      RT: data.mapping?.RT || '',
+      PHIE: data.mapping?.PHIE || '',
+      PERM: data.mapping?.PERM || '',
+    })
+    setResult(null)
+  }
+
+  const loadSample = async () => {
+    setUploading(true)
+    try {
+      const response = await ccusApi.loadSample()
+      hydrateSession(response.data)
+      toast.success('CCUS demo LAS loaded')
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'Failed to load CCUS sample')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const uploadLas = async (file: File) => {
+    setUploading(true)
+    try {
+      const response = await ccusApi.uploadLas(file)
+      hydrateSession(response.data)
+      toast.success(`LAS "${file.name}" loaded`)
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'LAS upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const runScreening = async () => {
+    if (!session?.session_id) {
+      toast.error('Upload or load a LAS file first')
+      return
+    }
+    setLoading(true)
+    try {
+      const payload = {
+        session_id: session.session_id,
+        gr_curve: mapping.GR,
+        rhob_curve: mapping.RHOB,
+        nphi_curve: mapping.NPHI,
+        rt_curve: mapping.RT,
+        phie_curve: mapping.PHIE,
+        perm_curve: mapping.PERM,
+        gr_clean: emptyToNull(params.gr_clean),
+        gr_shale: emptyToNull(params.gr_shale),
+        matrix_density: params.matrix_density,
+        fluid_density: params.fluid_density,
+        phie_cutoff: params.phie_cutoff,
+        vsh_cutoff: params.vsh_cutoff,
+        perm_cutoff: params.perm_cutoff,
+        min_thickness: params.min_thickness,
+        depth_top: emptyToNull(params.depth_top),
+        depth_base: emptyToNull(params.depth_base),
+        plot_curves: selectedCurves,
+      }
+      const response = await ccusApi.calculate(payload)
+      setResult(response.data)
+      toast.success('CCUS screening completed')
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'CCUS screening failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const curves = session?.curves || []
+  const meta = session?.meta || {}
+
+  return (
+    <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px,420px) minmax(0,1fr)', gap: 18 }}>
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 14 }}>
+            <div>
+              <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 01</div>
+              <h2 style={{ margin: '6px 0 0', color: text, fontSize: 24 }}>Upload LAS File</h2>
+            </div>
+            <button onClick={loadSample} disabled={uploading} style={smallButton(isLight)}>{uploading ? 'Loading...' : 'Load Demo LAS'}</button>
+          </div>
+          <div
+            onDrop={event => {
+              event.preventDefault()
+              const file = event.dataTransfer.files[0]
+              if (file) uploadLas(file)
+            }}
+            onDragOver={event => event.preventDefault()}
+            style={{ border: `2px dashed ${isLight ? '#CBD5E1' : '#334155'}`, borderRadius: 14, padding: 22, background: isLight ? '#F1F5F9' : '#08111F' }}
+          >
+            <div style={{ color: text, fontWeight: 900 }}>Drop LAS here or click to browse</div>
+            <div style={{ color: muted, marginTop: 8 }}>Supported: .las well-log files</div>
+            <button
+              style={{ ...smallButton(isLight), marginTop: 16 }}
+              onClick={() => {
+                const input = document.createElement('input')
+                input.type = 'file'
+                input.accept = '.las'
+                input.onchange = event => {
+                  const file = (event.target as HTMLInputElement).files?.[0]
+                  if (file) uploadLas(file)
+                }
+                input.click()
+              }}
+            >
+              Browse LAS
+            </button>
+            <div style={{ color: session ? '#10B981' : muted, marginTop: 14, fontSize: 13 }}>
+              {session ? `Loaded: ${meta.FILE_NAME || 'LAS file'}` : 'No LAS loaded yet'}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Well Metadata</div>
+          <h2 style={{ margin: '6px 0 14px', color: text, fontSize: 24 }}>{meta.WELL || 'No LAS loaded'}</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(145px,1fr))', gap: 10 }}>
+            {[
+              ['Field', meta.FLD || 'N/A'],
+              ['Company', meta.COMP || 'N/A'],
+              ['Country', meta.CTRY || 'N/A'],
+              ['Depth Range', meta.START_DEPTH ? `${meta.START_DEPTH} - ${meta.STOP_DEPTH} m` : '--'],
+              ['Curves', meta.CURVE_COUNT || '--'],
+              ['Samples', meta.ROWS || '--'],
+            ].map(([label, value]) => <Metric key={label} label={label} value={value} />)}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px,1fr) minmax(300px,1fr)', gap: 18 }}>
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 02</div>
+          <h2 style={{ margin: '6px 0 12px', color: text, fontSize: 22 }}>Curve Mapping & User Edits</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 10 }}>
+            {[
+              ['GR', 'Gamma Ray / GR'],
+              ['RHOB', 'Density / RHOB'],
+              ['NPHI', 'Neutron / NPHI'],
+              ['RT', 'Resistivity / RT'],
+              ['PHIE', 'Existing PHIE optional'],
+              ['PERM', 'Existing PERM optional'],
+            ].map(([key, label]) => (
+              <Control key={key} label={label}>
+                <select style={field(isLight)} value={mapping[key] || ''} onChange={event => setMapping(prev => ({ ...prev, [key]: event.target.value }))}>
+                  <option value="">-- Not available / Calculate --</option>
+                  {curves.map((curve: string) => <option key={curve} value={curve}>{curve}</option>)}
+                </select>
+              </Control>
+            ))}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 14 }}>
+            {['GR', 'VSH', 'PHIE', 'PERM_MD', 'RT'].map(curve => (
+              <label key={curve} style={{ color: text, border: `1px solid ${border}`, borderRadius: 999, padding: '8px 12px', background: selectedCurves.includes(curve) ? `${accent}22` : 'transparent' }}>
+                <input type="checkbox" checked={selectedCurves.includes(curve)} onChange={event => setSelectedCurves(prev => event.target.checked ? [...prev, curve] : prev.filter(item => item !== curve))} /> {curve}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 03</div>
+          <h2 style={{ margin: '6px 0 12px', color: text, fontSize: 22 }}>Screening Rules / Cutoffs</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+            <NumberControl label="GR Clean" value={params.gr_clean} onChange={value => setParams(prev => ({ ...prev, gr_clean: value }))} isLight={isLight} placeholder="Auto P5" />
+            <NumberControl label="GR Shale" value={params.gr_shale} onChange={value => setParams(prev => ({ ...prev, gr_shale: value }))} isLight={isLight} placeholder="Auto P95" />
+            <NumberControl label="Matrix Density" value={params.matrix_density} onChange={value => setParams(prev => ({ ...prev, matrix_density: Number(value) }))} isLight={isLight} step="0.01" />
+            <NumberControl label="Fluid Density" value={params.fluid_density} onChange={value => setParams(prev => ({ ...prev, fluid_density: Number(value) }))} isLight={isLight} step="0.01" />
+            <NumberControl label="PHIE Cutoff" value={params.phie_cutoff} onChange={value => setParams(prev => ({ ...prev, phie_cutoff: Number(value) }))} isLight={isLight} step="0.01" />
+            <NumberControl label="Vsh Cutoff" value={params.vsh_cutoff} onChange={value => setParams(prev => ({ ...prev, vsh_cutoff: Number(value) }))} isLight={isLight} step="0.01" />
+            <NumberControl label="Perm Cutoff (mD)" value={params.perm_cutoff} onChange={value => setParams(prev => ({ ...prev, perm_cutoff: Number(value) }))} isLight={isLight} />
+            <NumberControl label="Min Thickness" value={params.min_thickness} onChange={value => setParams(prev => ({ ...prev, min_thickness: Number(value) }))} isLight={isLight} />
+            <NumberControl label="Visual Depth Top" value={params.depth_top} onChange={value => setParams(prev => ({ ...prev, depth_top: value }))} isLight={isLight} placeholder={meta.START_DEPTH || 'Auto start'} />
+            <NumberControl label="Visual Depth Base" value={params.depth_base} onChange={value => setParams(prev => ({ ...prev, depth_base: value }))} isLight={isLight} placeholder={meta.STOP_DEPTH || 'Auto stop'} />
+          </div>
+          <button onClick={runScreening} disabled={loading || !session} style={{ width: '100%', marginTop: 16, padding: '12px 16px', borderRadius: 10, border: 'none', background: accent, color: '#fff', fontWeight: 900, cursor: 'pointer' }}>
+            {loading ? 'Running Screening...' : 'Run Screening'}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 320px', gap: 18 }}>
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 04</div>
+          <h2 style={{ margin: '6px 0 12px', color: text, fontSize: 22 }}>Interactive Multi-Track Log Viewer</h2>
+          {result?.log_plot ? <PlotlyFigure figure={result.log_plot} isLight={isLight} /> : <div style={{ minHeight: 360, display: 'grid', placeItems: 'center', color: muted, border: `1px dashed ${border}`, borderRadius: 14 }}>Upload LAS and run screening to visualize logs.</div>}
+        </div>
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>CO2 Storage Screening</div>
+          <h2 style={{ margin: '6px 0 14px', color: text, fontSize: 20 }}>Zone Quality Guide</h2>
+          <Guide color="#10B981" title="CO2 possible zone" text="Candidate top line where selected cutoffs pass." />
+          <Guide color="#F59E0B" title="Review boundary" text="Near limits; inspect before interpretation." />
+          <Guide color="#EF4444" title="Poor boundary" text="Red top line means PHIE, Vsh, or permeability failed." />
+          {result?.summary && (
+            <div style={{ marginTop: 16, padding: 14, borderRadius: 12, border: `1px solid ${border}`, color: muted }}>
+              <b style={{ color: text }}>PHIE:</b> {result.summary.phie_source}<br />
+              <b style={{ color: text }}>Permeability:</b> {result.summary.perm_source}<br /><br />
+              <b style={{ color: text }}>Result:</b> {result.summary.zones_found} candidate zone(s), {result.summary.poor_zones_found || 0} poor boundary zone(s).
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginBottom: 14 }}>
+          <div>
+            <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 05</div>
+            <h2 style={{ margin: '6px 0 0', color: text, fontSize: 22 }}>Preliminary CCS Screening Zones</h2>
+          </div>
+          {session?.session_id && result?.export_url && <a href={ccusApi.exportUrl(session.session_id)} download style={{ ...smallButton(isLight), textDecoration: 'none', color: text }}>Export Excel</a>}
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', color: text, fontSize: 13 }}>
+            <thead>
+              <tr>{['Zone', 'Top', 'Base', 'Thickness', 'Avg PHIE', 'Avg Vsh', 'Avg Perm mD', 'Avg GR', 'Avg RT', 'Score', 'Status'].map(head => <th key={head} style={{ textAlign: 'left', padding: 10, borderBottom: `1px solid ${border}`, color: muted }}>{head}</th>)}</tr>
+            </thead>
+            <tbody>
+              {result?.zones?.length ? result.zones.map((zone: any) => (
+                <tr key={`${zone.zone}-${zone.top_m}`}>
+                  {[zone.zone, zone.top_m, zone.base_m, zone.thickness_m, zone.avg_phie, zone.avg_vsh, zone.avg_perm_md, zone.avg_gr_api, zone.avg_rt_ohmm, zone.screening_score, zone.status].map((value, index) => (
+                    <td key={index} title={index === 10 ? zone.reason : undefined} style={{ padding: 10, borderBottom: `1px solid ${border}`, color: index === 10 ? statusColor(String(value)) : text }}>{String(value ?? '')}</td>
+                  ))}
+                </tr>
+              )) : <tr><td colSpan={11} style={{ padding: 14, color: muted }}>No results yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function SeismicEnhancerPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
   const [result, setResult] = useState<any>(null)
   const [loading, setLoading] = useState(false)
@@ -83,6 +353,10 @@ function SeismicEnhancerPanel({ accent, isLight }: { accent: string; isLight: bo
   const [view, setView] = useState<'Inline' | 'Crossline'>('Inline')
   const [inlineNo, setInlineNo] = useState(426)
   const [crosslineNo, setCrosslineNo] = useState(950)
+  const [dimension, setDimension] = useState('3D')
+  const [workflow, setWorkflow] = useState('Low Frequency')
+  const [amplitudeRange, setAmplitudeRange] = useState('+/-4k')
+  const [colorScale, setColorScale] = useState('RdBu')
   const [uploadedFileInfo, setUploadedFileInfo] = useState<{
     fileName: string;
     storagePath: string;
@@ -113,10 +387,15 @@ function SeismicEnhancerPanel({ accent, isLight }: { accent: string; isLight: bo
         freq_high: freqHigh,
         gain: 1.8,
         sample_interval_ms: 2,
-        workflow: 'Low Frequency',
-        dimension: '3D',
+        workflow,
+        dimension,
         dl_epochs: 15,
         dl_batch: 32,
+        view,
+        selected_inline: inlineNo,
+        selected_crossline: crosslineNo,
+        amplitude_range: amplitudeRange,
+        color_scale: colorScale,
       })
       setResult(response.data)
       toast.success('Seismic enhancement results fetched from backend')
@@ -189,12 +468,12 @@ function SeismicEnhancerPanel({ accent, isLight }: { accent: string; isLight: bo
           </div>
         )}
 
-        <Control label="Data Dimension"><select style={field(isLight)} defaultValue="3D"><option>3D</option><option>2D</option></select></Control>
+        <Control label="Data Dimension"><select style={field(isLight)} value={dimension} onChange={e => setDimension(e.target.value)}><option>3D</option><option>2D</option></select></Control>
         <Control label="Low Frequency (Hz)"><input style={field(isLight)} type="number" value={freqLow} onChange={e => setFreqLow(Number(e.target.value))} /></Control>
         <Control label="High Frequency (Hz)"><input style={field(isLight)} type="number" value={freqHigh} onChange={e => setFreqHigh(Number(e.target.value))} /></Control>
-        <Control label="Workflow"><select style={field(isLight)} defaultValue="Low Frequency"><option>Low Frequency</option><option>High Frequency</option><option>Both</option></select></Control>
-        <Control label="Amplitude Range"><select style={field(isLight)} defaultValue="+/-4k"><option>+/-4k</option><option>+/-10k</option><option>+/-20k</option></select></Control>
-        <Control label="Color Scale"><select style={field(isLight)} defaultValue="RdBu"><option>RdBu</option><option>RdGy</option><option>gray</option><option>Blues</option><option>Reds</option></select></Control>
+        <Control label="Workflow"><select style={field(isLight)} value={workflow} onChange={e => setWorkflow(e.target.value)}><option>Low Frequency</option><option>High Frequency</option><option>Both</option></select></Control>
+        <Control label="Amplitude Range"><select style={field(isLight)} value={amplitudeRange} onChange={e => setAmplitudeRange(e.target.value)}><option>+/-4k</option><option>+/-10k</option><option>+/-20k</option></select></Control>
+        <Control label="Color Scale"><select style={field(isLight)} value={colorScale} onChange={e => setColorScale(e.target.value)}><option>RdBu</option><option>RdGy</option><option>gray</option><option>Blues</option><option>Reds</option></select></Control>
         <button onClick={runEnhancement} disabled={loading} style={{ width: '100%', marginTop: 16, padding: '12px 16px', borderRadius: 10, border: 'none', background: accent, color: '#fff', fontWeight: 900, cursor: 'pointer' }}>{loading ? 'Fetching Results...' : 'Run Enhancement'}</button>
       </aside>
 
@@ -205,8 +484,8 @@ function SeismicEnhancerPanel({ accent, isLight }: { accent: string; isLight: bo
           </div>
         )}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 18 }}>
-          <SliderLabel label={String(inlineNo)} min="200.00" max="650.00" />
-          <SliderLabel label={String(crosslineNo)} min="700.00" max="1200.00" />
+          <SliderLabel label="Inline #" value={inlineNo} min={200} max={650} onChange={setInlineNo} />
+          <SliderLabel label="Crossline #" value={crosslineNo} min={700} max={1200} onChange={setCrosslineNo} />
         </div>
         <div style={{ color: text, marginBottom: 16 }}>
           <div style={{ fontSize: 13, marginBottom: 10 }}>View</div>
@@ -255,8 +534,105 @@ function Control({ label, children }: { label: string; children: React.ReactNode
   return <label style={{ display: 'block', marginTop: 16 }}><div style={{ color: '#94A3B8', fontSize: 13, fontWeight: 800, marginBottom: 7 }}>{label}</div>{children}</label>
 }
 
-function SliderLabel({ label, min, max }: { label: string; min: string; max: string }) {
-  return <div><div style={{ textAlign: 'center', color: '#FF4B4B', fontFamily: 'monospace' }}>{Number(label).toFixed(2)}</div><div style={{ height: 5, background: 'linear-gradient(90deg,#ff4b4b,#e5e7eb)', borderRadius: 99 }} /><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, color: '#94A3B8', fontFamily: 'monospace' }}><span>{min}</span><span>{max}</span></div></div>
+function NumberControl({ label, value, onChange, isLight, placeholder, step = '1' }: { label: string; value: any; onChange: (value: any) => void; isLight: boolean; placeholder?: any; step?: string }) {
+  return (
+    <label style={{ display: 'block' }}>
+      <div style={{ color: '#94A3B8', fontSize: 13, fontWeight: 800, marginBottom: 7 }}>{label}</div>
+      <input style={field(isLight)} type="number" value={value} onChange={event => onChange(event.target.value)} placeholder={String(placeholder ?? '')} step={step} />
+    </label>
+  )
+}
+
+function PlotlyFigure({ figure, isLight }: { figure: any; isLight: boolean }) {
+  const plotRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!plotRef.current || !figure?.data || !figure?.layout) return
+    let cancelled = false
+    import('plotly.js-dist-min').then(({ default: Plotly }) => {
+      if (cancelled || !plotRef.current) return
+      Plotly.react(
+        plotRef.current,
+        figure.data,
+        {
+          ...figure.layout,
+          paper_bgcolor: isLight ? '#FFFFFF' : figure.layout.paper_bgcolor,
+          plot_bgcolor: isLight ? '#F8FAFC' : figure.layout.plot_bgcolor,
+          font: { ...(figure.layout.font || {}), color: isLight ? '#0F172A' : '#CBD5E1' },
+        },
+        {
+          responsive: true,
+          displaylogo: false,
+          modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+          toImageButtonOptions: {
+            format: 'png',
+            filename: 'ccus_screening_log_viewer',
+            height: 900,
+            width: 1300,
+            scale: 2,
+          },
+        },
+      )
+    })
+    return () => {
+      cancelled = true
+      import('plotly.js-dist-min').then(({ default: Plotly }) => {
+        if (plotRef.current) Plotly.purge(plotRef.current)
+      })
+    }
+  }, [figure, isLight])
+
+  return <div ref={plotRef} style={{ width: '100%', minHeight: 650, borderRadius: 12, overflow: 'hidden' }} />
+}
+
+function Guide({ color, title, text }: { color: string; title: string; text: string }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '16px 1fr', gap: 10, marginBottom: 12, alignItems: 'start' }}>
+      <span style={{ width: 12, height: 12, borderRadius: 999, background: color, boxShadow: `0 0 18px ${color}66`, marginTop: 4 }} />
+      <div><b>{title}</b><div style={{ color: '#94A3B8', marginTop: 3, fontSize: 13 }}>{text}</div></div>
+    </div>
+  )
+}
+
+function smallButton(isLight: boolean): React.CSSProperties {
+  return {
+    border: `1px solid ${isLight ? '#CBD5E1' : '#1E293B'}`,
+    borderRadius: 10,
+    background: isLight ? '#FFFFFF' : '#0B1220',
+    color: isLight ? '#0F172A' : '#F8FAFC',
+    padding: '10px 14px',
+    fontWeight: 900,
+    cursor: 'pointer',
+  }
+}
+
+function emptyToNull(value: any) {
+  return value === '' || value === undefined ? null : value
+}
+
+function statusColor(value: string) {
+  if (value === 'Excellent' || value === 'Good') return '#10B981'
+  if (value === 'Review') return '#F59E0B'
+  if (value === 'Poor') return '#EF4444'
+  return '#F8FAFC'
+}
+
+function SliderLabel({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (value: number) => void }) {
+  return (
+    <label style={{ display: 'block' }}>
+      <div style={{ color: '#94A3B8', fontSize: 13, marginBottom: 4 }}>{label}</div>
+      <div style={{ textAlign: 'center', color: '#FF4B4B', fontFamily: 'monospace' }}>{value.toFixed(2)}</div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        value={value}
+        onChange={event => onChange(Number(event.target.value))}
+        style={{ width: '100%', accentColor: '#FF4B4B' }}
+      />
+      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94A3B8', fontFamily: 'monospace' }}><span>{min.toFixed(2)}</span><span>{max.toFixed(2)}</span></div>
+    </label>
+  )
 }
 
 function ResultPlotCard({ title, plot, section, isLight, zmin = -4000, zmax = 4000 }: { title: string; plot: any; section: number[][]; isLight: boolean; zmin?: number; zmax?: number }) {

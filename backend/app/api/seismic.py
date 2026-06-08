@@ -31,6 +31,11 @@ class SeismicEnhancementRequest(BaseModel):
     dimension: str = Field(default="3D")
     dl_epochs: int = Field(default=15, ge=1, le=100)
     dl_batch: int = Field(default=32, ge=1, le=512)
+    view: str = Field(default="Inline")
+    selected_inline: int = Field(default=426)
+    selected_crossline: int = Field(default=950)
+    amplitude_range: str = Field(default="+/-4k")
+    color_scale: str = Field(default="RdBu")
 
 
 @router.post("/files/upload")
@@ -78,6 +83,11 @@ def low_frequency_enhancement(payload: SeismicEnhancementRequest):
                 dimension=payload.dimension,
                 dl_epochs=payload.dl_epochs,
                 dl_batch=payload.dl_batch,
+                view=payload.view,
+                selected_inline=payload.selected_inline,
+                selected_crossline=payload.selected_crossline,
+                amplitude_range=payload.amplitude_range,
+                color_scale=payload.color_scale,
             )
         )
     except Exception as exc:

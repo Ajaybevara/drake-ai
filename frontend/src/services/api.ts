@@ -117,6 +117,11 @@ export const seismicApi = {
     dimension?: string
     dl_epochs?: number
     dl_batch?: number
+    view?: string
+    selected_inline?: number
+    selected_crossline?: number
+    amplitude_range?: string
+    color_scale?: string
   }) => api.post('/seismic/inspect', params),
   lowFrequencyEnhancement: (params: {
     file_name: string
@@ -129,7 +134,25 @@ export const seismicApi = {
     dimension?: string
     dl_epochs?: number
     dl_batch?: number
+    view?: string
+    selected_inline?: number
+    selected_crossline?: number
+    amplitude_range?: string
+    color_scale?: string
   }) => api.post('/seismic/low-frequency-enhancement', params),
+}
+
+export const ccusApi = {
+  loadSample: () => api.post('/ccus/load-sample'),
+  uploadLas: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post('/ccus/upload', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  calculate: (params: any) => api.post('/ccus/calculate', params),
+  exportUrl: (sessionId: string) => `${API_URL}/api/ccus/export/${sessionId}`,
 }
 
 export const localProjectsApi = {
