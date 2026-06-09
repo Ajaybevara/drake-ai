@@ -95,6 +95,15 @@ export const reportsApi = {
 export const petrophysicsApi = {
   predictionBundle: (wellId: number) => api.get(`/petrophysics/well/${wellId}/prediction-bundle`),
   uncertainty: (wellId: number, params?: any) => api.post(`/petrophysics/well/${wellId}/uncertainty`, params || {}),
+  loadCrossplotDemo: () => api.post('/petrophysics/crossplot/load-demo'),
+  uploadCrossplotLas: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post('/petrophysics/crossplot/upload-las', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  generateCrossplot: (params: any) => api.post('/petrophysics/crossplot/generate', params),
 }
 
 // Seismic

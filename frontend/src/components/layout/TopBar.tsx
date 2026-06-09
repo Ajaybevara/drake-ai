@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useStore } from '../../store'
+import { saveProjectFile } from '../../utils/drakeProjectFile'
 
 const NAV_ITEMS = [
   { label: 'Petrophysics', path: '/petrophysics/log-visualization' },
@@ -12,7 +13,7 @@ const NAV_ITEMS = [
 ]
 
 export default function TopBar() {
-  const { user, logout, theme, toggleTheme } = useStore()
+  const { user, logout, theme, toggleTheme, activeLocalProject, activeProjectFileHandle, setActiveProjectFileHandle, markProjectSaved, projectDirty } = useStore()
   const [profileOpen, setProfileOpen] = useState(false)
   const profileRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
@@ -22,6 +23,22 @@ export default function TopBar() {
   const handleLogout = () => {
     logout()
     navigate('/login')
+  }
+
+  const handleSaveProject = async () => {
+    if (!activeLocalProject) {
+      toast.error('Create or open a .drake project first')
+      navigate('/projects')
+      return
+    }
+    try {
+      const result = await saveProjectFile(activeLocalProject, activeProjectFileHandle)
+      setActiveProjectFileHandle(result.handle, result.fileName)
+      markProjectSaved()
+      toast.success(result.usedFallback ? 'Project downloaded as .drake file' : 'Project saved to local disk')
+    } catch (error: any) {
+      if (error?.name !== 'AbortError') toast.error(error?.message || 'Project save failed')
+    }
   }
 
   useEffect(() => {
@@ -74,6 +91,10 @@ export default function TopBar() {
       </nav>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+        <button onClick={handleSaveProject} title="Save Project to Local Disk" style={{ height: 30, borderRadius: 6, background: projectDirty ? 'linear-gradient(135deg,#EF4444,#DA2626)' : isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${projectDirty ? '#EF4444' : isLight ? '#CBD5E1' : '#223047'}`, color: projectDirty ? '#FFFFFF' : isLight ? '#0F172A' : '#F8FAFC', display: 'flex', alignItems: 'center', gap: 7, padding: '0 12px', cursor: 'pointer', fontWeight: 800, whiteSpace: 'nowrap' }}>
+          <i className="fas fa-save" style={{ fontSize: 12 }}></i>
+          Save Project
+        </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: isLight ? '#F8FAFC' : '#070B12', border: `1px solid ${isLight ? '#CBD5E1' : '#223047'}`, borderRadius: 6, padding: '8px 14px', width: 280 }}>
           <i className="fas fa-search" style={{ color: isLight ? '#64748B' : '#E2E8F0', fontSize: 14 }}></i>
           <input type="text" placeholder="Search wells, projects..." onKeyDown={e => { if (e.key === 'Enter') toast.success(`Searching for "${e.currentTarget.value}"`) }} style={{ background: 'none', border: 'none', outline: 'none', color: isLight ? '#0F172A' : '#E2E8F0', fontSize: 14, width: '100%' }} />

@@ -67,20 +67,15 @@ export interface LocalProject {
   activity: Array<{ id: string; text: string; createdAt: string }>
 }
 
-const LOCAL_PROJECTS_KEY = 'drake_local_projects'
-const ACTIVE_LOCAL_PROJECT_KEY = 'drake_active_local_project'
-
-const readLocalProjects = (): LocalProject[] => {
-  try {
-    return JSON.parse(localStorage.getItem(LOCAL_PROJECTS_KEY) || '[]')
-  } catch {
-    return []
-  }
+export interface DrakeProjectDocument {
+  schemaVersion: 1
+  app: 'Drake AI Enterprise Platform'
+  savedAt: string
+  project: LocalProject
 }
 
-const writeLocalProjects = (projects: LocalProject[]) => {
-  localStorage.setItem(LOCAL_PROJECTS_KEY, JSON.stringify(projects))
-}
+const readLocalProjects = (): LocalProject[] => []
+const writeLocalProjects = (_projects: LocalProject[]) => {}
 
 const classifyProjectFile = (file: File): Pick<ProjectFile, 'category' | 'compatibility' | 'status'> => {
   const name = file.name.toLowerCase()
@@ -135,8 +130,14 @@ interface AppState {
   // Local project-first workflow
   localProjects: LocalProject[]
   activeLocalProject: LocalProject | null
+  activeProjectFileHandle: any | null
+  activeProjectFileName: string | null
+  projectDirty: boolean
   createLocalProject: (name: string) => LocalProject
   openLocalProject: (id: string) => void
+  setActiveProjectFileHandle: (handle: any | null, fileName?: string | null) => void
+  setActiveLocalProjectDocument: (project: LocalProject, handle?: any | null, fileName?: string | null) => void
+  markProjectSaved: () => void
   addProjectFiles: (projectId: string, files: File[]) => void
   addProjectFileRecords: (projectId: string, files: ProjectFile[]) => void
   deleteProjectFile: (projectId: string, fileId: string) => void
@@ -207,11 +208,10 @@ export const useStore = create<AppState>((set) => ({
 
   // Local project-first workflow
   localProjects: readLocalProjects(),
-  activeLocalProject: (() => {
-    const projects = readLocalProjects()
-    const activeId = localStorage.getItem(ACTIVE_LOCAL_PROJECT_KEY)
-    return projects.find(p => p.id === activeId) || null
-  })(),
+  activeLocalProject: null,
+  activeProjectFileHandle: null,
+  activeProjectFileName: null,
+  projectDirty: false,
   createLocalProject: (name) => {
     const now = new Date().toISOString()
     const project: LocalProject = {
@@ -227,9 +227,7 @@ export const useStore = create<AppState>((set) => ({
     }
     set((state) => {
       const localProjects = [project, ...state.localProjects]
-      writeLocalProjects(localProjects)
-      localStorage.setItem(ACTIVE_LOCAL_PROJECT_KEY, project.id)
-      return { localProjects, activeLocalProject: project }
+      return { localProjects, activeLocalProject: project, projectDirty: true }
     })
     return project
   },
@@ -239,10 +237,23 @@ export const useStore = create<AppState>((set) => ({
       project.id === id ? { ...project, lastOpenedAt: now } : project
     )
     const activeLocalProject = localProjects.find(project => project.id === id) || null
-    writeLocalProjects(localProjects)
-    if (activeLocalProject) localStorage.setItem(ACTIVE_LOCAL_PROJECT_KEY, id)
     return { localProjects, activeLocalProject }
   }),
+  setActiveProjectFileHandle: (activeProjectFileHandle, fileName = null) => set({
+    activeProjectFileHandle,
+    activeProjectFileName: fileName || activeProjectFileHandle?.name || null,
+  }),
+  setActiveLocalProjectDocument: (project, handle = null, fileName = null) => set((state) => {
+    const localProjects = [project, ...state.localProjects.filter(item => item.id !== project.id)]
+    return {
+      localProjects,
+      activeLocalProject: project,
+      activeProjectFileHandle: handle,
+      activeProjectFileName: fileName || handle?.name || `${project.name}.drake`,
+      projectDirty: false,
+    }
+  }),
+  markProjectSaved: () => set({ projectDirty: false }),
   addProjectFiles: (projectId, files) => set((state) => {
     const now = new Date().toISOString()
     const newFiles: ProjectFile[] = files.map(file => {
@@ -269,8 +280,7 @@ export const useStore = create<AppState>((set) => ({
       }
     })
     const activeLocalProject = localProjects.find(project => project.id === projectId) || state.activeLocalProject
-    writeLocalProjects(localProjects)
-    return { localProjects, activeLocalProject }
+    return { localProjects, activeLocalProject, projectDirty: true }
   }),
   addProjectFileRecords: (projectId, files) => set((state) => {
     const now = new Date().toISOString()
@@ -287,16 +297,14 @@ export const useStore = create<AppState>((set) => ({
       }
     })
     const activeLocalProject = localProjects.find(project => project.id === projectId) || state.activeLocalProject
-    writeLocalProjects(localProjects)
-    return { localProjects, activeLocalProject }
+    return { localProjects, activeLocalProject, projectDirty: true }
   }),
   deleteProjectFile: (projectId, fileId) => set((state) => {
     const localProjects = state.localProjects.map(project =>
       project.id === projectId ? { ...project, files: project.files.filter(file => file.id !== fileId) } : project
     )
     const activeLocalProject = localProjects.find(project => project.id === projectId) || state.activeLocalProject
-    writeLocalProjects(localProjects)
-    return { localProjects, activeLocalProject }
+    return { localProjects, activeLocalProject, projectDirty: true }
   }),
   importLocalProject: (incomingProject) => {
     const now = new Date().toISOString()
@@ -315,9 +323,7 @@ export const useStore = create<AppState>((set) => ({
     }
     set((state) => {
       const localProjects = [project, ...state.localProjects.filter(item => item.id !== project.id)]
-      writeLocalProjects(localProjects)
-      localStorage.setItem(ACTIVE_LOCAL_PROJECT_KEY, project.id)
-      return { localProjects, activeLocalProject: project }
+      return { localProjects, activeLocalProject: project, projectDirty: true }
     })
     return project
   },
@@ -333,8 +339,7 @@ export const useStore = create<AppState>((set) => ({
       }
     })
     const activeLocalProject = localProjects.find(project => project.id === projectId) || state.activeLocalProject
-    writeLocalProjects(localProjects)
-    return { localProjects, activeLocalProject }
+    return { localProjects, activeLocalProject, projectDirty: true }
   }),
   addProjectOutput: (projectId, output) => set((state) => {
     const now = new Date().toISOString()
@@ -347,7 +352,6 @@ export const useStore = create<AppState>((set) => ({
       }
     })
     const activeLocalProject = localProjects.find(project => project.id === projectId) || state.activeLocalProject
-    writeLocalProjects(localProjects)
-    return { localProjects, activeLocalProject }
+    return { localProjects, activeLocalProject, projectDirty: true }
   }),
 }))

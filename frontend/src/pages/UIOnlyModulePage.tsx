@@ -2,7 +2,7 @@ import { useStore } from '../store'
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
-import { ccusApi, seismicApi } from '../services/api'
+import { ccusApi, petrophysicsApi, seismicApi } from '../services/api'
 
 interface Props {
   title: string
@@ -18,10 +18,13 @@ export default function UIOnlyModulePage({ title, subtitle = DEFAULT_SUBTITLE, a
   const isLight = theme === 'light'
   const isSeismicEnhancer = kind === 'seismic' && title.toLowerCase().includes('frequency enhancer')
   const isCcusScreening = kind === 'ccus' && title.toLowerCase().includes('preliminary screening')
+  const isCrossplot = kind === 'logs' && title.toLowerCase().includes('crossplot')
   const displaySubtitle = isSeismicEnhancer
     ? 'Fetched from the integrated GitHub seismic backend: SEG-Y 3D low-frequency enhancement with inline/crossline/time visualization.'
     : isCcusScreening
       ? 'Integrated CCUS GitHub screening workflow: LAS parsing, curve mapping, CO2 candidate zones, log viewer, and Excel export.'
+      : isCrossplot
+        ? 'Integrated petrophysics crossplot workflow: LAS parsing, curve selection, interactive X/Y scatter, hover values, statistics, and plot export.'
     : subtitle
 
   const cards = kind === 'seismic'
@@ -57,6 +60,8 @@ export default function UIOnlyModulePage({ title, subtitle = DEFAULT_SUBTITLE, a
         <SeismicEnhancerPanel accent={accent} isLight={isLight} />
       ) : isCcusScreening ? (
         <CcusScreeningPanel accent={accent} isLight={isLight} />
+      ) : isCrossplot ? (
+        <PetrophysicsCrossplotPanel accent={accent} isLight={isLight} />
       ) : (
 
         <section style={gridStyle}>
@@ -77,6 +82,236 @@ export default function UIOnlyModulePage({ title, subtitle = DEFAULT_SUBTITLE, a
         </section>
       )}
     </div>
+  )
+}
+
+function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
+  const [session, setSession] = useState<any>(null)
+  const [config, setConfig] = useState({
+    x_curve: '',
+    y_curve: '',
+    color_by: 'Depth',
+    x_scale: 'Linear',
+    y_scale: 'Linear',
+    point_size: 6,
+    opacity: 0.82,
+  })
+  const [plotData, setPlotData] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
+
+  const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
+  const border = isLight ? '#E2E8F0' : '#1E293B'
+  const text = isLight ? '#0F172A' : '#F8FAFC'
+  const muted = isLight ? '#64748B' : '#94A3B8'
+  const curves: string[] = session?.curve_names || []
+
+  const hydrateSession = (data: any) => {
+    const names = data.curve_names || []
+    const defaultX = names.includes('NPHI') ? 'NPHI' : names.includes('GR') ? 'GR' : names[1] || names[0] || ''
+    const defaultY = names.includes('RHOB') ? 'RHOB' : names.includes('DT') ? 'DT' : names.find((name: string) => name !== defaultX) || ''
+    setSession(data)
+    setConfig(prev => ({
+      ...prev,
+      x_curve: defaultX,
+      y_curve: defaultY,
+      color_by: names.includes('GR') ? 'GR' : 'Depth',
+    }))
+    setPlotData(null)
+  }
+
+  const loadDemo = async () => {
+    setUploading(true)
+    try {
+      const response = await petrophysicsApi.loadCrossplotDemo()
+      hydrateSession(response.data)
+      toast.success('Petrophysics demo LAS loaded')
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'Failed to load demo LAS')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const uploadLas = async (file: File) => {
+    setUploading(true)
+    try {
+      const response = await petrophysicsApi.uploadCrossplotLas(file)
+      hydrateSession(response.data)
+      toast.success(`LAS "${file.name}" loaded`)
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'LAS upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const runCrossplot = async () => {
+    if (!session?.session_id) {
+      toast.error('Upload or load a LAS file first')
+      return
+    }
+    if (!config.x_curve || !config.y_curve || config.x_curve === config.y_curve) {
+      toast.error('Select two different curves')
+      return
+    }
+    setLoading(true)
+    try {
+      const response = await petrophysicsApi.generateCrossplot({ ...config, session_id: session.session_id })
+      const data = response.data
+      data.figure = applyCrossplotFigureStyle(data.figure, config, isLight, accent)
+      setPlotData(data)
+      toast.success(`Crossplot generated: ${data.point_count?.toLocaleString()} points`)
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'Crossplot generation failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const updateConfig = (key: string, value: any) => setConfig(prev => ({ ...prev, [key]: value }))
+
+  return (
+    <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px,420px) minmax(0,1fr)', gap: 18 }}>
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 14 }}>
+            <div>
+              <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 01</div>
+              <h2 style={{ margin: '6px 0 0', color: text, fontSize: 24 }}>Upload LAS File</h2>
+            </div>
+            <button onClick={loadDemo} disabled={uploading} style={smallButton(isLight)}>{uploading ? 'Loading...' : 'Load Demo LAS'}</button>
+          </div>
+          <div
+            onDrop={event => {
+              event.preventDefault()
+              const file = event.dataTransfer.files[0]
+              if (file) uploadLas(file)
+            }}
+            onDragOver={event => event.preventDefault()}
+            style={{ border: `2px dashed ${isLight ? '#CBD5E1' : '#334155'}`, borderRadius: 14, padding: 22, background: isLight ? '#F1F5F9' : '#08111F' }}
+          >
+            <div style={{ color: text, fontWeight: 900 }}>Drop LAS here or click to browse</div>
+            <div style={{ color: muted, marginTop: 8 }}>Supports .las files from the petrophysics crossplot workflow</div>
+            <button
+              style={{ ...smallButton(isLight), marginTop: 16 }}
+              onClick={() => {
+                const input = document.createElement('input')
+                input.type = 'file'
+                input.accept = '.las'
+                input.onchange = event => {
+                  const file = (event.target as HTMLInputElement).files?.[0]
+                  if (file) uploadLas(file)
+                }
+                input.click()
+              }}
+            >
+              Browse LAS
+            </button>
+            <div style={{ color: session ? '#10B981' : muted, marginTop: 14, fontSize: 13 }}>
+              {session ? `Loaded: ${session.file_name || 'LAS file'}` : 'No LAS loaded yet'}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Well Information</div>
+          <h2 style={{ margin: '6px 0 14px', color: text, fontSize: 24 }}>{session?.well_name || 'No LAS loaded'}</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(145px,1fr))', gap: 10 }}>
+            {[
+              ['File', session?.file_name || 'N/A'],
+              ['Company', session?.company || 'N/A'],
+              ['Field', session?.field || 'N/A'],
+              ['Country', session?.country || 'N/A'],
+              ['Depth Range', session?.depth_min !== undefined ? `${Number(session.depth_min).toFixed(1)} - ${Number(session.depth_max).toFixed(1)}` : '--'],
+              ['Curves', session?.num_curves || '--'],
+              ['Rows', session?.rows || '--'],
+              ['Active Module', 'Crossplot'],
+            ].map(([label, value]) => <Metric key={label} label={label} value={value} />)}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px,420px) minmax(0,1fr)', gap: 18 }}>
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 02</div>
+          <h2 style={{ margin: '6px 0 12px', color: text, fontSize: 22 }}>Crossplot Settings</h2>
+          <div style={{ display: 'grid', gap: 12 }}>
+            <Control label="X Axis Curve">
+              <select style={field(isLight)} value={config.x_curve} onChange={event => updateConfig('x_curve', event.target.value)} disabled={!session}>
+                <option value="">Select curve</option>
+                {curves.map(curve => <option key={curve} value={curve}>{curve}</option>)}
+              </select>
+            </Control>
+            <Control label="Y Axis Curve">
+              <select style={field(isLight)} value={config.y_curve} onChange={event => updateConfig('y_curve', event.target.value)} disabled={!session}>
+                <option value="">Select curve</option>
+                {curves.map(curve => <option key={curve} value={curve}>{curve}</option>)}
+              </select>
+            </Control>
+            <Control label="Color By">
+              <select style={field(isLight)} value={config.color_by} onChange={event => updateConfig('color_by', event.target.value)} disabled={!session}>
+                {['Depth', ...curves].map(curve => <option key={curve} value={curve}>{curve}</option>)}
+              </select>
+            </Control>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Control label="X Scale">
+                <select style={field(isLight)} value={config.x_scale} onChange={event => updateConfig('x_scale', event.target.value)}>
+                  {['Linear', 'Logarithmic'].map(scale => <option key={scale}>{scale}</option>)}
+                </select>
+              </Control>
+              <Control label="Y Scale">
+                <select style={field(isLight)} value={config.y_scale} onChange={event => updateConfig('y_scale', event.target.value)}>
+                  {['Linear', 'Logarithmic'].map(scale => <option key={scale}>{scale}</option>)}
+                </select>
+              </Control>
+            </div>
+            <SliderLabel label="Point Size" value={config.point_size} min={2} max={12} step={1} onChange={value => updateConfig('point_size', value)} />
+            <SliderLabel label="Opacity" value={config.opacity} min={0.2} max={1} step={0.05} onChange={value => updateConfig('opacity', value)} />
+            <button onClick={runCrossplot} disabled={loading || !session} style={{ width: '100%', marginTop: 6, padding: '13px 16px', borderRadius: 12, border: 'none', background: accent, color: '#fff', fontWeight: 900, cursor: 'pointer', boxShadow: `0 12px 34px ${accent}33` }}>
+              {loading ? 'Generating Crossplot...' : 'Generate Crossplot'}
+            </button>
+          </div>
+        </div>
+
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg, minWidth: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'center', marginBottom: 12 }}>
+            <div>
+              <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 03</div>
+              <h2 style={{ margin: '6px 0 0', color: text, fontSize: 22 }}>Interactive Crossplot</h2>
+            </div>
+          </div>
+          {plotData?.figure ? (
+            <PlotlyFigure
+              figure={plotData.figure}
+              isLight={isLight}
+              showExport
+              exportName={`crossplot_${plotData.x_curve}_vs_${plotData.y_curve}`}
+            />
+          ) : (
+            <div style={{ minHeight: 650, display: 'grid', placeItems: 'center', color: muted, border: `1px dashed ${border}`, borderRadius: 14 }}>
+              Upload LAS, choose curves, then generate the crossplot.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px,360px)', gap: 18 }}>
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Statistics</div>
+          <h2 style={{ margin: '6px 0 12px', color: text, fontSize: 22 }}>{plotData ? `${plotData.point_count?.toLocaleString()} Points` : 'No Plot Yet'}</h2>
+          {plotData ? (
+            <div style={{ display: 'grid', gap: 10 }}>
+              <Metric label="Correlation" value={plotData.statistics?.correlation?.toFixed?.(4) ?? 'N/A'} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10 }}>
+                <CurveStats title="X Axis" stats={plotData.statistics?.x} />
+                <CurveStats title="Y Axis" stats={plotData.statistics?.y} />
+              </div>
+            </div>
+          ) : <div style={{ color: muted }}>Statistics appear after generating a crossplot.</div>}
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -530,6 +765,140 @@ function SeismicEnhancerPanel({ accent, isLight }: { accent: string; isLight: bo
   )
 }
 
+function applyCrossplotFigureStyle(figure: any, config: any, isLight: boolean, accent: string) {
+  const paper = isLight ? '#FFFFFF' : '#111827'
+  const plot = isLight ? '#F8FAFC' : '#111827'
+  const grid = isLight ? '#D8E0EC' : '#253044'
+  const text = isLight ? '#0F172A' : '#DCE7F7'
+  const muted = isLight ? '#64748B' : '#6F86A6'
+  const trace = figure?.data?.[0] || {}
+  const pointCount = Array.isArray(trace.x) ? trace.x.length : 0
+  const colorBy = config.color_by || 'Depth'
+  return {
+    data: [{
+      ...trace,
+      marker: {
+        ...(trace.marker || {}),
+        size: Number(config.point_size || 6) + 5,
+        opacity: Number(config.opacity || 0.82),
+        colorscale: [
+          [0, '#2563EB'],
+          [0.14, '#06B6D4'],
+          [0.28, '#10B981'],
+          [0.42, '#A3E635'],
+          [0.56, '#F59E0B'],
+          [0.7, '#F97316'],
+          [0.84, '#EC4899'],
+          [1, '#8B5CF6'],
+        ],
+        line: { width: 0.35, color: isLight ? 'rgba(15,23,42,.16)' : 'rgba(255,255,255,.08)' },
+        colorbar: {
+          ...(trace.marker?.colorbar || {}),
+          title: { text: colorBy, side: 'top', font: { color: muted, size: 12 } },
+          tickfont: { color: muted, size: 11 },
+          thickness: 15,
+          len: 0.74,
+          x: 1.03,
+          y: 0.5,
+          bgcolor: isLight ? 'rgba(255,255,255,.82)' : 'rgba(17,24,39,.72)',
+          bordercolor: isLight ? '#D8E0EC' : '#253044',
+          borderwidth: 1,
+          outlinewidth: 0,
+        },
+      },
+    }],
+    layout: {
+      ...(figure?.layout || {}),
+      height: 650,
+      margin: { l: 78, r: 108, t: 92, b: 72 },
+      paper_bgcolor: paper,
+      plot_bgcolor: plot,
+      font: { color: text, family: 'Inter, system-ui, sans-serif' },
+      title: {
+        text: [
+          `<span style="color:${accent};font-size:28px;">|</span>`,
+          `<span style="letter-spacing:2px;"> ${String(config.x_curve || 'X').toUpperCase()} VS ${String(config.y_curve || 'Y').toUpperCase()}</span>`,
+          `<span style="float:right;color:${muted};font-size:12px;letter-spacing:2px;">${pointCount.toLocaleString()} DATA POINTS</span>`,
+        ].join(''),
+        x: 0.02,
+        y: 0.97,
+        xanchor: 'left',
+        yanchor: 'top',
+        font: { color: text, size: 19, family: 'Inter, system-ui, sans-serif' },
+      },
+      xaxis: {
+        ...(figure?.layout?.xaxis || {}),
+        gridcolor: grid,
+        zerolinecolor: grid,
+        linecolor: grid,
+        tickcolor: grid,
+        tickfont: { color: muted, size: 12 },
+        title: { text: config.x_curve, font: { color: muted, size: 13 }, standoff: 18 },
+        showgrid: true,
+        mirror: true,
+      },
+      yaxis: {
+        ...(figure?.layout?.yaxis || {}),
+        gridcolor: grid,
+        zerolinecolor: grid,
+        linecolor: grid,
+        tickcolor: grid,
+        tickfont: { color: muted, size: 12 },
+        title: { text: config.y_curve, font: { color: muted, size: 13 }, standoff: 18 },
+        showgrid: true,
+        mirror: true,
+      },
+      hoverlabel: {
+        bgcolor: isLight ? '#FFFFFF' : '#121C2F',
+        bordercolor: accent,
+        font: { color: text },
+      },
+      annotations: [{
+        text: 'Rendered',
+        x: 1,
+        y: 1.08,
+        xref: 'paper',
+        yref: 'paper',
+        showarrow: false,
+        font: { color: '#10B981', size: 12 },
+        bgcolor: 'rgba(16,185,129,.14)',
+        bordercolor: 'rgba(16,185,129,.28)',
+        borderpad: 10,
+      }],
+    },
+  }
+}
+
+function CurveStats({ title, stats }: { title: string; stats: any }) {
+  if (!stats) return null
+  return (
+    <div style={{ border: '1px solid #1E293B', borderRadius: 12, padding: 12, background: 'rgba(15,23,42,.5)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+        <strong>{title}</strong>
+        <span style={{ color: '#38BDF8', fontWeight: 900 }}>{stats.curve}</span>
+      </div>
+      {[
+        ['Count', stats.count],
+        ['Min', stats.min],
+        ['Max', stats.max],
+        ['Mean', stats.mean],
+        ['Std Dev', stats.std],
+      ].map(([label, value]) => (
+        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '5px 0', borderTop: '1px solid rgba(30,41,59,.7)' }}>
+          <span style={{ color: '#94A3B8' }}>{label}</span>
+          <span>{formatNumber(value)}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function formatNumber(value: any) {
+  if (value === null || value === undefined || value === '') return 'N/A'
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed.toFixed(Math.abs(parsed) >= 100 ? 2 : 5) : String(value)
+}
+
 function Control({ label, children }: { label: string; children: React.ReactNode }) {
   return <label style={{ display: 'block', marginTop: 16 }}><div style={{ color: '#94A3B8', fontSize: 13, fontWeight: 800, marginBottom: 7 }}>{label}</div>{children}</label>
 }
@@ -543,8 +912,9 @@ function NumberControl({ label, value, onChange, isLight, placeholder, step = '1
   )
 }
 
-function PlotlyFigure({ figure, isLight }: { figure: any; isLight: boolean }) {
+function PlotlyFigure({ figure, isLight, exportName = 'drake_ai_plot', showExport = false }: { figure: any; isLight: boolean; exportName?: string; showExport?: boolean }) {
   const plotRef = useRef<HTMLDivElement | null>(null)
+  const [format, setFormat] = useState<'png' | 'jpeg' | 'svg'>('png')
 
   useEffect(() => {
     if (!plotRef.current || !figure?.data || !figure?.layout) return
@@ -582,7 +952,79 @@ function PlotlyFigure({ figure, isLight }: { figure: any; isLight: boolean }) {
     }
   }, [figure, isLight])
 
-  return <div ref={plotRef} style={{ width: '100%', minHeight: 650, borderRadius: 12, overflow: 'hidden' }} />
+  const exportImage = async () => {
+    if (!plotRef.current) return
+    const { default: Plotly } = await import('plotly.js-dist-min')
+    Plotly.downloadImage(plotRef.current, {
+      format,
+      filename: exportName,
+      width: 1400,
+      height: 850,
+      scale: 2,
+    })
+  }
+
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <div ref={plotRef} style={{ width: '100%', minHeight: 650, borderRadius: 12, overflow: 'hidden' }} />
+      {showExport && (
+        <div style={{
+          position: 'absolute',
+          right: 16,
+          bottom: 14,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: 10,
+          borderRadius: 999,
+          border: `1px solid ${isLight ? '#CBD5E1' : '#1E293B'}`,
+          background: isLight ? 'rgba(255,255,255,.92)' : 'rgba(15,23,42,.92)',
+          boxShadow: isLight ? '0 14px 32px rgba(15,23,42,.12)' : '0 18px 46px rgba(0,0,0,.35)',
+          backdropFilter: 'blur(12px)',
+          zIndex: 5,
+        }}>
+          <select
+            value={format}
+            onChange={event => setFormat(event.target.value as 'png' | 'jpeg' | 'svg')}
+            style={{
+              minWidth: 108,
+              height: 46,
+              border: `1px solid ${isLight ? '#CBD5E1' : '#1E293B'}`,
+              borderRadius: 10,
+              background: isLight ? '#F8FAFC' : '#111827',
+              color: isLight ? '#0F172A' : '#F8FAFC',
+              padding: '0 14px',
+              fontWeight: 900,
+              textTransform: 'uppercase',
+            }}
+          >
+            <option value="png">PNG</option>
+            <option value="jpeg">JPG</option>
+            <option value="svg">SVG</option>
+          </select>
+          <button
+            onClick={exportImage}
+            style={{
+              height: 46,
+              border: 'none',
+              borderRadius: 10,
+              background: 'transparent',
+              color: isLight ? '#0F172A' : '#F8FAFC',
+              padding: '0 16px',
+              fontWeight: 900,
+              letterSpacing: .5,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <span style={{ fontSize: 18, lineHeight: 1 }}>⇩</span> EXPORT
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function Guide({ color, title, text }: { color: string; title: string; text: string }) {
@@ -617,7 +1059,7 @@ function statusColor(value: string) {
   return '#F8FAFC'
 }
 
-function SliderLabel({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (value: number) => void }) {
+function SliderLabel({ label, value, min, max, step = 1, onChange }: { label: string; value: number; min: number; max: number; step?: number; onChange: (value: number) => void }) {
   return (
     <label style={{ display: 'block' }}>
       <div style={{ color: '#94A3B8', fontSize: 13, marginBottom: 4 }}>{label}</div>
@@ -626,6 +1068,7 @@ function SliderLabel({ label, value, min, max, onChange }: { label: string; valu
         type="range"
         min={min}
         max={max}
+        step={step}
         value={value}
         onChange={event => onChange(Number(event.target.value))}
         style={{ width: '100%', accentColor: '#FF4B4B' }}
