@@ -550,6 +550,8 @@ def _build_log_viewer_figure(df: pd.DataFrame, curves: list[str] | None = None):
             "gridcolor": "#1E293B",
             "color": "#BBD7FF",
         }
+        if re.match(r"^(RT|ILD|ILM|LLD|LLS|MSFL|AT|RDEP|RESD|RES)", curve, re.IGNORECASE):
+            layout[key]["type"] = "log"
     return {"data": data, "layout": layout}
 
 
