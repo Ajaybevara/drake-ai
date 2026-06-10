@@ -1,0 +1,330 @@
+<!-- templates/display_categorized_data.html  -->
+<html lang="en">
+<head><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@400;500;600&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <meta charset="UTF-8">
+    <title>Review Well Data Selections - {{ project_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/well_selections.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
+     <style>
+        .well-folder { border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 10px; }
+        .folder-header { display: flex; align-items: center; font-weight: bold; margin-bottom: 5px; cursor: pointer; }
+        .folder-header input[type="checkbox"] { margin-right: 10px; }
+        .folder-toggle { margin-left: auto; padding: 0 5px; } /* For folder icon */
+        .las-files { list-style: none; padding-left: 25px; /* Indent files */ margin-top: 5px; }
+        .las-file { display: flex; align-items: center; margin-bottom: 3px; font-size: 0.9em; }
+        .las-file input[type="checkbox"] { margin-right: 8px; }
+        .las-file span:nth-of-type(1) { flex-grow: 1; margin-right: 10px; /* File name */ }
+        .las-file span:nth-of-type(2) { color: #666; /* Details */ }
+        .hidden { display: none; }
+         /* Styles for the Settings Modal (optional) */
+        #settingsModal {
+            display: none; /* Hidden by default */
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background-color: white; padding: 20px; border: 1px solid #ccc; box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            z-index: 1001; min-width: 300px; max-height: 80vh; overflow-y: auto;
+        }
+        #settingsModal form label { display: block; margin-bottom: 5px; }
+        #settingsModal form input { width: calc(100% - 16px); margin-bottom: 10px; padding: 8px; border: 1px solid #ddd; }
+        #settingsModal .modal-actions button { margin-right: 10px; }
+        /* Spinner Styles */
+        .spinner {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 20px auto 10px auto;
+            width: 40px;
+            height: 40px;
+            position: relative;
+        }
+        .spinner.hidden {
+            display: none;
+        }
+        .spinner .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+     </style>
+</head>
+<body>
+    <div id="sidebar">
+         <div id="sidebar-header">
+            <a href="{{ url_for('projects') }}" style="color: inherit; text-decoration: none;">
+                <h2>Review Selections</h2>
+            </a>
+         </div>
+         <div class="menu-item">
+            <a href="{{ url_for('project_dashboard', project_name=project_name) }}" class="text-sm text-blue-600 hover:underline">
+                <i class="fas fa-arrow-left"></i> Back to Project
+            </a>
+        </div>
+        <div class="menu-item active">
+            <button id="settingsBtn">Splice Settings</button>
+        </div>
+    </div>
+
+    <div id="content">
+        <h1>Review Auto-Selected Files for Project: {{ project_name }}</h1>
+        <p>Review the automatically selected files below. You can check or uncheck files before proceeding to splice.</p>
+
+        <div id="settingsModal">
+             <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                 <h3>Splice Parameters</h3>
+                 <button onclick="closeSettings()" class="close-btn" style="background:none; border:none; font-size:1.5em; cursor:pointer;">&times;</button>
+            </div>
+            <form id="paramsForm">
+                {% for key, value in splice_params.items() %}
+                <label for="{{ key }}">{{ key.replace('_', ' ').title() }}:</label>
+                <input type="text" id="{{ key }}" name="{{ key }}" value="{{ value }}">
+                {% endfor %}
+            </form>
+             <div class="modal-actions" style="margin-top: 15px;">
+                <button onclick="saveSettings()" class="btn btn-primary">Save Changes</button>
+                <button onclick="closeSettings()" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+
+        <form id="autospliceForm" action="{{ url_for('start_splicing') }}" method="post">
+            <input type="hidden" name="project_name" value="{{ project_name }}">
+            <div id="well-list">
+                {% for well, files in data.items() %}
+                    {# --- CHANGE 1: Capture the outer loop index and the generated ID --- #}
+                    {% set outer_loop_index = loop.index %}
+                    {% set well_checkbox_id = 'well-' ~ outer_loop_index %}
+ 
+                    <div class="well-folder">
+                        <div class="folder-header">
+                             {# --- CHANGE 2: Use the captured ID variable --- #}
+                            <input type="checkbox" class="well-checkbox" id="{{ well_checkbox_id }}" data-wellname="{{ well }}" onclick="toggleWellSelection(this);">
+                            <label class="well-name" for="{{ well_checkbox_id }}">{{ well }}</label>
+                            <span class="folder-toggle" onclick="toggleFolder(this)">
+                                <i class="fa fa-folder"></i>
+                            </span>
+                        </div>
+                        <ul class="las-files">
+                            {% for file, details in files.items() %}
+                                <li class="las-file">
+                                    <input type="checkbox" name="selected_files_{{ well }}" value="{{ file }}"
+                                           class="file-checkbox"
+                                           data-wellname="{{ well }}"
+                                           {% if well in selected_files and file in selected_files[well] %}checked{% endif %}
+                                           {# --- CHANGE 3: Use the captured ID variable directly in the onclick --- #}
+                                           onclick="toggleFileSelection(this, '{{ well_checkbox_id }}');">
+                                    <span title="{{ file }}">{{ file }}</span>
+                                    <span>({{ details.get('depthrange', 'N/A') }}, {{ details.get('categories', [])|length }} logs)</span>
+                                </li>
+                            {% else %}
+                                <li>No files found or processed for this well in the initial step.</li>
+                            {% endfor %} {# End INNER LOOP #}
+                        </ul>
+                    </div>
+                {% else %}
+                    <p>No wells were processed in the previous step or data is missing.</p>
+                {% endfor %} {# End OUTER LOOP #}
+            </div>
+            <button type="submit" id="proceedBtn" class="bg-teal-500 text-white px-4 py-2 rounded hover:bg-teal-600 disabled:bg-gray-400">
+                <i class="fas fa-check"></i> Proceed to Autosplice with Selected Files
+            </button>
+        </form>
+        <div id="submit-spinner" class="spinner hidden"><div class="loader"></div></div>
+        <span id="submit-status" class="text-sm text-gray-600 ml-2"></span>
+    </div>
+
+    <script>
+        function toggleFolder(toggleElement) {
+            const folderItem = toggleElement.closest('.well-folder');
+            const filesList = folderItem.querySelector('.las-files');
+            const folderIcon = toggleElement.querySelector('i');
+            if (filesList) filesList.classList.toggle('hidden');
+            if (folderIcon) {
+                folderIcon.classList.toggle('fa-folder');
+                folderIcon.classList.toggle('fa-folder-open');
+            }
+        }
+
+        function toggleWellSelection(wellCheckbox) {
+            const filesCheckboxes = wellCheckbox.closest('.well-folder').querySelectorAll('.las-files input[type="checkbox"].file-checkbox');
+            filesCheckboxes.forEach(cb => {
+                cb.checked = wellCheckbox.checked;
+            });
+            updateProceedButtonState();
+        }
+
+        function toggleFileSelection(fileCheckbox, wellCheckboxId) {
+            const wellCheckbox = document.getElementById(wellCheckboxId);
+            if (!wellCheckbox) return;
+
+            const allFilesCheckboxes = fileCheckbox.closest('.las-files').querySelectorAll('input[type="checkbox"].file-checkbox');
+            // Check if *any* file is checked to keep the well checkbox checked (or uncheck if none are)
+            const anyChecked = Array.from(allFilesCheckboxes).some(cb => cb.checked);
+            // Check if *all* files are checked
+            //const allChecked = Array.from(allFilesCheckboxes).every(cb => cb.checked);
+
+            wellCheckbox.checked = anyChecked; // Well is selected if at least one file is selected
+            // wellCheckbox.indeterminate = anyChecked && !allChecked; // Optional: show indeterminate state
+
+            updateProceedButtonState();
+        }
+
+         function updateProceedButtonState() {
+            const anyWellSelected = document.querySelector('.well-checkbox:checked');
+            const proceedBtn = document.getElementById('proceedBtn');
+            if (proceedBtn) {
+                proceedBtn.disabled = !anyWellSelected; // Enable if at least one well is selected
+            }
+        }
+
+        // Initial check for well checkboxes based on file selections
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('.well-checkbox').forEach(wellCheckbox => {
+                const fileCheckboxes = wellCheckbox.closest('.well-folder').querySelectorAll('.las-files input[type="checkbox"].file-checkbox');
+                const anyChecked = Array.from(fileCheckboxes).some(cb => cb.checked);
+                // const allChecked = Array.from(fileCheckboxes).every(cb => cb.checked); // Not needed for basic logic
+                wellCheckbox.checked = anyChecked;
+                 // wellCheckbox.indeterminate = anyChecked && !allChecked;
+            });
+            updateProceedButtonState(); // Set initial button state
+        });
+
+
+        // Handle Form Submission (AJAX to /start_splicing)
+        document.getElementById('autospliceForm').addEventListener('submit', function(e) {
+            e.preventDefault(); // Prevent traditional form submission
+
+            const spinner = document.getElementById('submit-spinner');
+            const status = document.getElementById('submit-status');
+            const proceedBtn = document.getElementById('proceedBtn');
+
+            spinner.classList.remove('hidden');
+            status.textContent = 'Initiating splicing process...';
+            proceedBtn.disabled = true;
+
+
+            // Collect final selections
+            const finalSelections = {};
+            document.querySelectorAll('.well-folder').forEach(wellFolder => {
+                const wellName = wellFolder.querySelector('.well-checkbox').dataset.wellname;
+                const selectedFiles = [];
+                wellFolder.querySelectorAll('.las-files input[type="checkbox"].file-checkbox:checked').forEach(fileCb => {
+                    selectedFiles.push(fileCb.value);
+                });
+                // Only include wells that have at least one file selected
+                if (selectedFiles.length > 0) {
+                    finalSelections[wellName] = selectedFiles;
+                }
+            });
+
+            console.log("Final Selections:", finalSelections);
+
+            if (Object.keys(finalSelections).length === 0) {
+                 alert("Please select at least one file from one well to proceed.");
+                 spinner.classList.add('hidden');
+                 status.textContent = '';
+                 proceedBtn.disabled = false; // Re-enable button
+                 updateProceedButtonState(); // Ensure it reflects state correctly
+                 return;
+            }
+
+
+            fetch("{{ url_for('start_splicing') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    // Add CSRF token header if needed
+                },
+                body: JSON.stringify({ final_selections: finalSelections })
+            })
+            .then(response => {
+                 // Check if response is ok (status 200-299)
+                if (!response.ok) {
+                     // Attempt to parse error message from JSON response, fallback to status text
+                    return response.json().then(errData => {
+                        throw new Error(errData.message || `Server error: ${response.statusText}`);
+                    }).catch(() => { // Handle cases where error body isn't JSON
+                        throw new Error(`Server error: ${response.statusText}`);
+                    });
+                }
+                return response.json(); // Parse successful JSON response
+            })
+            .then(data => {
+                if (data.success) {
+                    status.textContent = data.message + " Opening live processing status...";
+                    spinner.classList.add('hidden'); // Hide spinner on success message
+                    // Redirect back to the project dashboard after a delay
+                    // The dashboard should handle SSE updates if the process is running
+                    setTimeout(() => {
+                        window.location.href = "{{ url_for('autosplice_status_page', project_name=project_name) }}";
+                    }, 700);
+                } else {
+                    // Display error message from backend
+                     throw new Error(data.message || "An unknown error occurred.");
+                }
+            })
+            .catch(error => {
+                console.error('Error starting splice:', error);
+                status.textContent = 'Error: ' + error.message;
+                spinner.classList.add('hidden');
+                proceedBtn.disabled = false; // Re-enable button on error
+                updateProceedButtonState(); // Ensure it reflects state correctly
+            });
+        });
+
+        // --- Settings Modal Logic ---
+        const settingsModal = document.getElementById('settingsModal');
+        const settingsBtn = document.getElementById('settingsBtn');
+
+        settingsBtn.addEventListener('click', () => {
+             settingsModal.style.display = 'block';
+             // Optional: Fetch latest params again if they could change elsewhere
+             fetch("{{ url_for('get_params') }}")
+                .then(response => response.json())
+                .then(params => {
+                     const form = document.getElementById('paramsForm');
+                     for (const key in params) {
+                         if (form.elements[key]) {
+                            form.elements[key].value = params[key];
+                         }
+                     }
+                 });
+        });
+
+        function closeSettings() {
+            settingsModal.style.display = 'none';
+        }
+
+        function saveSettings() {
+             const form = document.getElementById('paramsForm');
+             const formData = new FormData(form);
+             const params = {};
+             formData.forEach((value, key) => { params[key] = value; });
+
+             fetch("{{ url_for('save_params_route') }}", {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify(params)
+             })
+             .then(response => response.json())
+             .then(data => {
+                 if (data.success) {
+                     alert("Settings saved successfully.");
+                     closeSettings();
+                 } else {
+                     alert("Error saving settings: " + (data.message || "Unknown error"));
+                 }
+             })
+             .catch(error => {
+                 console.error('Error saving settings:', error);
+                 alert("An error occurred while saving settings.");
+             });
+         }
+
+    </script>
+</body>
+</html>

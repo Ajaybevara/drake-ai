@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AutoSplice Projects | Drake AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/drake_dark.css') }}" />
+</head>
+<body>
+  <div class="drake-shell">
+    <aside class="drake-sidebar">
+      <div class="brand-block">
+        <img src="{{ url_for('static', filename='drake.png') }}" alt="Drake AI" class="logo-mini" />
+      </div>
+      <button id="create-project-btn" class="btn" style="width:100%;margin-bottom:18px;"><i class="fas fa-plus"></i> Create New Project</button>
+      <div class="sidebar-section">
+        <div class="sidebar-title">Projects</div>
+        <a class="nav-link active" href="{{ url_for('projects') }}"><i class="fas fa-th-large"></i><span>AutoSplice Projects</span></a>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-title">Existing Projects</div>
+        <ul id="project-list" style="list-style:none;padding:0;margin:0;">
+          {% for project in projects %}
+          <li><a class="nav-link" href="{{ url_for('project_dashboard', project_name=project) }}"><i class="fas fa-folder"></i><span>{{ project }}</span></a></li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div class="sidebar-footer"><div class="settings-card"><i class="fas fa-cog"></i> <span>System Settings</span></div></div>
+    </aside>
+
+    <main class="drake-main">
+      <header class="topbar">
+        <div class="topbar-title"><strong>Drake AI</strong><span>Petrophysics Platform</span></div>
+        <div class="top-actions"><i class="far fa-bell"></i><i class="fas fa-cog"></i><span class="avatar">E</span><span>Engineer</span></div>
+      </header>
+      <section class="content-wrap">
+        <div class="breadcrumb">Petrophysics &nbsp;›&nbsp; AutoSplice &nbsp;›&nbsp; <span>Projects</span></div>
+        <div class="page-title">
+          <div class="page-icon"><i class="fas fa-project-diagram"></i></div>
+          <div><h1>AutoSplice Projects</h1><p>Create, manage, and open AutoSplice petrophysics projects</p></div>
+        </div>
+
+        <div id="create-project-form-div" class="card">
+          <h2 class="card-title"><i class="fas fa-plus-circle accent"></i> Create New Project</h2>
+          <form id="create-project-form" class="form-grid">
+            <input class="input" type="text" id="project-name-input" name="project_name" required placeholder="Enter project name, e.g. drake" />
+            <button type="submit" class="btn btn-green"><i class="fas fa-check"></i> Create Project</button>
+          </form>
+        </div>
+
+        <div class="card" style="margin-top:18px;">
+          <h2 class="card-title"><i class="fas fa-database accent"></i> Existing Projects</h2>
+          <div id="project-details"></div>
+          <div class="project-grid">
+            {% if projects %}
+              {% for project in projects %}
+                <div class="project-card">
+                  <h3><i class="fas fa-folder-open accent"></i> {{ project }}</h3>
+                  <p>AutoSplice workspace ready for wells, LAS imports, and spliced log generation.</p>
+                  <a class="btn" href="{{ url_for('project_dashboard', project_name=project) }}">Open Project</a>
+                </div>
+              {% endfor %}
+            {% else %}
+              <p class="muted">No projects found. Create a new project to begin.</p>
+            {% endif %}
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="{{ url_for('static', filename='js/projects.js') }}"></script>
+</body>
+</html>

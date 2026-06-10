@@ -1,0 +1,14 @@
+1) Extract the ZIP.
+2) Open the extracted folder in VS Code.
+3) Open Terminal in VS Code.
+4) Run:
+
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+python app.py
+
+5) Open browser:
+http://127.0.0.1:5000
+
+Login, upload multiple LAS files from the same well, click Run AutoSplice, view the before/after log plots, and download AutoSpliced_Output.las.

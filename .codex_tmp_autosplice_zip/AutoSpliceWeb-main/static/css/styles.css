@@ -1,0 +1,335 @@
+/* Drake AI Design System for AutoSplice */
+
+:root {
+    --navy-900: #07111f;
+    --navy-800: #0b1a2e;
+    --navy-700: #0f2341;
+    --navy-panel: #081526;
+    --border: #1a3050;
+    --border-hover: #243d5c;
+    --cyan: #00c8f0;
+    --cyan-dark: #00a0c8;
+    --amber: #f5a800;
+    --green: #22d46a;
+    --red: #ff4d4d;
+    --text-main: #d0e4f4;
+    --text-muted: #4a6a8a;
+}
+
+body, html {
+    margin: 0;
+    padding: 0;
+    background-color: var(--navy-900);
+    color: var(--text-main);
+    font-family: 'Barlow', sans-serif;
+    height: 100%;
+    overflow-x: hidden;
+}
+
+/* Scanline Overlay */
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 0, 0, 0.04) 2px,
+        rgba(0, 0, 0, 0.04) 4px
+    );
+}
+
+/* Dot Grid Background */
+body {
+    background-image: radial-gradient(rgba(0, 200, 240, 0.1) 1px, transparent 1px);
+    background-size: 24px 24px;
+}
+
+.welcome-slide {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: var(--navy-900);
+    color: white;
+    text-align: center;
+}
+
+.welcome-slide h1 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 4em;
+    margin-bottom: 0.2em;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+}
+
+.welcome-slide p {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1.2em;
+    color: var(--cyan);
+    margin-bottom: 3em;
+    letter-spacing: 2px;
+}
+
+.btn {
+    padding: 12px 30px;
+    background-color: transparent;
+    color: var(--cyan);
+    text-decoration: none;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 1.1em;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    transition: all 0.3s ease;
+}
+
+.btn:hover {
+    border-color: var(--cyan);
+    box-shadow: 0 0 15px rgba(0, 200, 240, 0.2);
+    background-color: rgba(0, 200, 240, 0.05);
+}
+
+.container {
+    display: flex;
+    height: 100vh;
+}
+
+.sidebar {
+    width: 260px;
+    background-color: var(--navy-panel);
+    border-right: 1px solid var(--border);
+    color: var(--text-main);
+    padding: 25px;
+    overflow-y: auto;
+}
+
+.sidebar h2 {
+    font-family: 'Barlow Condensed', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-size: 1.2em;
+    margin-top: 0;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
+
+.sidebar ul {
+    list-style-type: none;
+    padding: 0;
+}
+
+.sidebar li {
+    margin-bottom: 8px;
+}
+
+.sidebar a {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.9em;
+    transition: color 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sidebar a::before {
+    content: '⬡';
+    font-size: 10px;
+    opacity: 0.5;
+}
+
+.sidebar a:hover {
+    color: var(--cyan);
+}
+
+.content {
+    flex-grow: 1;
+    padding: 40px;
+    overflow-y: auto;
+    background-color: var(--navy-900);
+}
+
+h1, h2, h3, h4 {
+    font-family: 'Barlow Condensed', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: white;
+}
+
+h1 {
+    border-left: 4px solid var(--cyan);
+    padding-left: 20px;
+    margin-bottom: 30px;
+}
+
+.hidden {
+    display: none;
+}
+
+/* Forms */
+form {
+    background-color: var(--navy-panel);
+    padding: 30px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+label {
+    display: block;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.8em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+}
+
+input[type="text"], input[type="password"], select, textarea {
+    width: 100%;
+    background-color: var(--navy-800);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    padding: 10px;
+    margin-bottom: 20px;
+    border-radius: 2px;
+}
+
+input[type="submit"] {
+    background-color: transparent;
+    color: var(--cyan);
+    border: 1px solid var(--border);
+    padding: 10px 25px;
+    font-family: 'Barlow Condensed', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+input[type="submit"]:hover {
+    border-color: var(--cyan);
+    background-color: rgba(0, 200, 240, 0.05);
+}
+
+/* Tables */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+th {
+    background-color: var(--navy-800);
+    font-family: 'Share Tech Mono', monospace;
+    text-transform: uppercase;
+    font-size: 0.8em;
+    text-align: left;
+    padding: 12px;
+    border-bottom: 2px solid var(--border);
+}
+
+td {
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.9em;
+}
+
+tr:hover td {
+    background-color: var(--navy-700);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 4px;
+}
+::-webkit-scrollbar-thumb {
+    background: var(--border-hover);
+    border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* Restored Application-Specific Classes (Adapted for Dark Theme) */
+.selected-row {
+    background-color: var(--navy-700);
+    border-left: 3px solid var(--cyan);
+}
+.well-name {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 1.2em;
+    display: inline-block;
+    margin-right: 10px;
+    color: var(--text-main);
+}
+.well-checkbox, .file-checkbox {
+    transform: scale(1.2);
+    margin-right: 8px;
+    vertical-align: middle;
+    accent-color: var(--cyan);
+}
+.well-tree {
+    list-style-type: none;
+    padding-left: 20px;
+}
+.well-folder {
+    margin-bottom: 10px;
+    font-family: 'Share Tech Mono', monospace;
+}
+.folder-toggle {
+    cursor: pointer;
+    color: var(--cyan);
+    transition: color 0.2s;
+}
+.folder-toggle:hover {
+    color: var(--cyan-dark);
+}
+.folder-toggle i {
+    margin-right: 5px;
+}
+.las-files {
+    list-style-type: none;
+    padding-left: 20px;
+    margin-top: 5px;
+}
+.las-file {
+    margin: 8px 0;
+    font-size: 0.95em;
+    color: var(--text-muted);
+}
+#create-project-form-div {
+    margin-bottom: 20px;
+    background-color: var(--navy-panel);
+    padding: 20px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+#create-project-form input[type="text"] {
+    width: auto;
+    display: inline-block;
+    padding: 10px 15px;
+    margin-right: 10px;
+    margin-bottom: 0;
+}
+#create-project-form button {
+    background-color: transparent;
+    color: var(--cyan);
+    padding: 10px 20px;
+    border: 1px solid var(--cyan);
+    cursor: pointer;
+    font-family: 'Barlow Condensed', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-radius: 2px;
+    transition: all 0.3s;
+}
+#create-project-form button:hover {
+    background-color: rgba(0, 200, 240, 0.1);
+    box-shadow: 0 0 10px rgba(0, 200, 240, 0.2);
+}

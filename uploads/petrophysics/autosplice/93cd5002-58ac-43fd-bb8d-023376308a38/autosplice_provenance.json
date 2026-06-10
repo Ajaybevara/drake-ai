@@ -1,0 +1,74 @@
+{
+  "run_id": "93cd5002-58ac-43fd-bb8d-023376308a38",
+  "engine": "Drake AutoSplice integrated fallback",
+  "input_files": [
+    {
+      "valid": true,
+      "file_name": "dado7.las",
+      "well": "SOUTH BARROW #19",
+      "rows": 4489,
+      "curve_count": 13,
+      "curves": [
+        "GR",
+        "CALI",
+        "RHOB",
+        "DRHO",
+        "NPHI",
+        "DT",
+        "SP",
+        "ILD",
+        "ILM",
+        "LL8",
+        "LLD",
+        "LLS",
+        "MSFL"
+      ],
+      "depth_min": 52.0,
+      "depth_max": 2296.0
+    },
+    {
+      "valid": true,
+      "file_name": "dado6.las",
+      "well": "SOUTH BARROW #17",
+      "rows": 4625,
+      "curve_count": 12,
+      "curves": [
+        "CALI",
+        "GR",
+        "NPHI",
+        "RHOB",
+        "DRHO",
+        "DT",
+        "SP",
+        "ILD",
+        "ILM",
+        "LL8",
+        "LLD",
+        "LLS"
+      ],
+      "depth_min": 68.0,
+      "depth_max": 2380.0
+    }
+  ],
+  "selected_files": [
+    "dado7.las",
+    "dado6.las"
+  ],
+  "depth_min": 52.0,
+  "depth_max": 2380.0624000000016,
+  "output_curves": [
+    "CALI",
+    "DRHO",
+    "DT",
+    "GR",
+    "ILD",
+    "ILM",
+    "LL8",
+    "LLD",
+    "LLS",
+    "MSFL",
+    "NPHI",
+    "RHOB",
+    "SP"
+  ]
+}

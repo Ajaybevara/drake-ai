@@ -1,0 +1,607 @@
+/* General Styles */
+body {
+    font-family: sans-serif;
+    margin: 0;
+    display: flex; /* Use flex for overall layout */
+    height: 100vh;
+    overflow: hidden; /* Prevent body scrolling */
+}
+
+#app-container {
+    display: flex;
+    width: 100%;
+    height: 100%;
+}
+
+/* Sidebar Styles */
+#sidebar {
+    width: 250px;
+    background-color: #f4f4f4;
+    padding: 15px;
+    border-right: 1px solid #ccc;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto; /* Allow sidebar content to scroll if needed */
+}
+
+#sidebar h1 {
+    font-size: 1.4em;
+    margin-top: 0;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+#sidebar button {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    margin-bottom: 15px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1em;
+}
+
+#sidebar button:hover {
+    background-color: #0056b3;
+}
+#sidebar button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
+
+.sidebar-section {
+    margin-bottom: 20px;
+    border-top: 1px solid #ddd;
+    padding-top: 15px;
+}
+
+.sidebar-section h2 {
+    font-size: 1.1em;
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #333;
+}
+
+#loaded-files-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 150px; /* Limit height */
+    overflow-y: auto;
+}
+
+#loaded-files-list li {
+    padding: 5px 8px;
+    margin-bottom: 4px;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9em;
+    cursor: pointer; /* Indicate clickability for summary */
+}
+#loaded-files-list li:hover {
+    background-color: #eee;
+}
+#loaded-files-list li .remove-file-btn {
+    background: none;
+    border: none;
+    color: #dc3545;
+    cursor: pointer;
+    font-size: 1.2em;
+    padding: 0 5px;
+    line-height: 1;
+    margin: 0;
+    width: auto;
+}
+#loaded-files-list li .remove-file-btn:hover {
+    color: #a71d2a;
+}
+#loaded-files-list li span { /* Ellipsis for long filenames */
+    flex-grow: 1;
+    margin-right: 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+#loaded-files-list li .spinner {
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #555;
+    border-radius: 50%;
+    width: 12px;
+    height: 12px;
+    animation: spin 1s linear infinite;
+    margin-right: 8px;
+}
+
+/* File Summary */
+#file-summary-tabs-container {
+    border: 1px solid #ccc;
+    background-color: #fff;
+    border-radius: 4px;
+    margin-top: 10px;
+    overflow: hidden; /* Contain child elements */
+}
+#summary-tabs {
+    display: flex;
+    flex-wrap: wrap; /* Allow tabs to wrap */
+    border-bottom: 1px solid #ccc;
+    background-color: #e9ecef;
+}
+.summary-tab {
+    padding: 6px 10px;
+    border: none;
+    border-right: 1px solid #ccc;
+    background-color: transparent;
+    cursor: pointer;
+    font-size: 0.85em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px; /* Limit tab width */
+    position: relative; /* For close button positioning */
+    display: flex;
+    align-items: center;
+}
+.summary-tab:last-child {
+    border-right: none;
+}
+.summary-tab.active {
+    background-color: #fff;
+    border-bottom: 1px solid #fff; /* Cover bottom border */
+    margin-bottom: -1px; /* Pull up to cover */
+    font-weight: bold;
+}
+.summary-tab:hover {
+    background-color: #dee2e6;
+}
+.summary-tab .close-tab-btn {
+    background: none;
+    border: none;
+    color: #6c757d;
+    cursor: pointer;
+    font-size: 1.1em;
+    padding: 0 0 0 6px; /* Space it from text */
+    line-height: 1;
+    margin: 0; /* Reset button margins */
+    width: auto; /* Override sidebar button width */
+}
+.summary-tab .close-tab-btn:hover {
+    color: #343a40;
+}
+
+#summary-content {
+    padding: 10px;
+    max-height: 200px; /* Limit height */
+    overflow-y: auto;
+    font-size: 0.85em;
+}
+#summary-content pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 0.9em;
+    font-family: monospace;
+}
+#summary-content p { /* Initial message */
+    color: #6c757d;
+    text-align: center;
+    margin-top: 20px;
+}
+
+
+/* Track Controls Container Styles*/
+#track-controls-container {
+    width: 400px; 
+    background-color: #e9ecef;
+    padding: 10px;
+    border-right: 1px solid #ccc;
+    overflow-y: auto; 
+    display: flex;
+    flex-direction: column;
+
+    gap: 10px;
+} 
+
+.track-control-panel {
+    border: 1px solid #adb5bd;
+    border-radius: 5px;
+    background-color: #f8f9fa;
+    padding: 10px;
+}
+
+.track-control-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #dee2e6;
+    padding-bottom: 5px;
+}
+
+.track-control-header h3 {
+    margin: 0;
+    font-size: 1.1em;
+}
+
+.track-control-header .remove-track-btn,
+.curve-control-item .remove-curve-btn {
+    background: none;
+    border: none;
+    color: #dc3545;
+    cursor: pointer;
+    font-size: 1.2em;
+    padding: 0 5px;
+    line-height: 1;
+    margin: 0;
+}
+.track-control-header .remove-track-btn:hover,
+.curve-control-item .remove-curve-btn:hover {
+    color: #a71d2a;
+}
+
+.track-curves-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px; /* Space between curve items */
+    margin-bottom: 10px;
+}
+
+.curve-control-item {
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    padding: 8px;
+    background-color: #fff;
+}
+
+.curve-main-controls {
+    display: flex;
+    align-items: center;
+    gap: 5px; /* Space between selects/buttons */
+    flex-wrap: wrap; /* Allow wrapping on smaller widths */
+}
+
+.curve-main-controls select {
+    flex-grow: 1; /* Allow selects to take available space */
+    min-width: 30px; /* Prevent them becoming too small */
+    padding: 4px;
+    font-size: 0.85em;
+    border: 1px solid #ced4da;
+    border-radius: 3px;
+}
+.curve-main-controls select:disabled {
+    background-color: #e9ecef;
+    cursor: not-allowed;
+}
+
+.curve-main-controls button {
+    background: none;
+    border: 1px solid transparent; /* Keep alignment */
+    color: #6c757d;
+    cursor: pointer;
+    padding: 4px;
+    line-height: 1;
+    font-size: 1.1em; /* Icon size */
+}
+.curve-main-controls button:hover {
+    color: #343a40;
+}
+.curve-main-controls .remove-curve-btn {
+    margin-left: auto; /* Push remove button to the right */
+}
+
+.curve-settings-panel {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed #dee2e6;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85em;
+}
+
+.curve-settings-panel label {
+    margin-right: 3px;
+}
+.curve-settings-panel select,
+.curve-settings-panel input[type="color"],
+.curve-settings-panel input[type="number"] {
+    padding: 3px;
+    font-size: 0.9em;
+    border: 1px solid #ced4da;
+    border-radius: 3px;
+}
+.curve-settings-panel input[type="color"] {
+    height: 24px;
+    min-width: 40px;
+}
+.curve-settings-panel input[type="number"] {
+    width: 60px; /* Adjust as needed */
+}
+.curve-settings-panel .x-range-group {
+    display: contents; /* Integrate inputs directly into the flex layout */
+}
+
+/* static/well_log_viewer/css/style.css */
+
+/* --- Additions for Tab Switching (Replaces Tailwind 'hidden'/'flex') --- */
+.tab-content {
+    display: none; /* Hide tab content by default */
+    width: 100%;   /* Ensure content takes full width within its area */
+    height: 100%;  /* Ensure content takes full height */
+    overflow: hidden; /* Prevent unwanted scrollbars on the content div itself */
+  }
+  
+  .tab-content.active {
+    display: flex; /* Show active tab content using flex */
+    /* Use flex for log-plots-content, block might be ok for splice-summary */
+    /* If splice-summary looks odd, create a specific rule: */
+    /* #splice-summary-content.active { display: block; } */
+    flex-direction: column; /* Default for main content area */
+  }
+  
+  
+  /* --- Additions for #log-plots-content Layout (Replaces Tailwind flex row) --- */
+  #log-plots-content {
+    /* display: flex; is set by .tab-content.active */
+    flex-direction: row; /* Arrange children horizontally */
+    flex-grow: 1;       /* Allow it to grow within main-content-area */
+    overflow: hidden;   /* Hide overflow */
+  }
+  
+
+  
+  #tracks-plot-container {
+    flex-grow: 1;       /* Allow plot area to take remaining width */
+    overflow-x: auto;   /* Allow horizontal scrolling for plots */
+    overflow-y: hidden; /* Prevent vertical scrolling within this container */
+    display: flex;      /* Arrange individual plot areas */
+    flex-direction: row;/* Arrange plots horizontally */
+    padding: 10px;      /* Padding around the plots */
+    gap: 10px;          /* Space between plots */
+    background-color: #fff; /* White background for plot area */
+    height: 100%;       /* Make plot container take full height */
+    box-sizing: border-box; /* Include padding in width/height */
+  }
+  
+  /* Ensure track plots themselves have a height */
+  .track-plot-area {
+     /* Keep existing styles like min-width, border etc. */
+     height: 100%; /* Make individual plots fill the container height */
+     box-sizing: border-box;
+  }
+  
+
+
+.track-control-panel .add-curve-btn {
+    display: block;
+    width: 100%;
+    padding: 5px;
+    margin-top: 10px;
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.9em;
+    text-align: center;
+}
+.track-control-panel .add-curve-btn:hover {
+    background-color: #5a6268;
+}
+.track-control-panel .add-curve-btn i {
+    margin-right: 5px;
+}
+
+
+/* Main Content & Plot Container Styles */
+#main-content {
+    flex-grow: 1; /* Takes remaining width */
+    display: flex; /* Use flex to manage plot container */
+    height: 100%;
+    overflow: hidden; /* Hide overflow */
+}
+
+#tracks-plot-container {
+    display: flex; /* Arrange plots horizontally */
+    height: 100%;
+    width: 100%;
+    overflow-x: auto; /* Allow horizontal scrolling for plots */
+    overflow-y: hidden; /* Prevent vertical scrolling here */
+    padding: 10px; /* Add some padding around plots */
+    box-sizing: border-box;
+    gap: 10px; /* Space between plots */
+    background-color: #fff; /* White background for plot area */
+}
+
+.track-plot-area {
+    border: 1px solid #ccc;
+    height: calc(100% - 20px); /* Fill height minus padding */
+    min-width: 250px; /* Minimum width for a track, adjust as needed */
+    width: 300px; /* Fixed width for each plot */
+    box-sizing: border-box;
+    position: relative; /* For positioning axes inside */
+    background-color: #fdfdfd;
+}
+/* Add initial message styles if needed */
+#track-controls-container .controls-message,
+#tracks-plot-container .plots-message {
+    color: #6c757d;
+    text-align: center;
+    margin-top: 30px;
+    width: 100%;
+    font-style: italic;
+}
+
+
+/* Plotter SVG Styles */
+.plot-svg {
+    display: block; /* Remove extra space below SVG */
+    width: 100%;
+    height: 100%;
+}
+
+.axis-label {
+    font-size: 0.8em;
+    fill: #555;
+}
+
+.grid .tick line {
+    stroke: #e0e0e0;
+    stroke-opacity: 0.7;
+}
+
+.grid path.domain {
+    stroke-width: 0; /* Hide domain line for grid */
+}
+
+/* Style for multiple X axes (example) */
+.x-axis-group .domain {
+     /* Domain line color matches curve */
+    stroke-width: 1.5px;
+}
+.x-axis-group .tick line {
+    stroke-width: 1px;
+    /* Tick line color matches curve */
+}
+.x-axis-group .tick text {
+    font-size: 0.75em;
+    /* Tick text color matches curve */
+}
+
+.log-line { /* Path element class */
+    fill: none;
+    stroke-width: 1.5px;
+}
+
+.cursor-line {
+    stroke: #555;
+    stroke-width: 0.5px;
+    stroke-dasharray: 3,3;
+    pointer-events: none;
+}
+
+.cursor-text {
+    font-size: 0.8em;
+    fill: #333;
+    pointer-events: none;
+    background-color: rgba(255, 255, 255, 0.7); /* Semi-transparent background */
+    padding: 2px 4px;
+}
+
+/* Modal Styles (remain mostly the same) */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.5);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 15% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 500px;
+    border-radius: 5px;
+    position: relative;
+}
+
+.modal-content h2 {
+    margin-top: 0;
+    font-size: 1.3em;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+
+.close-button {
+    color: #aaa;
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close-button:hover,
+.close-button:focus {
+    color: black;
+    text-decoration: none;
+}
+
+#las-file-list {
+    list-style: none;
+    padding: 0;
+    margin: 15px 0;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+}
+
+#las-file-list li {
+    padding: 8px 12px;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+}
+
+#las-file-list li:last-child {
+    border-bottom: none;
+}
+
+#las-file-list li:hover {
+    background-color: #f0f0f0;
+}
+#las-file-list li .spinner {
+     border: 3px solid #f3f3f3;
+     border-top: 3px solid #555;
+     border-radius: 50%;
+     width: 12px;
+     height: 12px;
+     animation: spin 1s linear infinite;
+     display: inline-block; /* Keep it inline */
+     margin-right: 8px;
+     vertical-align: middle;
+}
+
+.modal-buttons {
+    text-align: right;
+    margin-top: 20px;
+}
+.modal-buttons button {
+    padding: 8px 15px;
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.modal-buttons button:hover {
+    background-color: #5a6268;
+}
+
+
+/* Animation */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+
+  /* --- END ADDITIONS --- */
+  
+  /* Keep all your existing styles above these additions */
+  /* ... (previous content of style.css) ... */

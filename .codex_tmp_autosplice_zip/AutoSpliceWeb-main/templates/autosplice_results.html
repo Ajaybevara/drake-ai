@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@400;500;600&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoSplice Results</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/autosplice_results.css') }}"
+    />
+</head>
+<body>
+    <div id="sidebar">
+        <div id="sidebar-header">
+            <div class="logo-container">
+                <img src="{{ url_for('static', filename='drake.png') }}" alt="Drake AI" class="logo" />
+            </div>
+            <div class="project-name">
+                <span>Project: {{ project_name }}</span>
+            </div>
+        </div>
+        <div class="sidebar-divider"></div>
+        <a href="/projects" class="menu-item">
+            <i class="fas fa-home"></i>
+            <span class="ml-2">Home (Projects)</span>
+        </a>
+    </div>
+
+    <div id="content">
+        <input type="hidden" id="project-name" value="{{ project_name }}">
+        <h1 class="text-2xl font-bold mb-6">AutoSplice Results</h1>
+
+        <div id="progress-container">
+            <h2 class="text-xl font-semibold mb-4">Processing Progress</h2>
+            
+            <div class="flex items-start ml-4">
+                <div class="flex items-center">
+                    <div class="spinner"></div>
+                    <span class="status-message ml-3">Initializing processing...</span>
+                </div>
+            </div>
+
+            <div id="well-progress" class="ml-4 mt-4">
+                <!-- Well status updates will be inserted here -->
+            </div>
+        </div>
+
+        <div id="results-container" class="mt-8">
+            <h2 class="text-xl font-semibold mb-4">AutoSplice Results:</h2>
+            <div id="download-links" class="ml-4">
+                <!-- Download links will be inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/auto_splice_manager.js') }}"></script>
+    <script>
+        // This will be populated by auto_splice_manager.js
+        function addWellStatus(wellName, status, message, sourceFiles = []) {
+            const wellProgress = document.getElementById('well-progress');
+            const wellDiv = document.createElement('div');
+            wellDiv.className = `well-status ${status}`;
+            
+            let icon = '';
+            if (status === 'success') {
+                icon = '<i class="fas fa-check-circle"></i>';
+            } else if (status === 'error') {
+                icon = '<i class="fas fa-times-circle"></i>';
+            } else {
+                icon = '<div class="spinner"></div>';
+            }
+
+            wellDiv.innerHTML = `
+                ${icon}
+                <div>
+                    <strong>${wellName}</strong>: ${message}
+                    ${status === 'success' ? `
+                    <div class="source-files">
+                        <h3>Source LAS Files:</h3>
+                        <ul class="source-file-list">
+                            ${sourceFiles.map(file => `<li>${file}</li>`).join('')}
+                        </ul>
+                        <button class="view-original-btn" data-well="${wellName}">
+                            <i class="fas fa-eye"></i> View Original Curves
+                        </button>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+
+            wellProgress.appendChild(wellDiv);
+        }
+
+        // Event listener for view original curves button
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('.view-original-btn')) {
+                const wellName = e.target.closest('.view-original-btn').dataset.well;
+                // This will be handled by auto_splice_manager.js
+                console.log(`View original curves for well: ${wellName}`);
+            }
+        });
+    </script>
+</body>
+</html>

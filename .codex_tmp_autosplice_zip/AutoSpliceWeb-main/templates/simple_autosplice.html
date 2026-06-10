@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Auto Log Splicer</title>
+  <style>
+    :root { --bg:#071426; --card:#0f2238; --card2:#132b46; --text:#eaf4ff; --muted:#9fb5ca; --line:#27415f; --accent:#38bdf8; --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; }
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:radial-gradient(circle at top left,#123456 0,#071426 45%,#050b14 100%);color:var(--text);min-height:100vh}
+    .shell{max-width:1260px;margin:0 auto;padding:28px 20px 60px}.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}.brand{display:flex;gap:14px;align-items:center}.logo{width:120px;height:120px;object-fit:contain;border-radius:12px;background:#fff1;padding:6px}.brand h1{margin:0;font-size:29px}.brand p{margin:4px 0 0;color:var(--muted)}.logout{color:var(--text);text-decoration:none;border:1px solid var(--line);padding:10px 14px;border-radius:12px}.card{background:linear-gradient(180deg,var(--card),#0b192b);border:1px solid var(--line);border-radius:22px;padding:22px;box-shadow:0 20px 60px #0005;margin-bottom:20px}.upload{border:2px dashed #3c5c7e;border-radius:18px;padding:28px;text-align:center;background:#06111f}.btn{border:0;background:linear-gradient(135deg,#38bdf8,#2563eb);color:white;padding:13px 22px;border-radius:14px;font-weight:800;cursor:pointer}.hint{color:var(--muted);font-size:14px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.metric{background:var(--card2);border:1px solid var(--line);border-radius:16px;padding:16px}.metric strong{font-size:22px;display:block;margin-top:6px}.msg{padding:14px 16px;border-radius:14px;margin-bottom:18px}.error{background:#431616;border:1px solid #7f1d1d}.success{background:#12381f;border:1px solid #166534}.table-wrap{overflow:auto;border-radius:16px;border:1px solid var(--line)}table{width:100%;border-collapse:collapse;background:#091a2d}th,td{padding:12px 13px;text-align:left;border-bottom:1px solid var(--line);font-size:14px;vertical-align:top}th{background:#102943;color:#cde8ff;position:sticky;top:0}.pill{padding:5px 9px;border-radius:999px;font-weight:700;font-size:12px;display:inline-block}.pill.good{background:#064e3b;color:#bbf7d0}.pill.warn{background:#4a3306;color:#fde68a}.pill.bad{background:#4c1111;color:#fecaca}.actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px}.download{background:#102943;border:1px solid #38bdf8;color:#eaf4ff;text-decoration:none;padding:12px 16px;border-radius:14px;font-weight:800}.small{font-size:12px;color:var(--muted)}.selected{margin:8px 0 0;padding-left:20px;color:#dbeafe}.file-picker{display:none}.file-label{display:inline-flex;align-items:center;gap:10px;border:1px solid #3c5c7e;background:#0b2138;padding:13px 18px;border-radius:14px;cursor:pointer;font-weight:800}.file-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin:18px 0 6px;text-align:left}.file-chip{display:flex;gap:10px;align-items:center;background:#0d243c;border:1px solid var(--line);border-radius:14px;padding:10px}.file-icon{width:36px;height:36px;border-radius:10px;background:#113b62;display:grid;place-items:center;font-weight:900;color:#7dd3fc}.visual-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:16px}.visual-card{background:#081727;border:1px solid var(--line);border-radius:16px;padding:12px}.visual-card img{width:100%;border-radius:12px;background:white}.flow{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px}.flow div{background:#081727;border:1px solid var(--line);border-radius:14px;padding:14px}.divider-note{border-left:3px solid var(--accent);padding:10px 12px;background:#071b2f;border-radius:10px;color:#cde8ff;margin-top:12px}@media(max-width:900px){.grid,.flow{grid-template-columns:1fr}.top{align-items:flex-start;gap:14px;flex-direction:column}}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="top">
+      <div class="brand">
+        <img class="logo" src="{{ url_for('static', filename='drake-ai-logo.png') }}" onerror="this.style.display='none'" />
+        <div>
+          <h1>Auto Log Splicer</h1>
+          <p>Upload multiple LAS files from one well and generate one clean spliced LAS.</p>
+        </div>
+      </div>
+      <a class="logout" href="{{ url_for('logout') }}">Logout</a>
+    </div>
+
+    {% if error %}<div class="msg error">{{ error }}</div>{% endif %}
+    {% if success %}<div class="msg success">AutoSplice completed. Final LAS is ready.</div>{% endif %}
+
+    <div class="card">
+      <h2>Upload LAS files</h2>
+      <form class="upload" method="POST" enctype="multipart/form-data">
+        <label class="file-label" for="las_files"><span class="file-icon">LAS</span> Choose multiple LAS files</label>
+        <input id="las_files" class="file-picker" type="file" name="las_files" multiple accept=".las,.LAS" required />
+        <div id="fileList" class="file-list"></div>
+        <input type="hidden" name="step" value="0.1524" />
+        <div class="flow">
+          <div><b>1. Upload</b><br><span class="small">Add LAS files from the same well.</span></div>
+          <div><b>2. Validate</b><br><span class="small">Check LAS structure, curves, and depth ranges.</span></div>
+          <div><b>3. Splice</b><br><span class="small">Merge into one final LAS file.</span></div>
+        </div>
+        <div style="margin-top:18px"><button class="btn" type="submit">Run AutoSplice</button></div>
+      </form>
+    </div>
+
+    {% if file_summary %}
+    <div class="card">
+      <h2>Uploaded LAS files</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>File</th><th>Status</th><th>Depth Range</th><th>Curves</th><th>Rows</th><th>Decision</th></tr></thead>
+          <tbody>
+            {% for item in file_summary %}
+            <tr>
+              <td>{{ item.filename }}</td>
+              <td>{% if item.meta.valid %}<span class="pill good">Valid</span>{% else %}<span class="pill bad">Invalid</span>{% endif %}</td>
+              <td>{{ item.meta.depth_min }} – {{ item.meta.depth_max }}</td>
+              <td>{{ item.meta.curve_count }}</td>
+              <td>{{ item.meta.row_count }}</td>
+              <td>{% if item.meta.valid %}<span class="pill good">Used</span>{% else %}<span class="pill bad">Skipped</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if selected_files %}
+      <h3>Splice order</h3>
+      <ol class="selected">{% for f in selected_files %}<li>{{ f }}</li>{% endfor %}</ol>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if success %}
+    <div class="card">
+      <h2>AutoSplice Output Summary</h2>
+      <div class="grid">
+        <div class="metric"><span class="hint">Depth From</span><strong>{{ detail.depth_min }}</strong></div>
+        <div class="metric"><span class="hint">Depth To</span><strong>{{ detail.depth_max }}</strong></div>
+        <div class="metric"><span class="hint">Output Curves</span><strong>{{ detail.curve_count }}</strong></div>
+        <div class="metric"><span class="hint">Depth Step</span><strong>{{ output_depth_step }}</strong></div>
+      </div>
+      <div class="actions">
+        <a class="download" href="{{ url_for('download_direct_autosplice', run_id=run_id, filename=output_name) }}">Download Spliced LAS</a>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if skipped %}
+    <div class="card"><h3>Skipped files</h3><p class="hint">{{ skipped|join(', ') }}</p></div>
+    {% endif %}
+  </div>
+  <script>
+    const input = document.getElementById('las_files');
+    const list = document.getElementById('fileList');
+    input?.addEventListener('change', () => {
+      list.innerHTML = '';
+      [...input.files].forEach(file => {
+        const item = document.createElement('div');
+        item.className = 'file-chip';
+        item.innerHTML = `<span class="file-icon">LAS</span><span><strong>${file.name}</strong><br><span class="small">${(file.size/1024/1024).toFixed(2)} MB</span></span>`;
+        list.appendChild(item);
+      });
+    });
+  </script>
+</body>
+</html>

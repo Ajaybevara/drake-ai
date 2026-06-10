@@ -19,12 +19,27 @@ export default function UIOnlyModulePage({ title, subtitle = DEFAULT_SUBTITLE, a
   const isSeismicEnhancer = kind === 'seismic' && title.toLowerCase().includes('frequency enhancer')
   const isCcusScreening = kind === 'ccus' && title.toLowerCase().includes('preliminary screening')
   const isCrossplot = kind === 'logs' && title.toLowerCase().includes('crossplot')
+  const isHistogram = kind === 'logs' && title.toLowerCase().includes('histogram')
+  const isLogVisualization = kind === 'logs' && title.toLowerCase().includes('log visualization')
+  const isParameterPrediction = kind === 'logs' && title.toLowerCase().includes('parameter prediction')
+  const isUncertainty = kind === 'logs' && title.toLowerCase().includes('uncertainty')
+  const isAutoSplicer = kind === 'logs' && title.toLowerCase().includes('auto splicer')
   const displaySubtitle = isSeismicEnhancer
     ? 'Fetched from the integrated GitHub seismic backend: SEG-Y 3D low-frequency enhancement with inline/crossline/time visualization.'
     : isCcusScreening
       ? 'Integrated CCUS GitHub screening workflow: LAS parsing, curve mapping, CO2 candidate zones, log viewer, and Excel export.'
       : isCrossplot
         ? 'Integrated petrophysics crossplot workflow: LAS parsing, curve selection, interactive X/Y scatter, hover values, statistics, and plot export.'
+        : isHistogram
+          ? 'Integrated Drake histogram workflow: LAS parsing, curve distribution, KDE overlay, statistics, AI analytics, and image export.'
+          : isLogVisualization
+            ? 'Integrated AI log visualization: upload one LAS file, parse well details, select curves, and visualize interactive depth tracks.'
+            : isParameterPrediction
+              ? 'Integrated Drake AI prediction workflow: uses the active LAS session to calculate porosity, saturation, lithology, confidence, and preview rows.'
+              : isUncertainty
+                ? 'Integrated uncertainty workflow: P10 / P50 / P90 porosity and water saturation envelopes from the active uploaded LAS file.'
+                : isAutoSplicer
+                  ? 'Integrated AutoSplice workflow: upload multiple LAS files, validate intervals, splice them, preview merged tracks, and download LAS output.'
     : subtitle
 
   const cards = kind === 'seismic'
@@ -62,6 +77,16 @@ export default function UIOnlyModulePage({ title, subtitle = DEFAULT_SUBTITLE, a
         <CcusScreeningPanel accent={accent} isLight={isLight} />
       ) : isCrossplot ? (
         <PetrophysicsCrossplotPanel accent={accent} isLight={isLight} />
+      ) : isHistogram ? (
+        <PetrophysicsHistogramPanel accent={accent} isLight={isLight} />
+      ) : isLogVisualization ? (
+        <PetrophysicsLogVisualizationPanel accent={accent} isLight={isLight} />
+      ) : isParameterPrediction ? (
+        <PetrophysicsPredictionPanel accent={accent} isLight={isLight} />
+      ) : isUncertainty ? (
+        <PetrophysicsUncertaintyPanel accent={accent} isLight={isLight} />
+      ) : isAutoSplicer ? (
+        <AutoSplicerPanel accent={accent} isLight={isLight} />
       ) : (
 
         <section style={gridStyle}>
@@ -83,6 +108,351 @@ export default function UIOnlyModulePage({ title, subtitle = DEFAULT_SUBTITLE, a
       )}
     </div>
   )
+}
+
+const PETRO_SESSION_KEY = 'drake_active_petro_las_session'
+
+function savePetroSession(session: any) {
+  try {
+    localStorage.setItem(PETRO_SESSION_KEY, JSON.stringify(session))
+  } catch {
+    // Backend holds parsed LAS data; this only remembers the active session id.
+  }
+}
+
+function readPetroSession() {
+  try {
+    const raw = localStorage.getItem(PETRO_SESSION_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
+  const [session, setSession] = useState<any>(() => readPetroSession())
+  const [selected, setSelected] = useState<string[]>([])
+  const [result, setResult] = useState<any>(null)
+  const [busy, setBusy] = useState(false)
+  const border = isLight ? '#E2E8F0' : '#1E293B'
+  const text = isLight ? '#0F172A' : '#F8FAFC'
+  const muted = isLight ? '#64748B' : '#94A3B8'
+  const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
+  const curves: string[] = session?.curve_names || []
+
+  const hydrate = (data: any) => {
+    const defaults = ['GR', 'RT', 'RHOB', 'NPHI', 'DT'].filter(name => data.curve_names?.includes(name))
+    setSession(data)
+    savePetroSession(data)
+    setSelected(defaults.length ? defaults : (data.curve_names || []).slice(0, 5))
+    setResult(null)
+  }
+  const loadDemo = async () => {
+    setBusy(true)
+    try {
+      const response = await petrophysicsApi.loadPetroLasDemo()
+      hydrate(response.data)
+      toast.success('Demo LAS loaded')
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'Failed to load LAS')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const upload = async (file: File) => {
+    setBusy(true)
+    try {
+      const response = await petrophysicsApi.uploadPetroLas(file)
+      hydrate(response.data)
+      toast.success(`LAS "${file.name}" loaded across Petrophysics`)
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'LAS upload failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const visualize = async () => {
+    if (!session?.session_id) return toast.error('Upload or load a LAS file first')
+    setBusy(true)
+    try {
+      const response = await petrophysicsApi.generatePetroLogViewer({ session_id: session.session_id, curves: selected })
+      setResult(response.data)
+      toast.success('AI visualization rendered')
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'Visualization failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(310px,430px) minmax(0,1fr)', gap: 18 }}>
+        <LasUploadCard accent={accent} isLight={isLight} busy={busy} session={session} onDemo={loadDemo} onUpload={upload} title="Upload LAS File" />
+        <InfoCard accent={accent} isLight={isLight} title={session?.well_name || 'No LAS loaded'} label="Well Details" items={[
+          ['File', session?.file_name || 'N/A'],
+          ['Company', session?.company || 'N/A'],
+          ['Field', session?.field || 'N/A'],
+          ['Country', session?.country || 'N/A'],
+          ['Depth Range', session ? `${Number(session.depth_min).toFixed(1)} - ${Number(session.depth_max).toFixed(1)}` : '--'],
+          ['Curves', session?.num_curves || '--'],
+          ['Samples', session?.rows?.toLocaleString?.() || '--'],
+          ['Shared Session', session?.session_id ? 'Ready' : 'Waiting'],
+        ]} />
+      </div>
+      <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+          <div>
+            <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Available Logs</div>
+            <h2 style={{ margin: '6px 0 0', color: text, fontSize: 22 }}>Select Curves to Visualize</h2>
+          </div>
+          <button onClick={visualize} disabled={busy || !session} style={{ ...primaryButton(accent), width: 180 }}>{busy ? 'Rendering...' : 'Plot Tracks'}</button>
+        </div>
+        {curves.length ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{curves.map(curve => {
+          const active = selected.includes(curve)
+          return <button key={curve} onClick={() => setSelected(prev => active ? prev.filter(item => item !== curve) : [...prev, curve])} style={{ padding: '9px 13px', borderRadius: 999, border: `1px solid ${active ? accent : border}`, background: active ? `${accent}22` : 'transparent', color: active ? '#F8FAFC' : muted, fontWeight: 900, cursor: 'pointer' }}>{curve}</button>
+        })}</div> : <div style={{ color: muted }}>Upload LAS to see available logs.</div>}
+      </div>
+      <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+        {result?.figure ? <PlotlyFigure figure={result.figure} isLight={isLight} showExport exportName={`${session?.well_name || 'well'}_ai_log_visualization`} /> : <EmptyPlot border={border} muted={muted} text="Upload LAS, choose curves, then plot AI visualization." />}
+      </div>
+    </section>
+  )
+}
+
+function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
+  const [session, setSession] = useState<any>(() => readPetroSession())
+  const [result, setResult] = useState<any>(null)
+  const [busy, setBusy] = useState(false)
+  const border = isLight ? '#E2E8F0' : '#1E293B'
+  const muted = isLight ? '#64748B' : '#94A3B8'
+  const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
+  const run = async () => {
+    if (!session?.session_id) return toast.error('Upload LAS in Log Visualization or load demo first')
+    setBusy(true)
+    try {
+      const response = await petrophysicsApi.generatePetroPrediction(session.session_id)
+      setResult(response.data)
+      toast.success('AI parameter prediction complete')
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'AI prediction failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const loadDemo = async () => {
+    setBusy(true)
+    try {
+      const response = await petrophysicsApi.loadPetroLasDemo()
+      setSession(response.data)
+      savePetroSession(response.data)
+      toast.success('Demo LAS loaded')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const cards = result?.summary_cards || {}
+  return (
+    <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
+      <ActionHeader accent={accent} isLight={isLight} label="AI Parameter Prediction" title={session?.well_name || 'No Active LAS Session'} subtitle={session ? `${session.file_name} - ${session.rows?.toLocaleString?.()} samples` : 'Use the LAS uploaded in Log Visualization, or load demo data.'} actions={<><button onClick={loadDemo} disabled={busy} style={smallButton(isLight)}>Load Demo</button><button onClick={run} disabled={busy || !session} style={{ ...primaryButton(accent), width: 210 }}>{busy ? 'Calculating...' : 'Calculate Prediction'}</button></>} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 14 }}>
+        <Metric label="Avg PHI P50" value={cards.avg_phi_p50 ?? '--'} />
+        <Metric label="Avg SW P50" value={cards.avg_sw_p50 ?? '--'} />
+        <Metric label="Avg PHI Spread" value={cards.avg_phi_spread ?? '--'} />
+        <Metric label="Rows Processed" value={cards.rows?.toLocaleString?.() || '--'} />
+      </div>
+      <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+        {result?.figure ? <PlotlyFigure figure={result.figure} isLight={isLight} showExport exportName={`${session?.well_name || 'well'}_ai_parameter_prediction`} /> : <EmptyPlot border={border} muted={muted} text="Run prediction to view porosity and saturation tracks." />}
+      </div>
+      {result?.records?.length ? <ResultTable title="AI Prediction - First 5 Rows" rows={result.records} isLight={isLight} accent={accent} /> : null}
+    </section>
+  )
+}
+
+function PetrophysicsUncertaintyPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
+  const [session, setSession] = useState<any>(() => readPetroSession())
+  const [result, setResult] = useState<any>(null)
+  const [busy, setBusy] = useState(false)
+  const [params, setParams] = useState({ phi_unc: 0.03, phi_pct: 0.1, sw_unc: 0.05, sw_pct: 0.1 })
+  const border = isLight ? '#E2E8F0' : '#1E293B'
+  const muted = isLight ? '#64748B' : '#94A3B8'
+  const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
+  const run = async () => {
+    if (!session?.session_id) return toast.error('Upload LAS in Log Visualization or load demo first')
+    setBusy(true)
+    try {
+      const response = await petrophysicsApi.generatePetroUncertainty({ session_id: session.session_id, ...params })
+      setResult(response.data)
+      toast.success('Uncertainty calculated')
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'Uncertainty calculation failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const loadDemo = async () => {
+    setBusy(true)
+    try {
+      const response = await petrophysicsApi.loadPetroLasDemo()
+      setSession(response.data)
+      savePetroSession(response.data)
+      toast.success('Demo LAS loaded')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const cards = result?.summary_cards || {}
+  return (
+    <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
+      <ActionHeader accent={accent} isLight={isLight} label="AI Uncertainty" title={session?.well_name || 'No Active LAS Session'} subtitle="P10 / P50 / P90 envelopes are computed from uploaded LAS-derived prediction curves." actions={<><button onClick={loadDemo} disabled={busy} style={smallButton(isLight)}>Load Demo</button><button onClick={run} disabled={busy || !session} style={{ ...primaryButton(accent), width: 220 }}>{busy ? 'Calculating...' : 'Calculate Uncertainty'}</button></>} />
+      <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
+        <Control label="Porosity Fixed +/-"><input style={field(isLight)} type="number" step="0.01" value={params.phi_unc} onChange={e => setParams(prev => ({ ...prev, phi_unc: Number(e.target.value) }))} /></Control>
+        <Control label="Porosity Pct"><input style={field(isLight)} type="number" step="0.01" value={params.phi_pct} onChange={e => setParams(prev => ({ ...prev, phi_pct: Number(e.target.value) }))} /></Control>
+        <Control label="Sw Fixed +/-"><input style={field(isLight)} type="number" step="0.01" value={params.sw_unc} onChange={e => setParams(prev => ({ ...prev, sw_unc: Number(e.target.value) }))} /></Control>
+        <Control label="Sw Pct"><input style={field(isLight)} type="number" step="0.01" value={params.sw_pct} onChange={e => setParams(prev => ({ ...prev, sw_pct: Number(e.target.value) }))} /></Control>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 14 }}>
+        <Metric label="Avg PHI P50" value={cards.avg_phi_p50 ?? '--'} />
+        <Metric label="Avg PHI Spread" value={cards.avg_phi_spread ?? '--'} />
+        <Metric label="Avg SW P50" value={cards.avg_sw_p50 ?? '--'} />
+        <Metric label="Avg SW Spread" value={cards.avg_sw_spread ?? '--'} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(420px,1fr))', gap: 18 }}>
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>{result?.porosity_figure ? <PlotlyFigure figure={result.porosity_figure} isLight={isLight} showExport exportName="porosity_uncertainty" /> : <EmptyPlot border={border} muted={muted} text="Run uncertainty to view porosity P10 / P50 / P90." />}</div>
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>{result?.saturation_figure ? <PlotlyFigure figure={result.saturation_figure} isLight={isLight} showExport exportName="saturation_uncertainty" /> : <EmptyPlot border={border} muted={muted} text="Run uncertainty to view saturation P10 / P50 / P90." />}</div>
+      </div>
+      {result?.records?.length ? <ResultTable title="Uncertainty - First 5 Rows" rows={result.records} isLight={isLight} accent={accent} /> : null}
+    </section>
+  )
+}
+
+function AutoSplicerPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
+  const [files, setFiles] = useState<File[]>([])
+  const [result, setResult] = useState<any>(null)
+  const [busy, setBusy] = useState(false)
+  const border = isLight ? '#E2E8F0' : '#1E293B'
+  const text = isLight ? '#0F172A' : '#F8FAFC'
+  const muted = isLight ? '#64748B' : '#94A3B8'
+  const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
+  const run = async () => {
+    if (files.length < 2) return toast.error('Select at least two LAS files')
+    setBusy(true)
+    try {
+      const response = await petrophysicsApi.runAutoSplice(files)
+      setResult(response.data)
+      toast.success('AutoSplice completed')
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'AutoSplice failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(310px,430px) minmax(0,1fr)', gap: 18 }}>
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 01</div>
+          <h2 style={{ margin: '6px 0 14px', color: text, fontSize: 24 }}>Upload Multiple LAS Files</h2>
+          <div onDrop={event => { event.preventDefault(); setFiles(Array.from(event.dataTransfer.files).filter(file => file.name.toLowerCase().endsWith('.las'))) }} onDragOver={event => event.preventDefault()} style={{ border: `2px dashed ${isLight ? '#CBD5E1' : '#334155'}`, borderRadius: 14, padding: 22, background: isLight ? '#F1F5F9' : '#08111F' }}>
+            <div style={{ color: text, fontWeight: 900 }}>Drop LAS files here</div>
+            <div style={{ color: muted, marginTop: 8 }}>AutoSplice validates, sorts, merges intervals, and outputs one final LAS.</div>
+            <button style={{ ...smallButton(isLight), marginTop: 16 }} onClick={() => {
+              const input = document.createElement('input')
+              input.type = 'file'
+              input.accept = '.las'
+              input.multiple = true
+              input.onchange = event => setFiles(Array.from((event.target as HTMLInputElement).files || []))
+              input.click()
+            }}>Browse LAS Files</button>
+          </div>
+          <div style={{ display: 'grid', gap: 8, marginTop: 14 }}>
+            {files.map(file => <div key={`${file.name}-${file.size}`} style={{ padding: 10, borderRadius: 10, border: `1px solid ${border}`, color: text, display: 'flex', justifyContent: 'space-between' }}><span>{file.name}</span><span style={{ color: muted }}>{(file.size / 1024 / 1024).toFixed(2)} MB</span></div>)}
+          </div>
+          <button onClick={run} disabled={busy || files.length < 2} style={{ ...primaryButton(accent), marginTop: 16, width: '100%' }}>{busy ? 'Splicing...' : 'Run AutoSplice'}</button>
+        </div>
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Validation Summary</div>
+          <h2 style={{ margin: '6px 0 14px', color: text, fontSize: 24 }}>{result ? 'Validated LAS Files' : 'Waiting for AutoSplice'}</h2>
+          {result?.file_summary?.length ? <SimpleTable rows={result.file_summary} columns={['file_name', 'valid', 'depth_min', 'depth_max', 'curve_count', 'rows']} isLight={isLight} /> : <div style={{ color: muted }}>Upload files and run AutoSplice to validate intervals.</div>}
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 14 }}>
+        <Metric label="Output Curves" value={result?.output?.curve_count ?? '--'} />
+        <Metric label="Output Rows" value={result?.output?.rows?.toLocaleString?.() || '--'} />
+        <Metric label="Depth From" value={result?.output?.depth_min ?? '--'} />
+        <Metric label="Depth To" value={result?.output?.depth_max ?? '--'} />
+      </div>
+      <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+          <h2 style={{ margin: 0, color: text, fontSize: 22 }}>Merged AutoSplice Preview</h2>
+          {result?.download_url ? <a href={petrophysicsApi.autospliceDownloadUrl(result.download_url)} style={{ ...primaryButton(accent), textDecoration: 'none', width: 180, textAlign: 'center' }}>Download LAS</a> : null}
+        </div>
+        {result?.figure ? <PlotlyFigure figure={result.figure} isLight={isLight} showExport exportName="AutoSpliced_Output_preview" /> : <EmptyPlot border={border} muted={muted} text="Run AutoSplice to preview the merged output." />}
+      </div>
+    </section>
+  )
+}
+
+function LasUploadCard({ accent, isLight, busy, session, onDemo, onUpload, title }: { accent: string; isLight: boolean; busy: boolean; session: any; onDemo: () => void; onUpload: (file: File) => void; title: string }) {
+  const border = isLight ? '#E2E8F0' : '#1E293B'
+  const text = isLight ? '#0F172A' : '#F8FAFC'
+  const muted = isLight ? '#64748B' : '#94A3B8'
+  return (
+    <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 14 }}>
+        <div><div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Petrophysics Input</div><h2 style={{ margin: '6px 0 0', color: text, fontSize: 24 }}>{title}</h2></div>
+        <button onClick={onDemo} disabled={busy} style={smallButton(isLight)}>{busy ? 'Loading...' : 'Load Demo'}</button>
+      </div>
+      <div onDrop={event => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file) onUpload(file) }} onDragOver={event => event.preventDefault()} style={{ border: `2px dashed ${isLight ? '#CBD5E1' : '#334155'}`, borderRadius: 14, padding: 22, background: isLight ? '#F1F5F9' : '#08111F' }}>
+        <div style={{ color: text, fontWeight: 900 }}>Drop LAS here or browse</div>
+        <div style={{ color: muted, marginTop: 8 }}>This LAS becomes active for Visualization, Prediction, and Uncertainty.</div>
+        <button style={{ ...smallButton(isLight), marginTop: 16 }} onClick={() => {
+          const input = document.createElement('input')
+          input.type = 'file'
+          input.accept = '.las'
+          input.onchange = event => {
+            const file = (event.target as HTMLInputElement).files?.[0]
+            if (file) onUpload(file)
+          }
+          input.click()
+        }}>Browse LAS</button>
+        <div style={{ color: session ? '#10B981' : muted, marginTop: 14, fontSize: 13 }}>{session ? `Active: ${session.file_name}` : 'No active LAS yet'}</div>
+      </div>
+    </div>
+  )
+}
+
+function ActionHeader({ accent, isLight, label, title, subtitle, actions }: { accent: string; isLight: boolean; label: string; title: string; subtitle: string; actions: React.ReactNode }) {
+  return <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${isLight ? '#E2E8F0' : '#1E293B'}`, background: isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))', display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}><div><div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>{label}</div><h2 style={{ margin: '6px 0', color: isLight ? '#0F172A' : '#F8FAFC', fontSize: 26 }}>{title}</h2><p style={{ margin: 0, color: isLight ? '#64748B' : '#94A3B8' }}>{subtitle}</p></div><div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>{actions}</div></div>
+}
+
+function InfoCard({ accent, isLight, label, title, items }: { accent: string; isLight: boolean; label: string; title: string; items: any[] }) {
+  return <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${isLight ? '#E2E8F0' : '#1E293B'}`, background: isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))' }}><div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>{label}</div><h2 style={{ margin: '6px 0 14px', color: isLight ? '#0F172A' : '#F8FAFC', fontSize: 24 }}>{title}</h2><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(145px,1fr))', gap: 10 }}>{items.map(([itemLabel, value]) => <Metric key={itemLabel} label={itemLabel} value={value} />)}</div></div>
+}
+
+function EmptyPlot({ border, muted, text }: { border: string; muted: string; text: string }) {
+  return <div style={{ minHeight: 460, display: 'grid', placeItems: 'center', color: muted, border: `1px dashed ${border}`, borderRadius: 14 }}>{text}</div>
+}
+
+function SimpleTable({ rows, columns, isLight }: { rows: any[]; columns: string[]; isLight: boolean }) {
+  return <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', color: isLight ? '#0F172A' : '#F8FAFC' }}><thead><tr>{columns.map(column => <th key={column} style={tableHead(isLight)}>{column.replace(/_/g, ' ')}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={index}>{columns.map(column => <td key={column} style={tableCell(isLight)}>{String(row[column] ?? '--')}</td>)}</tr>)}</tbody></table></div>
+}
+
+function ResultTable({ title, rows, isLight, accent }: { title: string; rows: any[]; isLight: boolean; accent: string }) {
+  const columns = rows.length ? Object.keys(rows[0]).slice(0, 9) : []
+  return <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${isLight ? '#E2E8F0' : '#1E293B'}`, background: isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))' }}><div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>{title}</div><SimpleTable rows={rows} columns={columns} isLight={isLight} /></div>
+}
+
+function primaryButton(accent: string): React.CSSProperties {
+  return { padding: '13px 16px', borderRadius: 12, border: 'none', background: accent, color: '#fff', fontWeight: 900, cursor: 'pointer', boxShadow: `0 12px 34px ${accent}33` }
+}
+
+function tableHead(isLight: boolean): React.CSSProperties {
+  return { textAlign: 'left', padding: '11px 10px', borderBottom: `1px solid ${isLight ? '#E2E8F0' : '#1E293B'}`, color: isLight ? '#475569' : '#94A3B8', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 }
+}
+
+function tableCell(isLight: boolean): React.CSSProperties {
+  return { padding: '11px 10px', borderBottom: `1px solid ${isLight ? '#E2E8F0' : '#1E293B'}`, color: isLight ? '#0F172A' : '#E2E8F0', fontSize: 13 }
 }
 
 function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
@@ -310,6 +680,250 @@ function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLig
             </div>
           ) : <div style={{ color: muted }}>Statistics appear after generating a crossplot.</div>}
         </div>
+      </div>
+    </section>
+  )
+}
+
+function PetrophysicsHistogramPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
+  const [metadata, setMetadata] = useState<any>(null)
+  const [settings, setSettings] = useState({
+    selectedCurve: '',
+    scaleType: 'Auto',
+    customMin: '',
+    customMax: '',
+    depthFrom: '',
+    depthTo: '',
+    bins: 30,
+    colorTheme: 'Auto by Curve',
+    opacity: 0.75,
+    kdeEnabled: true,
+    showMean: true,
+    showMedian: true,
+    showPercentiles: true,
+  })
+  const [result, setResult] = useState<any>(null)
+  const [uploading, setUploading] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
+  const border = isLight ? '#E2E8F0' : '#1E293B'
+  const text = isLight ? '#0F172A' : '#F8FAFC'
+  const muted = isLight ? '#64748B' : '#94A3B8'
+
+  const hydrateMetadata = (data: any) => {
+    setMetadata(data)
+    setSettings(prev => ({
+      ...prev,
+      selectedCurve: data.curves?.[0]?.name || '',
+      depthFrom: '',
+      depthTo: '',
+    }))
+    setResult(null)
+  }
+
+  const loadDemo = async () => {
+    setUploading(true)
+    try {
+      const response = await petrophysicsApi.loadHistogramDemo()
+      hydrateMetadata(response.data)
+      toast.success('Histogram demo LAS loaded')
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'Failed to load histogram demo')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const uploadLas = async (file: File) => {
+    setUploading(true)
+    try {
+      const response = await petrophysicsApi.uploadHistogramLas(file)
+      hydrateMetadata(response.data)
+      toast.success(`LAS "${file.name}" loaded`)
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'LAS upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const generate = async () => {
+    if (!metadata?.file_id || !settings.selectedCurve) {
+      toast.error('Upload LAS and select a curve first')
+      return
+    }
+    setLoading(true)
+    try {
+      const response = await petrophysicsApi.generateHistogram({
+        file_id: metadata.file_id,
+        curve_name: settings.selectedCurve,
+        scale_type: settings.scaleType,
+        custom_min: emptyToNull(settings.customMin),
+        custom_max: emptyToNull(settings.customMax),
+        depth_from: emptyToNull(settings.depthFrom),
+        depth_to: emptyToNull(settings.depthTo),
+        bins: settings.bins,
+        opacity: settings.opacity,
+        kde_enabled: settings.kdeEnabled,
+        show_mean: settings.showMean,
+        show_median: settings.showMedian,
+        show_percentiles: settings.showPercentiles,
+      })
+      setResult(response.data)
+      toast.success('Histogram generated')
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'Histogram generation failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const update = (key: string, value: any) => setSettings(prev => ({ ...prev, [key]: value }))
+  const figure = result ? buildHistogramFigure(result, settings, metadata, isLight) : null
+
+  return (
+    <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px,420px) minmax(0,1fr)', gap: 18 }}>
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 14 }}>
+            <div>
+              <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 01</div>
+              <h2 style={{ margin: '6px 0 0', color: text, fontSize: 24 }}>Upload LAS File</h2>
+            </div>
+            <button onClick={loadDemo} disabled={uploading} style={smallButton(isLight)}>{uploading ? 'Loading...' : 'Load Demo LAS'}</button>
+          </div>
+          <div
+            onDrop={event => {
+              event.preventDefault()
+              const file = event.dataTransfer.files[0]
+              if (file) uploadLas(file)
+            }}
+            onDragOver={event => event.preventDefault()}
+            style={{ border: `2px dashed ${isLight ? '#CBD5E1' : '#334155'}`, borderRadius: 14, padding: 22, background: isLight ? '#F1F5F9' : '#08111F' }}
+          >
+            <div style={{ color: text, fontWeight: 900 }}>Drop LAS here or click to browse</div>
+            <div style={{ color: muted, marginTop: 8 }}>Supports .las files for histogram analysis</div>
+            <button
+              style={{ ...smallButton(isLight), marginTop: 16 }}
+              onClick={() => {
+                const input = document.createElement('input')
+                input.type = 'file'
+                input.accept = '.las'
+                input.onchange = event => {
+                  const file = (event.target as HTMLInputElement).files?.[0]
+                  if (file) uploadLas(file)
+                }
+                input.click()
+              }}
+            >
+              Browse LAS
+            </button>
+            <div style={{ color: metadata ? '#10B981' : muted, marginTop: 14, fontSize: 13 }}>
+              {metadata ? `Loaded: ${metadata.file_name || 'LAS file'}` : 'No LAS loaded yet'}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>LAS Information</div>
+          <h2 style={{ margin: '6px 0 14px', color: text, fontSize: 24 }}>{metadata?.well_name || 'No LAS loaded'}</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(145px,1fr))', gap: 10 }}>
+            {[
+              ['File', metadata?.file_name || 'N/A'],
+              ['Company', metadata?.company || 'N/A'],
+              ['Field', metadata?.field || 'N/A'],
+              ['Location', metadata?.location || 'N/A'],
+              ['Depth Range', metadata ? `${Number(metadata.depth_start).toFixed(1)} - ${Number(metadata.depth_stop).toFixed(1)} ft` : '--'],
+              ['Curves', metadata?.num_curves || '--'],
+              ['Samples', metadata?.num_samples?.toLocaleString?.() || '--'],
+              ['Null Value', metadata?.null_value ?? '--'],
+            ].map(([label, value]) => <Metric key={label} label={label} value={value} />)}
+          </div>
+          {metadata?.curves?.length ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
+              {metadata.curves.slice(0, 22).map((curve: any) => (
+                <span key={curve.name} style={{ border: `1px solid ${border}`, borderRadius: 999, padding: '6px 10px', color: muted, background: isLight ? '#F8FAFC' : '#08111F', fontSize: 12 }}>{curve.name}</span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px,420px) minmax(0,1fr)', gap: 18 }}>
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 02</div>
+          <h2 style={{ margin: '6px 0 12px', color: text, fontSize: 22 }}>Histogram Settings</h2>
+          <div style={{ display: 'grid', gap: 12 }}>
+            <Control label="Log Curve">
+              <select style={field(isLight)} value={settings.selectedCurve} onChange={event => update('selectedCurve', event.target.value)} disabled={!metadata}>
+                <option value="">Select curve</option>
+                {metadata?.curves?.map((curve: any) => <option key={curve.name} value={curve.name}>{curve.name}{curve.unit ? ` (${curve.unit})` : ''}</option>)}
+              </select>
+            </Control>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Control label="Histogram Scale">
+                <select style={field(isLight)} value={settings.scaleType} onChange={event => update('scaleType', event.target.value)}>
+                  {['Auto', 'Linear', 'Logarithmic', 'Custom'].map(scale => <option key={scale}>{scale}</option>)}
+                </select>
+              </Control>
+              <Control label="Number of Bins">
+                <select style={field(isLight)} value={settings.bins} onChange={event => update('bins', Number(event.target.value))}>
+                  {[10, 15, 20, 25, 30, 40, 50, 75, 100].map(bin => <option key={bin} value={bin}>{bin}</option>)}
+                </select>
+              </Control>
+            </div>
+            {settings.scaleType === 'Custom' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <NumberControl label="Min Value" value={settings.customMin} onChange={value => update('customMin', value)} isLight={isLight} />
+                <NumberControl label="Max Value" value={settings.customMax} onChange={value => update('customMax', value)} isLight={isLight} />
+              </div>
+            )}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <NumberControl label="Depth From" value={settings.depthFrom} onChange={value => update('depthFrom', value)} isLight={isLight} placeholder={metadata?.depth_start || 'From'} />
+              <NumberControl label="Depth To" value={settings.depthTo} onChange={value => update('depthTo', value)} isLight={isLight} placeholder={metadata?.depth_stop || 'To'} />
+            </div>
+            <Control label="Histogram Color">
+              <select style={field(isLight)} value={settings.colorTheme} onChange={event => update('colorTheme', event.target.value)}>
+                {['Auto by Curve', 'Blue', 'Green', 'Red', 'Purple', 'Cyan', 'Yellow'].map(color => <option key={color}>{color}</option>)}
+              </select>
+            </Control>
+            <SliderLabel label="Bar Opacity" value={settings.opacity} min={0.1} max={1} step={0.05} onChange={value => update('opacity', value)} />
+            <div style={{ padding: 12, borderRadius: 12, border: `1px solid ${border}`, background: isLight ? '#F8FAFC' : '#08111F', display: 'grid', gap: 8 }}>
+              {[
+                ['KDE Density Overlay', 'kdeEnabled'],
+                ['Show Mean Line', 'showMean'],
+                ['Show Median Line', 'showMedian'],
+                ['Show P10 / P50 / P90 Lines', 'showPercentiles'],
+              ].map(([label, key]) => (
+                <label key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: muted, fontSize: 13 }}>
+                  {label}
+                  <input type="checkbox" checked={Boolean((settings as any)[key])} onChange={event => update(key, event.target.checked)} style={{ accentColor: accent }} />
+                </label>
+              ))}
+            </div>
+            <button onClick={generate} disabled={loading || !metadata} style={{ width: '100%', marginTop: 6, padding: '13px 16px', borderRadius: 12, border: 'none', background: accent, color: '#fff', fontWeight: 900, cursor: 'pointer', boxShadow: `0 12px 34px ${accent}33` }}>
+              {loading ? 'Generating Histogram...' : 'Generate Histogram'}
+            </button>
+          </div>
+        </div>
+
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg, minWidth: 0 }}>
+          <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 03</div>
+          <h2 style={{ margin: '6px 0 12px', color: text, fontSize: 22 }}>Interactive Histogram</h2>
+          {figure ? (
+            <PlotlyFigure figure={figure} isLight={isLight} showExport exportName={`${sanitizeFileName(metadata?.well_name || 'Well')}_${sanitizeFileName(result.curve_name)}_Histogram`} />
+          ) : (
+            <div style={{ minHeight: 540, display: 'grid', placeItems: 'center', color: muted, border: `1px dashed ${border}`, borderRadius: 14 }}>
+              Upload LAS, choose a curve, then generate the histogram.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px,1fr) minmax(300px,1fr)', gap: 18 }}>
+        <HistogramStatistics result={result} isLight={isLight} accent={accent} />
+        <HistogramAnalytics result={result} isLight={isLight} accent={accent} />
       </div>
     </section>
   )
@@ -897,6 +1511,216 @@ function formatNumber(value: any) {
   if (value === null || value === undefined || value === '') return 'N/A'
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed.toFixed(Math.abs(parsed) >= 100 ? 2 : 5) : String(value)
+}
+
+function buildHistogramFigure(result: any, settings: any, metadata: any, isLight: boolean) {
+  const color = getHistogramCurveColor(settings.selectedCurve || result.curve_name, settings.colorTheme)
+  const paper = isLight ? '#FFFFFF' : '#111827'
+  const plot = isLight ? '#F8FAFC' : 'rgba(11,18,32,.78)'
+  const grid = isLight ? '#D8E0EC' : 'rgba(148,163,184,.13)'
+  const text = isLight ? '#0F172A' : '#F1F5F9'
+  const muted = isLight ? '#64748B' : '#94A3B8'
+  const data: any[] = [{
+    type: 'bar',
+    x: result.histogram.bin_centers,
+    y: result.histogram.counts,
+    name: result.curve_name,
+    marker: {
+      color,
+      opacity: settings.opacity,
+      line: { color, width: 1 },
+    },
+    hovertemplate: `<b>${result.curve_name}</b><br>Range: %{x:.4f}<br>Frequency: %{y}<extra></extra>`,
+  }]
+
+  if (settings.kdeEnabled && result.kde?.x) {
+    data.push({
+      type: 'scatter',
+      x: result.kde.x,
+      y: result.kde.y,
+      mode: 'lines',
+      name: 'KDE',
+      line: { color: isLight ? '#0F172A' : '#F8FAFC', width: 2.4, shape: 'spline' },
+      hovertemplate: 'KDE<br>Value: %{x:.4f}<br>Density count: %{y:.2f}<extra></extra>',
+    })
+  }
+
+  const shapes: any[] = []
+  const annotations: any[] = []
+  const addLine = (x: number, label: string, lineColor: string, dash = 'solid') => {
+    shapes.push({ type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: { color: lineColor, width: 1.6, dash } })
+    annotations.push({
+      x,
+      y: 1,
+      xref: 'x',
+      yref: 'paper',
+      text: label,
+      showarrow: false,
+      yanchor: 'bottom',
+      font: { color: lineColor, size: 10 },
+      bgcolor: isLight ? 'rgba(255,255,255,.86)' : 'rgba(15,23,42,.86)',
+      bordercolor: lineColor,
+      borderwidth: 1,
+      borderpad: 3,
+    })
+  }
+  if (settings.showMean) addLine(result.statistics.mean, 'Mean', '#3B82F6')
+  if (settings.showMedian) addLine(result.statistics.median, 'Med', '#8B5CF6')
+  if (settings.showPercentiles) {
+    addLine(result.statistics.p10, 'P10', '#F59E0B', 'dash')
+    addLine(result.statistics.p50, 'P50', '#06B6D4', 'dash')
+    addLine(result.statistics.p90, 'P90', '#EF4444', 'dash')
+  }
+
+  return {
+    data,
+    layout: {
+      height: 540,
+      title: {
+        text: metadata ? `<b>${metadata.well_name}</b> | <b>${Number(metadata.depth_start).toFixed(0)}-${Number(metadata.depth_stop).toFixed(0)} ft</b> | <b>${result.curve_name} Histogram</b>` : `<b>${result.curve_name} Histogram</b>`,
+        font: { color: text, size: 15 },
+        x: 0.5,
+        xanchor: 'center',
+      },
+      paper_bgcolor: paper,
+      plot_bgcolor: plot,
+      font: { color: muted, family: 'Inter, system-ui, sans-serif' },
+      xaxis: {
+        title: { text: `${result.curve_name}${result.unit ? ` (${result.unit})` : ''}`, font: { color: muted, size: 12 } },
+        tickfont: { color: muted, size: 11 },
+        gridcolor: grid,
+        zerolinecolor: grid,
+        linecolor: isLight ? '#CBD5E1' : '#1E293B',
+        type: settings.scaleType === 'Logarithmic' ? 'log' : 'linear',
+      },
+      yaxis: {
+        title: { text: 'Frequency', font: { color: muted, size: 12 } },
+        tickfont: { color: muted, size: 11 },
+        gridcolor: grid,
+        zerolinecolor: grid,
+        linecolor: isLight ? '#CBD5E1' : '#1E293B',
+      },
+      legend: {
+        bgcolor: isLight ? 'rgba(255,255,255,.86)' : 'rgba(15,23,42,.86)',
+        bordercolor: isLight ? '#CBD5E1' : '#1E293B',
+        borderwidth: 1,
+        font: { color: muted, size: 11 },
+        x: 0.98,
+        xanchor: 'right',
+        y: 0.98,
+        yanchor: 'top',
+      },
+      margin: { t: 58, r: 24, b: 64, l: 68 },
+      shapes,
+      annotations,
+      bargap: 0.05,
+      hovermode: 'x',
+    },
+  }
+}
+
+function HistogramStatistics({ result, isLight, accent }: { result: any; isLight: boolean; accent: string }) {
+  const border = isLight ? '#E2E8F0' : '#1E293B'
+  const text = isLight ? '#0F172A' : '#F8FAFC'
+  const muted = isLight ? '#64748B' : '#94A3B8'
+  const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
+  const rows = result ? [
+    ['Curve', result.curve_name],
+    ['Unit', result.unit || 'N/A'],
+    ['Count', result.statistics.count?.toLocaleString?.()],
+    ['Missing', `${result.statistics.missing_percentage?.toFixed?.(1)}%`],
+    ['Min', result.statistics.min],
+    ['Max', result.statistics.max],
+    ['Mean', result.statistics.mean],
+    ['Median', result.statistics.median],
+    ['Std Dev', result.statistics.std],
+    ['Variance', result.statistics.variance],
+    ['P10', result.statistics.p10],
+    ['P25', result.statistics.p25],
+    ['P50', result.statistics.p50],
+    ['P75', result.statistics.p75],
+    ['P90', result.statistics.p90],
+    ['Skewness', result.statistics.skewness],
+    ['Kurtosis', result.statistics.kurtosis],
+  ] : []
+
+  return (
+    <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+      <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Statistics</div>
+      <h2 style={{ margin: '6px 0 12px', color: text, fontSize: 22 }}>{result ? result.curve_name : 'No Histogram Yet'}</h2>
+      {result ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+          {rows.map(([label, value]) => <Metric key={label} label={label} value={formatNumber(value)} />)}
+        </div>
+      ) : <div style={{ color: muted }}>Generate a histogram to view statistics.</div>}
+    </div>
+  )
+}
+
+function HistogramAnalytics({ result, isLight, accent }: { result: any; isLight: boolean; accent: string }) {
+  const border = isLight ? '#E2E8F0' : '#1E293B'
+  const text = isLight ? '#0F172A' : '#F8FAFC'
+  const muted = isLight ? '#64748B' : '#94A3B8'
+  const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
+  const qualityColor = result ? ({ Excellent: '#10B981', Good: '#3B82F6', Moderate: '#F59E0B', Poor: '#EF4444' } as Record<string, string>)[result.analytics.quality_label] || accent : accent
+
+  return (
+    <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+      <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>AI Curve Analytics</div>
+      <h2 style={{ margin: '6px 0 12px', color: text, fontSize: 22 }}>{result ? result.analytics.quality_label : 'Waiting for Result'}</h2>
+      {result ? (
+        <div style={{ display: 'grid', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 14, borderRadius: 12, border: `1px solid ${qualityColor}55`, background: `${qualityColor}18` }}>
+            <div style={{ color: qualityColor, fontSize: 34, fontWeight: 900 }}>{result.analytics.quality_score}</div>
+            <div><div style={{ color: text, fontWeight: 900 }}>Curve Quality Score</div><div style={{ color: muted, fontSize: 13 }}>{result.analytics.distribution_type}</div></div>
+          </div>
+          {[
+            ['Data Completeness', result.analytics.completeness, '#10B981'],
+            ['Missing Values', result.analytics.missing_percentage, '#F59E0B'],
+            ['Outlier Percentage', result.analytics.outlier_percentage, '#8B5CF6'],
+            ['AI Confidence', result.analytics.ai_confidence, '#2563EB'],
+          ].map(([label, value, color]) => (
+            <div key={label}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: muted, fontSize: 13, marginBottom: 6 }}>
+                <span>{label}</span><b style={{ color: String(color) }}>{Number(value).toFixed(1)}%</b>
+              </div>
+              <div style={{ height: 8, borderRadius: 999, background: isLight ? '#E2E8F0' : '#1E293B', overflow: 'hidden' }}>
+                <div style={{ width: `${Math.min(100, Number(value))}%`, height: '100%', background: String(color), borderRadius: 999 }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : <div style={{ color: muted }}>Generate a histogram to view AI analytics.</div>}
+    </div>
+  )
+}
+
+function getHistogramCurveColor(curveName: string, theme: string): string {
+  if (theme !== 'Auto by Curve') {
+    const colorMap: Record<string, string> = {
+      Blue: '#2563EB',
+      Green: '#10B981',
+      Red: '#EF4444',
+      Purple: '#8B5CF6',
+      Cyan: '#06B6D4',
+      Yellow: '#F59E0B',
+    }
+    return colorMap[theme] || '#2563EB'
+  }
+  const name = curveName.toUpperCase()
+  if (name.includes('GR')) return '#10B981'
+  if (name.includes('SP')) return '#F59E0B'
+  if (name.includes('RT') || name.includes('ILD') || name.includes('LLD') || name.includes('RESIST') || name.includes('LL')) return '#EF4444'
+  if (name.includes('RHOB') || name.includes('DENS')) return '#2563EB'
+  if (name.includes('NPHI') || name.includes('NEUT')) return '#8B5CF6'
+  if (name.includes('DT') || name.includes('SONIC')) return '#06B6D4'
+  if (name.includes('CALI')) return '#F97316'
+  if (name.includes('PE')) return '#EC4899'
+  return '#2563EB'
+}
+
+function sanitizeFileName(value: string) {
+  return String(value || 'histogram').replace(/[^a-zA-Z0-9]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
 }
 
 function Control({ label, children }: { label: string; children: React.ReactNode }) {

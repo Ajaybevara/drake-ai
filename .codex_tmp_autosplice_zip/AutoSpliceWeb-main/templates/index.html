@@ -1,0 +1,21 @@
+<!-- templates/index.html  -->
+<!DOCTYPE html>
+<html lang="en">
+  <head><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@400;500;600&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AUTO-SPLICE</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/styles.css') }}"
+    />
+  </head>
+  <body>
+    <div class="welcome-slide">
+      <h1>Welcome to AUTO-SPLICE</h1>
+      <p>Automated Well Log Splicing and Analysis</p>
+      <a href="{{ url_for('projects') }}" class="btn">Get Started</a>
+    </div>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  </body>
+</html>

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@400;500;600&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <meta charset="UTF-8" />
+    <title>Processed LAS Data</title>
+    <!-- Link to CSS -->
+    <!-- Include Font Awesome for icons (if needed) -->
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/well_selections.css') }}"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/styles.css') }}"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css"
+    />
+    <style>
+      /* Sidebar styles */
+      #sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 250px;
+        background-color: #343a40;
+        color: white;
+        overflow-y: auto;
+        padding-top: 20px;
+      }
+
+      #sidebar-header {
+        padding: 10px;
+        text-align: center;
+        border-bottom: 1px solid #555;
+      }
+
+      #sidebar-header h2 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .menu-item {
+        padding: 15px;
+        border-bottom: 1px solid #555;
+      }
+
+      .menu-item a {
+        text-decoration: none;
+        color: white;
+        display: block;
+      }
+
+      .menu-item a:hover {
+        background-color: #495057;
+      }
+
+      /* Logout button styles */
+      #logout-btn {
+        position: absolute;
+        bottom: 20px;
+        width: 100%;
+        text-align: center;
+      }
+
+      #logout-btn a {
+        text-decoration: none;
+        color: white;
+        font-weight: bold;
+        padding: 10px;
+        display: block;
+        background-color: #dc3545;
+        border-radius: 5px;
+      }
+
+      #logout-btn a:hover {
+        background-color: #c82333;
+      }
+
+      /* Adjust content area to account for sidebar */
+      #content {
+        margin-left: 260px;
+        padding: 20px;
+      }
+
+      h1 {
+        font-size: 24px;
+      }
+
+      h2 {
+        font-size: 20px;
+        margin-top: 20px;
+      }
+
+      ul {
+        list-style-type: none;
+        padding-left: 0;
+      }
+
+      li {
+        background-color: #f8f9fa;
+        margin: 5px 0;
+        padding: 10px;
+        border-radius: 5px;
+      }
+
+      a.back-link {
+        display: inline-block;
+        margin-top: 20px;
+        text-decoration: none;
+        color: #007bff;
+      }
+
+      a.back-link:hover {
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Sidebar -->
+    <div id="sidebar">
+      <div id="sidebar-header">
+        <h2>Processed LAS Data</h2>
+      </div>
+      <div class="menu-item">
+        <a href="{{ url_for('projects') }}">Home (Projects)</a>
+      </div>
+      <!-- Logout Button -->
+      <!-- <div id="logout-btn">
+        <a href="{{ url_for('logout') }}">Logout</a>
+      </div> -->
+    </div>
+
+    <!-- Main Content -->
+    <div id="content">
+      <h1>Processed LAS Data</h1>
+      <!-- Dynamic content to display processed data -->
+      {% for well, files in data.items() %}
+      <h2>{{ well }}</h2>
+      <ul>
+        {% for file, attributes in files.items() %}
+        <li>{{ file }}: {{ attributes }}</li>
+        {% endfor %}
+      </ul>
+      {% endfor %}
+      <a href="{{ url_for('projects') }}" class="back-link">Back to Home</a>
+    </div>
+  </body>
+</html>

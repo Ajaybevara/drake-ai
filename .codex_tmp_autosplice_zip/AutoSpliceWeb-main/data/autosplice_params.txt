@@ -1,0 +1,5 @@
+export_sampling_interval=0.1524
+hist_bins=200
+n_big_patches=2
+equal_val_allowed_width=15
+nan_patches_gap_ignored=20

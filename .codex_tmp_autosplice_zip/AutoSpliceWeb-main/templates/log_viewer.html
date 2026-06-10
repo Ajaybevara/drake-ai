@@ -1,0 +1,323 @@
+<!-- templates/log_viewer.html  -->
+<!DOCTYPE html>
+<html lang="en">
+  <head><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@400;500;600&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Log Viewer - {{ well_name }} ({{ project_name }})</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='well_log_viewer/css/style.css') }}"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <!-- <link
+      href="{{ url_for('static', filename='css/output.css') }}"
+      rel="stylesheet"
+    /> -->
+  </head>
+  <body>
+    <div id="app-container" class="flex h-screen bg-gray-100">
+      <div
+        id="sidebar"
+        class="w-72 bg-white p-4 flex flex-col border-r border-gray-300 overflow-y-auto"
+      >
+        <h1 class="text-xl font-bold mb-1 text-gray-800">Log Viewer</h1>
+        <p class="text-xs text-gray-600 mb-3">
+          Project: <strong class="font-medium">{{ project_name }}</strong><br />
+          Well: <strong class="font-medium">{{ well_name }}</strong>
+        </p>
+        <div class="mb-3">
+          <button
+            id="load-file-btn"
+            class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm shadow-sm transition duration-150 ease-in-out"
+            type="button"
+          >
+            Load Other LAS
+          </button>
+          <a
+            href="{{ url_for('project_dashboard', project_name=project_name) }}"
+            class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm shadow-sm transition duration-150 ease-in-out no-underline inline-block ml-2"
+            >Back to Project</a
+          >
+        </div>
+
+        <div class="sidebar-section mb-4 border-t border-gray-200 pt-3">
+          <h2 class="text-sm font-semibold mb-2 text-gray-700">
+            Loaded LAS Files
+          </h2>
+          <ul id="loaded-files-list" class="text-xs space-y-1">
+            <li class="text-gray-500 italic">No files loaded yet.</li>
+          </ul>
+        </div>
+
+        <div
+          class="sidebar-section flex-grow border-t border-gray-200 pt-3 overflow-hidden flex flex-col"
+        >
+          <h2 class="text-sm font-semibold mb-2 text-gray-700">File Summary</h2>
+          <div
+            id="file-summary-tabs-container"
+            class="flex-grow overflow-hidden flex flex-col"
+          >
+            <div id="summary-tabs" class="flex-shrink-0"></div>
+            <div
+              id="summary-content"
+              class="flex-grow overflow-y-auto bg-gray-50 p-2 border border-gray-200 rounded mt-1"
+            >
+              <p class="text-xs text-gray-500 italic">
+                Select a loaded file to see its summary.
+              </p>
+              <pre
+                id="summary-details"
+                class="text-xs whitespace-pre-wrap break-words"
+              ></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="viewer-action-row" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+          <button
+            id="add-track-btn"
+            class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm shadow-sm transition duration-150 ease-in-out flex-shrink-0"
+            disabled
+            type="button"
+          >
+            Add Track
+          </button>
+          <button
+            id="clear-curves-btn"
+            class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm shadow-sm transition duration-150 ease-in-out flex-shrink-0"
+            disabled
+            type="button"
+          >
+            Clear Curves
+          </button>
+        </div>
+      </div>
+
+      <div
+        id="main-content-area"
+        class="flex-grow flex flex-col overflow-hidden"
+      >
+        <div
+          class="tab-controls px-3 py-2 border-b border-gray-300 bg-gray-100 flex-shrink-0"
+        >
+          <button class="tab-button active" data-tab="log-plots">
+            Log Plots
+          </button>
+          <button class="tab-button" data-tab="splice-summary">
+            Splice Summary
+          </button>
+        </div>
+
+        <div
+          id="log-plots-content"
+          class="tab-content active flex flex-row flex-grow overflow-hidden"
+        >
+          <div
+            id="track-controls-container"
+            class="p-2 bg-gray-50 border-b border-gray-300 overflow-y-auto flex-shrink-0"
+
+          >
+            <p class="controls-message text-sm text-gray-500 italic">
+              Add a Track to configure curves.
+            </p>
+          </div>
+          <div
+            id="tracks-plot-container"
+            class="flex-grow overflow-auto bg-white"
+          >
+            <p class="plots-message text-sm text-gray-500 italic p-4">
+              Loading initial files...
+            </p>
+          </div>
+        </div>
+
+        <div
+          id="splice-summary-content"
+          class="tab-content p-4 overflow-y-auto"
+        >
+          <p class="text-sm text-gray-500 italic">Loading splice summary...</p>
+        </div>
+      </div>
+    </div>
+    <div
+      id="file-select-modal"
+      class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"
+    >
+      <div
+        class="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white"
+      >
+        <div
+          class="flex justify-between items-center pb-3 border-b border-gray-200"
+        >
+          <h3 class="text-lg leading-6 font-medium text-gray-900">
+            Select LAS File to Load
+          </h3>
+          <button
+            class="close-button text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center"
+            title="Close modal"
+          >
+            <svg
+              aria-hidden="true"
+              class="w-5 h-5"
+              fill="currentColor"
+              viewBox="0 0 20 20"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                clip-rule="evenodd"
+              ></path>
+            </svg>
+            <span class="sr-only">Close modal</span>
+          </button>
+        </div>
+        <div class="mt-3 text-sm">
+          <ul
+            id="las-file-list"
+            class="max-h-60 overflow-y-auto border border-gray-300 rounded p-2 mb-3 space-y-1 bg-gray-50"
+          >
+            <li>Loading available files...</li>
+          </ul>
+          <p class="text-xs text-gray-500">Click on a file name to load it.</p>
+        </div>
+        <div class="mt-4 text-right border-t border-gray-200 pt-3">
+          <button
+            id="cancel-load-btn"
+            class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 text-sm shadow-sm transition duration-150 ease-in-out"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <template id="track-control-template">
+      <div
+        class="track-control-panel border border-gray-300 rounded mb-3 p-3 bg-white shadow-sm"
+      >
+        <div class="flex justify-between items-center mb-2">
+          <h3 class="track-title text-md font-semibold text-gray-700">
+            Track X
+          </h3>
+          <button
+            class="remove-track-btn text-red-500 hover:text-red-700 text-sm font-medium flex items-center"
+            title="Remove Track"
+          >
+            <i class="fas fa-times-circle mr-1"></i>Remove Track
+          </button>
+        </div>
+        <div class="track-curves-list space-y-2"></div>
+        <button
+          class="add-curve-btn text-blue-500 hover:text-blue-700 text-xs mt-2 font-medium flex items-center"
+        >
+          <i class="fas fa-plus-circle mr-1"></i>Add Curve to Track
+        </button>
+      </div>
+    </template>
+
+    <template id="curve-control-template">
+      <div
+        class="curve-control-item border border-gray-200 rounded p-2 bg-gray-50 space-y-2"
+      >
+        <div class="flex items-center space-x-2 flex-wrap">
+          <select
+            class="curve-file-select text-xs p-1 border rounded flex-grow min-w-[100px]"
+            title="Select LAS File"
+          >
+            <option value="">-- File --</option>
+          </select>
+          <select
+            class="curve-depth-select text-xs p-1 border rounded flex-grow min-w-[90px]"
+            title="Select Depth Curve"
+            disabled
+          >
+            <option value="">-- Depth --</option>
+          </select>
+          <select
+            class="curve-prop-select text-xs p-1 border rounded flex-grow min-w-[90px]"
+            title="Select Value Curve"
+            disabled
+          >
+            <option value="">-- Curve --</option>
+          </select>
+          <button
+            class="curve-settings-toggle text-gray-500 hover:text-gray-700 text-xs px-1"
+            title="Curve Settings"
+          >
+            <i class="fas fa-cog"></i>
+          </button>
+          <button
+            class="remove-curve-btn text-red-400 hover:text-red-600 text-xs px-1"
+            title="Remove Curve"
+          >
+            <i class="fas fa-minus-circle"></i>
+          </button>
+        </div>
+        <div
+          class="curve-settings-panel hidden mt-2 p-2 border-t border-gray-200 flex items-center space-x-2 flex-wrap bg-gray-100 rounded"
+        >
+          <label class="text-xs text-gray-600">Scale:</label>
+          <select class="curve-scale-select text-xs p-1 border rounded">
+            <option value="linear">Linear</option>
+            <option value="log">Log</option>
+          </select>
+          <label class="text-xs text-gray-600">Color:</label>
+          <input
+            type="color"
+            class="curve-color-picker h-6 w-8 border rounded p-0.5"
+            title="Curve Color"
+          />
+          <label class="text-xs text-gray-600">Range:</label>
+          <input
+            type="number"
+            step="any"
+            class="x-range-input x-min text-xs p-1 border rounded w-16"
+            placeholder="Min"
+            title="X-Axis Min"
+          />
+          <input
+            type="number"
+            step="any"
+            class="x-range-input x-max text-xs p-1 border rounded w-16"
+            placeholder="Max"
+            title="X-Axis Max"
+          />
+        </div>
+      </div>
+    </template>
+
+    <template id="track-plot-template">
+      <div
+        class="track-plot-area border border-gray-300 relative bg-gray-50"
+        style="min-height: 300px; z-index: 0"
+      >
+        <p
+          class="plot-message text-sm text-gray-400 italic absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[-1]"
+        >
+          Configure curves to plot
+        </p>
+      </div>
+    </template>
+
+    <script>
+      window.APP_DATA = {
+          projectName: {{ project_name|tojson }},
+          wellName: {{ well_name|tojson }},
+          filesToAutoload: {{ files_to_autoload_json|safe }}, // List of {filename, well, type, project}
+          allAvailableFiles: {{ all_available_files_json|safe }}, // List of {filename, well, type} used by modal fetch
+          spliceProvenance: {{ splice_provenance_json|safe }} // Detailed provenance object
+      };
+    </script>
+
+    <script
+      type="module"
+      src="{{ url_for('static', filename='js/viewer_controller.js') }}"
+    ></script>
+  </body>
+</html>

@@ -1,0 +1,2 @@
+LWD = ARC, EcoScope, PeriScope, GVR, RAB, ADN, sonicVISION, seismicVISION, proVISION, StethoScope, VISION, PWD
+WireLine = DIT, AIT, ARI, Rt Scanner, FMS, FMI, DLL, HDLT, IPL, APS, CNL, ECS, DSI, Sonic Scanner, CSI, VSI, CMR, MR Scanner, MDT, PressureXpress, MSCT, UBI

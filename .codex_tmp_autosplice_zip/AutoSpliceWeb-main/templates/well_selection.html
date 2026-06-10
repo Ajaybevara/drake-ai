@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AutoSplice | {{ project_name }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/drake_dark.css') }}" />
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body class="well-management-sidebar">
+  <div class="drake-shell">
+    <aside id="sidebar" class="drake-sidebar well-management-nav">
+      <div id="sidebar-header" class="well-sidebar-header">
+        <img src="{{ url_for('static', filename='drake-sidebar-logo.png') }}" alt="Drake AI" class="well-sidebar-logo" />
+        <button id="toggle-sidebar" class="sidebar-toggle-btn" type="button" aria-label="Toggle sidebar"><i class="fas fa-bars"></i></button>
+        <div class="project-name"><strong>Project:</strong> <span>{{ project_name }}</span></div>
+      </div>
+
+      <nav class="well-sidebar-menu" aria-label="Well management navigation">
+        <div class="menu-item" data-target="home"><i class="fas fa-home"></i><span>Home (Projects)</span></div>
+        <div class="menu-item" data-target="import-wells"><i class="fas fa-file-import"></i><span>Import Wells</span></div>
+        <div class="menu-item" data-target="import-las"><i class="fas fa-file-upload"></i><span>Import LAS Files</span></div>
+        <div class="menu-item" data-target="create-well"><i class="fas fa-plus-circle"></i><span>Create Well</span></div>
+      </nav>
+    </aside>
+
+    <main class="drake-main">
+      <header class="topbar">
+        <div class="topbar-title"><strong>Drake AI</strong><span>Petrophysics Platform</span></div>
+        <div class="top-actions"><i class="far fa-bell"></i><i class="fas fa-cog"></i><span class="avatar">E</span><span>Engineer</span></div>
+      </header>
+      <section id="content" class="content-wrap">
+        <div class="breadcrumb">Petrophysics &nbsp;›&nbsp; AutoSplice &nbsp;›&nbsp; <span>Generate</span></div>
+        <div class="page-title">
+          <div class="page-icon"><i class="fas fa-bezier-curve"></i></div>
+          <div><h1>AutoSplice – Generate</h1><p>Generate clean spliced LAS curves using AI-driven optimization</p></div>
+        </div>
+
+        <div id="existing-wells">
+          <div class="grid-2" style="margin-bottom:18px;">
+            <div class="card">
+              <h2 class="card-title"><i class="fas fa-info-circle accent"></i> Well Information</h2>
+              <div class="stats-grid">
+                <div><div class="label">Project</div><div class="value">{{ project_name }}</div></div>
+                <div><div class="label">Available Wells</div><div class="value accent">{{ project_structure|length }}</div></div>
+                <div><div class="label">Status</div><div class="badge"><i class="fas fa-circle"></i> Ready</div></div>
+              </div>
+            </div>
+            <div class="card readiness">
+              <div class="ring"></div>
+              <div><h2 class="card-title" style="margin-bottom:8px;"><i class="fas fa-microscope success"></i> Splice Readiness</h2><strong class="success">Excellent</strong><p class="muted">Data quality is suitable for AutoSplice</p></div>
+            </div>
+          </div>
+
+          <div class="grid-main">
+            <div class="card curve-preview">
+              <h2 class="card-title"><i class="fas fa-chart-line accent"></i> Curve Preview</h2>
+              {% if curve_preview and curve_preview.tracks %}
+              <div class="preview-source muted" style="margin:-4px 0 12px;font-size:13px;">
+                Showing real LAS preview from <strong>{{ curve_preview.source_well }}</strong> / <strong>{{ curve_preview.source_file }}</strong>
+              </div>
+              <div class="tracks">
+                {% for curve in curve_preview.tracks %}
+                  <div>
+                    <div class="track-title">{{ curve.name }} <small>({{ curve.unit or 'unit' }})</small><small>{{ curve.x_min }} – {{ curve.x_max }}</small></div>
+                    <div class="track"><div class="zone-line z1"></div><div class="zone-line z2"></div><svg class="curve-svg" viewBox="0 0 100 280" preserveAspectRatio="none"><polyline points="{{ curve.points }}" fill="none" stroke="{{ curve.color }}" stroke-width="2" opacity=".95" vector-effect="non-scaling-stroke"/></svg></div>
+                  </div>
+                {% endfor %}
+                <div class="zones"><div><strong class="success">Top</strong><br>{{ curve_preview.depth_min }} ft</div><div><strong style="color:#f1b51c">Mid</strong><br>Curve preview</div><div><strong class="accent">Bottom</strong><br>{{ curve_preview.depth_max }} ft</div></div>
+              </div>
+              <div class="legend"><span>Real imported LAS curves</span><span>Depth: {{ curve_preview.depth_min }}–{{ curve_preview.depth_max }} ft</span><span style="color:#e7c21d">--- Reference zones</span></div>
+              <div class="info-strip"><i class="fas fa-info-circle accent"></i> Curve preview is generated from the uploaded LAS file. Select wells below to generate AutoSplice.</div>
+              {% else %}
+              <div class="info-strip"><i class="fas fa-info-circle accent"></i> {{ curve_preview.message if curve_preview else 'No curve preview available yet.' }}</div>
+              {% endif %}
+
+              <form id="well-selection-form" style="margin-top:22px;">
+                <input type="hidden" id="project-name-select" name="project_name" value="{{ project_name }}" />
+                <h2 class="card-title"><i class="fas fa-oil-can accent"></i> Existing Wells</h2>
+                <div id="well-list">
+                  {% if not project_structure %}<p class="muted">No wells found in this project. Use Import Wells or Create Well.</p>{% endif %}
+                  {% for well, files in project_structure.items() %}
+                  <div class="well-folder" data-well="{{ well }}">
+                    <div class="folder-header">
+                      <div class="folder-toggle" style="display:flex;align-items:center;gap:12px;cursor:pointer;flex:1;">
+                        <input type="checkbox" class="well-checkbox" name="selected_wells" value="{{ well }}" id="well-check-{{loop.index}}" />
+                        <i class="fas fa-folder" style="color:#f1b51c"></i>
+                        <label for="well-check-{{loop.index}}" style="cursor:pointer;"><strong>{{ well }}</strong> <span class="muted">({{ files|length }} file{{ 's' if files|length != 1 }})</span></label>
+                      </div>
+                      <button type="button" class="remove-well-btn btn btn-ghost" data-well="{{ well }}" title="Remove Well"><i class="fas fa-trash-alt"></i></button>
+                    </div>
+                    <div class="las-files hidden">
+                      {% if files %}{% for las_file in files %}
+                      <div class="las-file" style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+                        <span class="las-file-name" title="{{ las_file }}">{{ las_file }}</span>
+                        <div><button type="button" class="view-source-btn btn btn-ghost" onclick="viewSourceLasFile('{{ project_name }}', '{{ well }}', '{{ las_file }}')">View</button> <button type="button" class="remove-las-btn btn btn-ghost" data-well="{{ well }}" data-file="{{ las_file }}"><i class="fas fa-times"></i></button></div>
+                      </div>
+                      {% endfor %}{% else %}<p class="muted">No LAS files in this well.</p>{% endif %}
+                    </div>
+                  </div>
+                  {% endfor %}
+                </div>
+                <button type="button" id="auto-select-btn" class="btn" disabled><i class="fas fa-magic"></i> Process Selected Wells / Generate AutoSplice</button>
+                <div class="process-status-container" style="display:inline-flex;align-items:center;gap:10px;margin-left:14px;"><div id="auto-select-spinner" class="spinner hidden"></div><span id="auto-select-status" class="muted"></span></div>
+              </form>
+            </div>
+
+            <div class="card">
+              <h2 class="card-title"><i class="fas fa-sliders-h accent"></i> Splice Configuration</h2>
+              <div class="config-row"><label class="label">Target Well</label><select class="select"><option>SOUTH BARROW #11</option>{% for well in project_structure.keys() %}<option>{{ well }}</option>{% endfor %}</select></div>
+              <div class="config-row"><label class="label">Source Wells</label><input class="input" value="BARROW #09, BARROW #10, BARROW #12" /></div>
+              <div class="config-row"><label class="label">Curve Selection</label><select class="select"><option>CALI (Caliper)</option><option>GR</option><option>RHOB</option><option>NPHI</option><option>DT</option></select></div>
+              <div class="config-row"><label class="label">Splice Method</label><div class="radio-row"><input type="radio" checked> AI Optimized (Recommended)</div><div class="radio-row"><input type="radio"> Manual Splice</div><div class="radio-row"><input type="radio"> Cross-correlation</div></div>
+              <hr style="border-color:rgba(141,165,198,.14);border-style:solid;border-width:1px 0 0;margin:20px 0;">
+              <h2 class="card-title">Optimization Parameters</h2>
+              <div class="config-row"><label class="label">Smoothness Weight</label><div class="slider-line"><input type="range" value="65"><input class="input" value="0.65"></div></div>
+              <div class="config-row"><label class="label">Correlation Threshold</label><div class="slider-line"><input type="range" value="80"><input class="input" value="0.80"></div></div>
+              <div class="config-row"><label class="label">Max Gap Size (ft)</label><div class="slider-line"><input type="range" value="18"><input class="input" value="100"></div></div>
+              <button type="button" id="config-generate-btn" class="btn" style="width:100%;margin-top:12px;"><i class="fas fa-sparkles"></i> Generate AutoSplice</button>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:18px;">
+            <h2 class="card-title"><i class="fas fa-info-circle accent"></i> Information</h2>
+            <div class="info-grid">
+              <div class="mini-card"><div class="mini-icon"><i class="fas fa-robot"></i></div><div><h3>AI Optimization</h3><p>Uses advanced algorithms to find the best splice points with maximum correlation.</p></div></div>
+              <div class="mini-card"><div class="mini-icon"><i class="fas fa-clipboard-check"></i></div><div><h3>Quality Assurance</h3><p>All spliced curves are validated for continuity and accuracy.</p></div></div>
+              <div class="mini-card"><div class="mini-icon"><i class="fas fa-code-branch"></i></div><div><h3>Seamless Integration</h3><p>Generated curves are ready for analysis and interpretation.</p></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="import-wells" class="hidden">
+          <div class="breadcrumb">Petrophysics &nbsp;›&nbsp; LAS Well Upload &nbsp;›&nbsp; <span>Import Wells</span></div>
+          <div class="page-title"><div class="page-icon"><i class="fas fa-folder-plus"></i></div><div><h1>Import Wells</h1><p>Import folders containing LAS files and automatically detect wells</p></div></div>
+          <div class="card">
+            <div id="drop-zone" class="drop-zone" style="min-height:220px;">
+              <i class="fas fa-folder-plus"></i>
+              <h3>Drop LAS files or folders here</h3>
+              <p class="muted">Select individual .las files or well folders containing LAS files.</p>
+              <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:14px;">
+                <button type="button" id="select-standalone-las-btn" class="btn"><i class="fas fa-file-import"></i> Select LAS Files</button>
+                <button type="button" id="select-folder-btn" class="btn btn-ghost"><i class="fas fa-folder-open"></i> Select Folder</button>
+              </div>
+              <input type="file" id="standalone-las-picker" multiple accept=".las,.LAS" style="display:none" />
+              <input type="file" id="folder-picker" webkitdirectory directory multiple style="display:none" />
+            </div>
+            <div id="selected-folders" style="margin-top:18px;"><h3>Selected LAS Files for Import:</h3><p class="muted">No LAS files selected yet.</p></div>
+            <form id="import-wells-form" style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;"><input type="hidden" id="project-name-import" value="{{ project_name }}" /><button type="submit" id="import-wells-btn" class="btn" disabled><i class="fas fa-check"></i> Import Selected LAS Files</button><button type="button" id="clear-selected-wells-btn" class="btn btn-ghost" disabled><i class="fas fa-eraser"></i> Clear Selected Files</button></form>
+            <div class="import-status-container" style="margin-top:12px;display:flex;align-items:center;gap:10px;"><div id="import-spinner" class="spinner hidden"></div><p id="import-status" class="muted"></p></div>
+          </div>
+        </div>
+
+        <div id="import-las" class="hidden">
+          <div class="breadcrumb">Petrophysics &nbsp;›&nbsp; LAS Well Upload &nbsp;›&nbsp; <span>Import LAS Files</span></div>
+          <div class="page-title"><div class="page-icon"><i class="fas fa-file-upload"></i></div><div><h1>Import LAS Files</h1><p>Upload LAS files into an existing well for AutoSplice processing</p></div></div>
+
+          <div class="grid-2" style="align-items:start;">
+            <div class="card">
+              <h2 class="card-title"><i class="fas fa-oil-can accent"></i> Select Well</h2>
+              {% if project_structure %}
+              <label for="well-select" class="label">Choose existing well</label>
+              <select id="well-select" class="select" style="margin:8px 0 14px;">
+                <option value="">-- Select a well --</option>
+                {% for well in project_structure.keys() %}<option value="{{ well }}">{{ well }}</option>{% endfor %}
+              </select>
+              <div id="selected-well-info" class="info-strip" style="display:none;text-align:left;margin-top:10px;"></div>
+              {% else %}
+              <div class="info-strip" style="text-align:left;"><i class="fas fa-exclamation-circle" style="color:var(--yellow)"></i> No wells found. Please create a well first.</div>
+              {% endif %}
+              <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;">
+                <button type="button" class="btn btn-ghost section-jump" data-target="create-well"><i class="fas fa-plus-circle"></i> Create Well</button>
+                <button type="button" class="btn btn-ghost section-jump" data-target="import-wells"><i class="fas fa-folder-open"></i> Folder Import</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <h2 class="card-title"><i class="fas fa-shield-alt success"></i> Upload Rules</h2>
+              <div class="meta-row"><div class="label">Accepted files</div><div class="value">.las, .LAS</div></div>
+              <div class="meta-row"><div class="label">Upload mode</div><div class="value">Multiple files supported</div></div>
+              <div class="meta-row"><div class="label">Save location</div><div class="value">Selected project / selected well</div></div>
+            </div>
+          </div>
+
+          <form id="import-las-form" method="post" enctype="multipart/form-data" class="hidden" style="margin-top:18px;">
+            <div class="card">
+              <h2 class="card-title"><i class="fas fa-cloud-upload-alt accent"></i> LAS File Upload</h2>
+              <div id="las-drop-zone" class="drop-zone">
+                <i class="fas fa-file-upload"></i>
+                <h3>Drop LAS files here or click to browse</h3>
+                <p class="muted">Select one or more LAS files for the chosen well.</p>
+                <button type="button" id="select-existing-las-btn" class="btn"><i class="fas fa-file-import"></i> Select LAS Files</button>
+                <input type="file" id="las-file-input" name="files[]" multiple accept=".las,.LAS" style="display:none" />
+              </div>
+            </div>
+
+            <div class="card" style="margin-top:18px;">
+              <h2 class="card-title"><i class="fas fa-table accent"></i> Selected LAS Files</h2>
+              <div id="direct-upload-status" class="info-strip" style="text-align:left;margin-bottom:14px;display:none;"></div>
+              <div style="overflow:auto;">
+                <table class="table" id="las-preview-table">
+                  <thead><tr><th>File Name</th><th>Size</th><th>Extension</th><th>Status</th><th>Action</th></tr></thead>
+                  <tbody><tr class="empty-row"><td colspan="5" class="muted">No LAS files selected yet.</td></tr></tbody>
+                </table>
+              </div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;">
+                <button type="submit" id="upload-las-btn" class="btn" disabled><i class="fas fa-upload"></i> Upload LAS Files</button>
+                <button type="button" id="validate-las-btn" class="btn btn-ghost"><i class="fas fa-check-double"></i> Validate Files</button>
+                <button type="button" id="clear-direct-files-btn" class="btn btn-ghost" disabled><i class="fas fa-eraser"></i> Clear Selected Files</button>
+                <button type="button" class="btn btn-green section-jump" data-target="existing-wells"><i class="fas fa-arrow-right"></i> Continue to AutoSplice</button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <div id="create-well" class="hidden">
+          <div class="page-title"><div class="page-icon"><i class="fas fa-plus-circle"></i></div><div><h1>Create New Well</h1><p>Create a well manually and attach LAS files later</p></div></div>
+          <div class="card">
+            <form action="{{ url_for('create_well_dir', project_name=project_name) }}" method="post">
+              <div class="config-row"><label for="new-well-name" class="label">Well Name</label><input class="input" type="text" id="new-well-name" name="well_name" required placeholder="Enter unique well name" /></div>
+              <div class="config-row"><label class="label">Field Name</label><input class="input" placeholder="Optional" /></div>
+              <div class="config-row"><label class="label">Location</label><input class="input" placeholder="Optional" /></div>
+              <div class="config-row"><label class="label">Operator</label><input class="input" placeholder="Optional" /></div>
+              <button type="submit" class="btn"><i class="fas fa-plus"></i> Create Well</button>
+            </form>
+          </div>
+        </div>
+
+        <div id="review-adjust" class="hidden">
+          <div class="page-title"><div class="page-icon"><i class="fas fa-sliders-h"></i></div><div><h1>Review & Adjust</h1><p>Review source LAS files, depth overlap zones, and suggested splice boundaries</p></div></div>
+          <div class="card"><h2 class="card-title"><i class="fas fa-clipboard-check accent"></i> AutoSplice Review</h2><p class="muted">Select wells in Generate page to prepare files for review. Suggested splice zones and missing data warnings will appear here before final processing.</p><button type="button" class="btn section-jump" data-target="existing-wells"><i class="fas fa-magic"></i> Go to Generate</button></div>
+        </div>
+
+        <div id="spliced-results" class="hidden">
+          <div class="page-title"><div class="page-icon"><i class="fas fa-check-circle"></i></div><div><h1>AutoSplice Results</h1><p>Download generated LAS outputs and open them in the log viewer</p></div></div>
+          <div id="resultsContainer" class="card">
+            <h2 class="card-title"><i class="fas fa-file-download accent"></i> Spliced Logs</h2>
+            {% if spliced_logs %}
+            <table class="table spliced-logs-table"><thead><tr><th>Well Name</th><th>Generated LAS</th><th>Status</th><th>View</th><th>Download</th><th>Provenance</th></tr></thead><tbody id="spliced-logs-tbody">
+              {% for well, log_file in spliced_logs.items() %}
+              <tr><td><strong>{{ well }}</strong></td><td>{{ log_file }}</td><td><span class="badge"><i class="fas fa-circle"></i> Success</span></td><td><a class="btn btn-ghost" href="{{ url_for('log_viewer_page', project_name=project_name, well_name=well) }}" target="_blank">Open in Viewer</a></td><td><button class="download-btn btn btn-green" data-well="{{ well }}" data-project="{{ project_name }}" data-filename="{{ log_file }}">Download LAS</button></td><td><button class="download-btn btn btn-ghost" data-well="{{ well }}" data-project="{{ project_name }}" data-filename="{{ well }}_spliced_provenance.json">Download Provenance JSON</button></td></tr>
+              {% endfor %}
+            </tbody></table>
+            {% else %}
+            <p class="muted">No spliced logs generated yet.</p><button type="button" class="btn btn-ghost section-jump" data-target="existing-wells">Select LAS Files</button>
+            {% endif %}
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="{{ url_for('static', filename='js/well_selection.js') }}"></script>
+</body>
+</html>

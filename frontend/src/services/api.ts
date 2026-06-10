@@ -104,6 +104,34 @@ export const petrophysicsApi = {
     })
   },
   generateCrossplot: (params: any) => api.post('/petrophysics/crossplot/generate', params),
+  loadHistogramDemo: () => api.post('/petrophysics/histogram/load-demo'),
+  uploadHistogramLas: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post('/petrophysics/histogram/upload-las', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  generateHistogram: (params: any) => api.post('/petrophysics/histogram/generate', params),
+  loadPetroLasDemo: () => api.post('/petrophysics/las/load-demo'),
+  uploadPetroLas: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post('/petrophysics/las/upload', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  generatePetroLogViewer: (params: any) => api.post('/petrophysics/las/log-viewer', params),
+  generatePetroPrediction: (sessionId: string) => api.post('/petrophysics/las/prediction', { session_id: sessionId }),
+  generatePetroUncertainty: (params: any) => api.post('/petrophysics/las/uncertainty', params),
+  runAutoSplice: (files: File[]) => {
+    const fd = new FormData()
+    files.forEach(file => fd.append('files', file))
+    return api.post('/petrophysics/autosplice/run', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  autospliceDownloadUrl: (path: string) => `${API_URL}${path}`,
 }
 
 // Seismic

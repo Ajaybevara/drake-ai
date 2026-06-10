@@ -1,0 +1,16 @@
+# Ignore the uploads folder and all its contents
+/uploads/
+
+# Ignore the to_delete folder
+/to_delete/
+
+# Optional: Ignore Python cache directories and compiled files
+__pycache__/
+*.pyc
+users.txt
+# Optional: Ignore environment variable files
+.env
+
+notes.md
+
+.venv
