@@ -111,6 +111,7 @@ export default function UIOnlyModulePage({ title, subtitle = DEFAULT_SUBTITLE, a
 }
 
 const PETRO_SESSION_KEY = 'drake_active_petro_las_session'
+const transientModuleState: Record<string, any> = {}
 
 function savePetroSession(session: any) {
   try {
@@ -129,29 +130,45 @@ function readPetroSession() {
   }
 }
 
+function isUserUploadedPetroSession(session: any) {
+  if (!session?.session_id) return false
+  const fileName = String(session.file_name || '').toLowerCase()
+  return !session.is_demo && !fileName.includes('demo')
+}
+
 function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
-  const [session, setSession] = useState<any>(() => readPetroSession())
-  const [selected, setSelected] = useState<string[]>([])
-  const [result, setResult] = useState<any>(null)
+  const saved = transientModuleState.logVisualization || {}
+  const [session, setSession] = useState<any>(() => saved.session || readPetroSession())
+  const [selected, setSelected] = useState<string[]>(() => saved.selected || [])
+  const [result, setResult] = useState<any>(() => saved.result || null)
+  const [depthRange, setDepthRange] = useState(() => saved.depthRange || { min: '', max: '', unit: 'Feet (ft)' })
   const [busy, setBusy] = useState(false)
   const border = isLight ? '#E2E8F0' : '#1E293B'
   const text = isLight ? '#0F172A' : '#F8FAFC'
   const muted = isLight ? '#64748B' : '#94A3B8'
   const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
   const curves: string[] = session?.curve_names || []
+  const activeCurves = selected.filter(curve => curves.includes(curve))
+
+  useEffect(() => {
+    transientModuleState.logVisualization = { session, selected, result, depthRange }
+  }, [session, selected, result, depthRange])
 
   const hydrate = (data: any) => {
-    const defaults = ['GR', 'RT', 'RHOB', 'NPHI', 'DT'].filter(name => data.curve_names?.includes(name))
+    const defaults = ['GR', 'ILD', 'RT', 'DRHO', 'RHOB', 'NPHI', 'DT'].filter(name => data.curve_names?.includes(name))
+    transientModuleState.prediction = {}
+    transientModuleState.uncertainty = {}
     setSession(data)
     savePetroSession(data)
     setSelected(defaults.length ? defaults : (data.curve_names || []).slice(0, 5))
+    setDepthRange({ min: data.depth_min ? String(Math.round(Number(data.depth_min))) : '', max: data.depth_max ? String(Math.round(Number(data.depth_max))) : '', unit: 'Feet (ft)' })
     setResult(null)
   }
   const loadDemo = async () => {
     setBusy(true)
     try {
       const response = await petrophysicsApi.loadPetroLasDemo()
-      hydrate(response.data)
+      hydrate({ ...response.data, is_demo: true })
       toast.success('Demo LAS loaded')
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'Failed to load LAS')
@@ -163,7 +180,7 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
     setBusy(true)
     try {
       const response = await petrophysicsApi.uploadPetroLas(file)
-      hydrate(response.data)
+      hydrate({ ...response.data, is_demo: false })
       toast.success(`LAS "${file.name}" loaded across Petrophysics`)
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'LAS upload failed')
@@ -173,10 +190,16 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
   }
   const visualize = async () => {
     if (!session?.session_id) return toast.error('Upload or load a LAS file first')
+    if (!activeCurves.length) return toast.error('Select at least one log track')
     setBusy(true)
     try {
-      const response = await petrophysicsApi.generatePetroLogViewer({ session_id: session.session_id, curves: selected })
-      setResult(response.data)
+      const response = await petrophysicsApi.generatePetroLogViewer({
+        session_id: session.session_id,
+        curves: activeCurves,
+        depth_min: emptyToNull(depthRange.min),
+        depth_max: emptyToNull(depthRange.max),
+      })
+      setResult({ ...response.data, figure: styleLogViewerFigure(response.data.figure), selected_curves: activeCurves })
       toast.success('AI visualization rendered')
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'Visualization failed')
@@ -187,6 +210,10 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
 
   return (
     <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
+      <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+        <h2 style={{ margin: 0, color: text, fontSize: 24 }}>AI Log Visualization</h2>
+        <p style={{ margin: '8px 0 0', color: muted, fontSize: 13 }}>Select logs below. Resistivity logs auto-use logarithmic scale.</p>
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(310px,430px) minmax(0,1fr)', gap: 18 }}>
         <LasUploadCard accent={accent} isLight={isLight} busy={busy} session={session} onDemo={loadDemo} onUpload={upload} title="Upload LAS File" />
         <InfoCard accent={accent} isLight={isLight} title={session?.well_name || 'No LAS loaded'} label="Well Details" items={[
@@ -201,34 +228,128 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
         ]} />
       </div>
       <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12 }}>
-          <div>
-            <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Available Logs</div>
-            <h2 style={{ margin: '6px 0 0', color: text, fontSize: 22 }}>Select Curves to Visualize</h2>
-          </div>
-          <button onClick={visualize} disabled={busy || !session} style={{ ...primaryButton(accent), width: 180 }}>{busy ? 'Rendering...' : 'Plot Tracks'}</button>
+        <div style={{ display: 'flex', gap: 12, borderBottom: `1px solid ${border}`, margin: '-18px -18px 16px', padding: '0 18px' }}>
+          <button style={{ padding: '13px 18px', border: 'none', borderBottom: `2px solid ${accent}`, background: `${accent}18`, color: text, fontWeight: 900 }}>Log Viewer</button>
+          <button style={{ padding: '13px 18px', border: 'none', background: 'transparent', color: muted, fontWeight: 800 }}>Log Ranges & Properties</button>
+        </div>
+        <p style={{ color: muted, margin: '0 0 14px' }}>Displaying {activeCurves.length || 0} track(s) - {session?.rows?.toLocaleString?.() || 0} depth points.</p>
+        <div style={{ color: muted, letterSpacing: 1, textTransform: 'uppercase', fontSize: 12, fontWeight: 900, marginBottom: 8 }}>Available Logs</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+          <button onClick={() => setSelected(['GR', 'ILD', 'DRHO', 'DT'].filter(name => curves.includes(name)))} disabled={!curves.length} style={smallChip(isLight, '#38BDF8', false)}>+ Add Standard</button>
+          <button onClick={() => { setSelected([]); setResult(null) }} disabled={!curves.length} style={smallChip(isLight, '#EF4444', false)}>x Clear All</button>
+          {['All', 'GR', 'RES', 'DEN', 'NEU', 'SON', 'CAL', 'SP', 'Other'].map(group => <span key={group} style={smallChip(isLight, groupColor(group), false)}>{group}</span>)}
         </div>
         {curves.length ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{curves.map(curve => {
           const active = selected.includes(curve)
-          return <button key={curve} onClick={() => setSelected(prev => active ? prev.filter(item => item !== curve) : [...prev, curve])} style={{ padding: '9px 13px', borderRadius: 999, border: `1px solid ${active ? accent : border}`, background: active ? `${accent}22` : 'transparent', color: active ? '#F8FAFC' : muted, fontWeight: 900, cursor: 'pointer' }}>{curve}</button>
+          const color = curveColor(curve)
+          return <button key={curve} onClick={() => setSelected(prev => active ? prev.filter(item => item !== curve) : [...prev, curve])} style={{ padding: '9px 13px', borderRadius: 999, border: `1px solid ${active ? color : border}`, background: active ? `${color}20` : 'transparent', color: active ? color : muted, fontWeight: 900, cursor: 'pointer' }}><span style={{ color }}>{active ? '✓ ' : '● '}</span>{curve}</button>
         })}</div> : <div style={{ color: muted }}>Upload LAS to see available logs.</div>}
+        <div style={{ color: muted, letterSpacing: 1, textTransform: 'uppercase', fontSize: 12, fontWeight: 900, margin: '18px 0 8px' }}>Active Tracks <span style={{ color: '#38BDF8' }}>{activeCurves.length}</span></div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, padding: 12, borderRadius: 12, background: isLight ? '#64748B22' : '#64748B55', marginBottom: 16 }}>
+          {activeCurves.length ? activeCurves.map(curve => <span key={curve} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 999, border: `1px solid ${curveColor(curve)}77`, color: curveColor(curve), background: `${curveColor(curve)}18`, fontWeight: 900 }}><span>● {curve}</span><small style={{ color: muted }}>{isResistivityCurve(curve) ? 'LOG' : 'LIN'}</small><button onClick={() => setSelected(prev => prev.filter(item => item !== curve))} style={{ border: 'none', background: 'transparent', color: muted, cursor: 'pointer' }}>×</button></span>) : <span style={{ color: muted }}>No active tracks selected.</span>}
+        </div>
+        <div style={{ color: muted, letterSpacing: 1, textTransform: 'uppercase', fontSize: 12, fontWeight: 900, marginBottom: 8 }}>Depth Range (Y-Axis)</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, alignItems: 'end' }}>
+          <Control label="Unit"><select style={field(isLight)} value={depthRange.unit} onChange={event => setDepthRange((prev: any) => ({ ...prev, unit: event.target.value }))}><option>Feet (ft)</option><option>Meters (m)</option></select></Control>
+          <Control label="Min Depth"><input style={field(isLight)} value={depthRange.min} onChange={event => setDepthRange((prev: any) => ({ ...prev, min: event.target.value }))} /></Control>
+          <Control label="Max Depth"><input style={field(isLight)} value={depthRange.max} onChange={event => setDepthRange((prev: any) => ({ ...prev, max: event.target.value }))} /></Control>
+          <button onClick={() => setDepthRange({ min: session?.depth_min ? String(Math.round(Number(session.depth_min))) : '', max: session?.depth_max ? String(Math.round(Number(session.depth_max))) : '', unit: 'Feet (ft)' })} style={smallButton(isLight)}>Reset</button>
+          <button onClick={visualize} disabled={busy || !session} style={{ ...primaryButton(accent), width: 180 }}>{busy ? 'Rendering...' : 'Plot Tracks'}</button>
+        </div>
       </div>
       <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
         {result?.figure ? <PlotlyFigure figure={result.figure} isLight={isLight} showExport exportName={`${session?.well_name || 'well'}_ai_log_visualization`} /> : <EmptyPlot border={border} muted={muted} text="Upload LAS, choose curves, then plot AI visualization." />}
+      </div>
+      <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+        <h2 style={{ margin: '0 0 14px', color: text, fontSize: 22 }}>AI Assisted Log Interpretation</h2>
+        <LogInterpretation curves={curves} selected={activeCurves} muted={muted} text={text} />
       </div>
     </section>
   )
 }
 
+function isResistivityCurve(curve: string) {
+  return /^(RT|ILD|ILM|LLD|LLS|MSFL|AT|RDEP|RESD|RES)/i.test(curve)
+}
+
+function curveColor(curve: string) {
+  if (/^(GR|CGR|SGR|GAM)/i.test(curve)) return '#16A34A'
+  if (isResistivityCurve(curve)) return '#B7791F'
+  if (/^(RHOB|DRHO|DEN|RHO)/i.test(curve)) return '#2563EB'
+  if (/^(NPHI|NEU|NPOR)/i.test(curve)) return '#38BDF8'
+  if (/^(DT|DTC|DTS|SON|AC)/i.test(curve)) return '#8B5CF6'
+  if (/^(CALI|CAL)/i.test(curve)) return '#EF4444'
+  if (/^(SP)/i.test(curve)) return '#EC4899'
+  return '#93C5FD'
+}
+
+function groupColor(group: string) {
+  const map: Record<string, string> = { GR: '#22C55E', RES: '#D97706', DEN: '#2563EB', NEU: '#38BDF8', SON: '#8B5CF6', CAL: '#EF4444', SP: '#EC4899', All: '#38BDF8', Other: '#93C5FD' }
+  return map[group] || '#93C5FD'
+}
+
+function smallChip(isLight: boolean, color: string, active: boolean): React.CSSProperties {
+  return { padding: '7px 11px', borderRadius: 999, border: `1px solid ${color}66`, background: active ? `${color}24` : isLight ? '#F8FAFC' : 'transparent', color, fontWeight: 900, fontSize: 12, cursor: 'pointer' }
+}
+
+function styleLogViewerFigure(figure: any) {
+  if (!figure?.layout) return figure
+  const styled = JSON.parse(JSON.stringify(figure))
+  styled.layout.paper_bgcolor = 'rgba(0,0,0,0)'
+  styled.layout.plot_bgcolor = '#FFFFFF'
+  styled.layout.height = 720
+  styled.layout.font = { color: '#1E3A5F', family: 'Inter, system-ui, sans-serif' }
+  styled.layout.margin = { l: 70, r: 30, t: 70, b: 70 }
+  styled.layout.legend = { orientation: 'h', x: 0, y: -0.12, bgcolor: 'rgba(255,255,255,.85)', bordercolor: '#E2E8F0', borderwidth: 1 }
+  styled.data = (styled.data || []).map((trace: any) => {
+    const name = String(trace.name || '')
+    return { ...trace, line: { ...(trace.line || {}), color: curveColor(name), width: 2.2 }, hoverlabel: { bgcolor: '#F59E0B', font: { color: '#0F172A', size: 14 } } }
+  })
+  Object.keys(styled.layout).forEach(key => {
+    if (key.startsWith('xaxis') || key === 'yaxis') {
+      styled.layout[key] = {
+        ...styled.layout[key],
+        gridcolor: '#E5EAF1',
+        zerolinecolor: '#CBD5E1',
+        linecolor: '#CBD5E1',
+        tickfont: { color: '#1E3A5F', size: 11 },
+        titlefont: { color: '#1E3A5F', size: 12 },
+        color: '#1E3A5F',
+      }
+    }
+  })
+  styled.layout.yaxis = { ...styled.layout.yaxis, title: 'Depth (ft)', autorange: 'reversed' }
+  return styled
+}
+
+function LogInterpretation({ curves, selected, muted, text }: { curves: string[]; selected: string[]; muted: string; text: string }) {
+  const has = (pattern: RegExp) => curves.some(curve => pattern.test(curve))
+  const notes = [
+    has(/^(GR|CGR|SGR|GAM)/i) ? '✅ Gamma Ray logs detected. Suitable for Vsh calculation and shale volume estimation.' : '⚠️ Gamma Ray log missing from uploaded LAS.',
+    has(/^(RT|ILD|ILM|LLD|LLS|MSFL|AT|RDEP|RESD|RES)/i) ? '✅ Resistivity logs detected. Suitable for water saturation calculation.' : '⚠️ Resistivity logs missing from uploaded LAS.',
+    has(/^(RHOB|DRHO|DEN|RHO)/i) ? '✅ Density logs detected. Suitable for density porosity calculation.' : '⚠️ Density logs missing from uploaded LAS.',
+    has(/^(NPHI|NEU|NPOR)/i) ? '✅ Neutron logs detected. Supports porosity and lithology interpretation.' : '⚠️ Neutron logs missing from uploaded LAS.',
+    has(/^(DT|DTC|DTS|SON|AC)/i) ? '✅ Sonic/DT logs detected. Suitable for sonic porosity and rock stiffness interpretation.' : '⚠️ Sonic/DT logs missing from uploaded LAS.',
+    selected.length ? `📊 Active interpretation tracks: ${selected.join(', ')}.` : 'Select log tracks to enable visual interpretation.',
+    '📌 Note: Interpretations require calibration with core data, formation water salinity, pressure data, and pay intervals before reservoir decisions.',
+  ]
+  return <div style={{ display: 'grid', gap: 8, color: text }}>{notes.map((note, index) => <div key={index} style={{ color: note.includes('⚠️') ? '#F59E0B' : text, fontSize: 14, lineHeight: 1.45 }}>{note}</div>)}</div>
+}
+
 function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
+  const saved = transientModuleState.prediction || {}
   const [session, setSession] = useState<any>(() => readPetroSession())
-  const [result, setResult] = useState<any>(null)
+  const [result, setResult] = useState<any>(() => saved.result || null)
   const [busy, setBusy] = useState(false)
   const border = isLight ? '#E2E8F0' : '#1E293B'
   const muted = isLight ? '#64748B' : '#94A3B8'
   const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
+  const hasUserSession = isUserUploadedPetroSession(session)
+  useEffect(() => {
+    transientModuleState.prediction = { result }
+  }, [result])
   const run = async () => {
-    if (!session?.session_id) return toast.error('Upload LAS in Log Visualization or load demo first')
+    if (!hasUserSession) return toast.error('Upload a real LAS file in Log Visualization first')
     setBusy(true)
     try {
       const response = await petrophysicsApi.generatePetroPrediction(session.session_id)
@@ -240,29 +361,18 @@ function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLi
       setBusy(false)
     }
   }
-  const loadDemo = async () => {
-    setBusy(true)
-    try {
-      const response = await petrophysicsApi.loadPetroLasDemo()
-      setSession(response.data)
-      savePetroSession(response.data)
-      toast.success('Demo LAS loaded')
-    } finally {
-      setBusy(false)
-    }
-  }
   const cards = result?.summary_cards || {}
   return (
     <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
-      <ActionHeader accent={accent} isLight={isLight} label="AI Parameter Prediction" title={session?.well_name || 'No Active LAS Session'} subtitle={session ? `${session.file_name} - ${session.rows?.toLocaleString?.()} samples` : 'Use the LAS uploaded in Log Visualization, or load demo data.'} actions={<><button onClick={loadDemo} disabled={busy} style={smallButton(isLight)}>Load Demo</button><button onClick={run} disabled={busy || !session} style={{ ...primaryButton(accent), width: 210 }}>{busy ? 'Calculating...' : 'Calculate Prediction'}</button></>} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 14 }}>
+      <ActionHeader accent={accent} isLight={isLight} label="AI Parameter Prediction" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? `${session.file_name} - ${session.rows?.toLocaleString?.()} samples` : 'Prediction uses only the user uploaded LAS from Log Visualization. Demo data is not used here.'} actions={<button onClick={run} disabled={busy || !hasUserSession} style={{ ...primaryButton(accent), width: 210 }}>{busy ? 'Calculating...' : 'Calculate Prediction'}</button>} />
+      {result ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 14 }}>
         <Metric label="Avg PHI P50" value={cards.avg_phi_p50 ?? '--'} />
         <Metric label="Avg SW P50" value={cards.avg_sw_p50 ?? '--'} />
         <Metric label="Avg PHI Spread" value={cards.avg_phi_spread ?? '--'} />
         <Metric label="Rows Processed" value={cards.rows?.toLocaleString?.() || '--'} />
-      </div>
+      </div> : null}
       <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
-        {result?.figure ? <PlotlyFigure figure={result.figure} isLight={isLight} showExport exportName={`${session?.well_name || 'well'}_ai_parameter_prediction`} /> : <EmptyPlot border={border} muted={muted} text="Run prediction to view porosity and saturation tracks." />}
+        {result?.figure ? <PlotlyFigure figure={result.figure} isLight={isLight} showExport exportName={`${session?.well_name || 'well'}_ai_parameter_prediction`} /> : <EmptyPlot border={border} muted={muted} text="Upload a real LAS in Log Visualization, then run prediction." />}
       </div>
       {result?.records?.length ? <ResultTable title="AI Prediction - First 5 Rows" rows={result.records} isLight={isLight} accent={accent} /> : null}
     </section>
@@ -270,15 +380,20 @@ function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLi
 }
 
 function PetrophysicsUncertaintyPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
+  const saved = transientModuleState.uncertainty || {}
   const [session, setSession] = useState<any>(() => readPetroSession())
-  const [result, setResult] = useState<any>(null)
+  const [result, setResult] = useState<any>(() => saved.result || null)
   const [busy, setBusy] = useState(false)
-  const [params, setParams] = useState({ phi_unc: 0.03, phi_pct: 0.1, sw_unc: 0.05, sw_pct: 0.1 })
+  const [params, setParams] = useState(() => saved.params || { phi_unc: 0.03, phi_pct: 0.1, sw_unc: 0.05, sw_pct: 0.1 })
   const border = isLight ? '#E2E8F0' : '#1E293B'
   const muted = isLight ? '#64748B' : '#94A3B8'
   const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
+  const hasUserSession = isUserUploadedPetroSession(session)
+  useEffect(() => {
+    transientModuleState.uncertainty = { result, params }
+  }, [result, params])
   const run = async () => {
-    if (!session?.session_id) return toast.error('Upload LAS in Log Visualization or load demo first')
+    if (!hasUserSession) return toast.error('Upload a real LAS file in Log Visualization first')
     setBusy(true)
     try {
       const response = await petrophysicsApi.generatePetroUncertainty({ session_id: session.session_id, ...params })
@@ -290,36 +405,25 @@ function PetrophysicsUncertaintyPanel({ accent, isLight }: { accent: string; isL
       setBusy(false)
     }
   }
-  const loadDemo = async () => {
-    setBusy(true)
-    try {
-      const response = await petrophysicsApi.loadPetroLasDemo()
-      setSession(response.data)
-      savePetroSession(response.data)
-      toast.success('Demo LAS loaded')
-    } finally {
-      setBusy(false)
-    }
-  }
   const cards = result?.summary_cards || {}
   return (
     <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
-      <ActionHeader accent={accent} isLight={isLight} label="AI Uncertainty" title={session?.well_name || 'No Active LAS Session'} subtitle="P10 / P50 / P90 envelopes are computed from uploaded LAS-derived prediction curves." actions={<><button onClick={loadDemo} disabled={busy} style={smallButton(isLight)}>Load Demo</button><button onClick={run} disabled={busy || !session} style={{ ...primaryButton(accent), width: 220 }}>{busy ? 'Calculating...' : 'Calculate Uncertainty'}</button></>} />
+      <ActionHeader accent={accent} isLight={isLight} label="AI Uncertainty" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? 'P10 / P50 / P90 envelopes are computed from uploaded LAS-derived prediction curves.' : 'Uncertainty uses only the user uploaded LAS from Log Visualization. Demo data is not used here.'} actions={<button onClick={run} disabled={busy || !hasUserSession} style={{ ...primaryButton(accent), width: 220 }}>{busy ? 'Calculating...' : 'Calculate Uncertainty'}</button>} />
       <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
-        <Control label="Porosity Fixed +/-"><input style={field(isLight)} type="number" step="0.01" value={params.phi_unc} onChange={e => setParams(prev => ({ ...prev, phi_unc: Number(e.target.value) }))} /></Control>
-        <Control label="Porosity Pct"><input style={field(isLight)} type="number" step="0.01" value={params.phi_pct} onChange={e => setParams(prev => ({ ...prev, phi_pct: Number(e.target.value) }))} /></Control>
-        <Control label="Sw Fixed +/-"><input style={field(isLight)} type="number" step="0.01" value={params.sw_unc} onChange={e => setParams(prev => ({ ...prev, sw_unc: Number(e.target.value) }))} /></Control>
-        <Control label="Sw Pct"><input style={field(isLight)} type="number" step="0.01" value={params.sw_pct} onChange={e => setParams(prev => ({ ...prev, sw_pct: Number(e.target.value) }))} /></Control>
+        <Control label="Porosity Fixed +/-"><input style={field(isLight)} type="number" step="0.01" value={params.phi_unc} onChange={e => setParams((prev: any) => ({ ...prev, phi_unc: Number(e.target.value) }))} /></Control>
+        <Control label="Porosity Pct"><input style={field(isLight)} type="number" step="0.01" value={params.phi_pct} onChange={e => setParams((prev: any) => ({ ...prev, phi_pct: Number(e.target.value) }))} /></Control>
+        <Control label="Sw Fixed +/-"><input style={field(isLight)} type="number" step="0.01" value={params.sw_unc} onChange={e => setParams((prev: any) => ({ ...prev, sw_unc: Number(e.target.value) }))} /></Control>
+        <Control label="Sw Pct"><input style={field(isLight)} type="number" step="0.01" value={params.sw_pct} onChange={e => setParams((prev: any) => ({ ...prev, sw_pct: Number(e.target.value) }))} /></Control>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 14 }}>
+      {result ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 14 }}>
         <Metric label="Avg PHI P50" value={cards.avg_phi_p50 ?? '--'} />
         <Metric label="Avg PHI Spread" value={cards.avg_phi_spread ?? '--'} />
         <Metric label="Avg SW P50" value={cards.avg_sw_p50 ?? '--'} />
         <Metric label="Avg SW Spread" value={cards.avg_sw_spread ?? '--'} />
-      </div>
+      </div> : null}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(420px,1fr))', gap: 18 }}>
-        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>{result?.porosity_figure ? <PlotlyFigure figure={result.porosity_figure} isLight={isLight} showExport exportName="porosity_uncertainty" /> : <EmptyPlot border={border} muted={muted} text="Run uncertainty to view porosity P10 / P50 / P90." />}</div>
-        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>{result?.saturation_figure ? <PlotlyFigure figure={result.saturation_figure} isLight={isLight} showExport exportName="saturation_uncertainty" /> : <EmptyPlot border={border} muted={muted} text="Run uncertainty to view saturation P10 / P50 / P90." />}</div>
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>{result?.porosity_figure ? <PlotlyFigure figure={result.porosity_figure} isLight={isLight} showExport exportName="porosity_uncertainty" /> : <EmptyPlot border={border} muted={muted} text="Upload a real LAS in Log Visualization, then run uncertainty." />}</div>
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>{result?.saturation_figure ? <PlotlyFigure figure={result.saturation_figure} isLight={isLight} showExport exportName="saturation_uncertainty" /> : <EmptyPlot border={border} muted={muted} text="Upload a real LAS in Log Visualization, then run uncertainty." />}</div>
       </div>
       {result?.records?.length ? <ResultTable title="Uncertainty - First 5 Rows" rows={result.records} isLight={isLight} accent={accent} /> : null}
     </section>
@@ -327,13 +431,17 @@ function PetrophysicsUncertaintyPanel({ accent, isLight }: { accent: string; isL
 }
 
 function AutoSplicerPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
+  const saved = transientModuleState.autoSplicer || {}
   const [files, setFiles] = useState<File[]>([])
-  const [result, setResult] = useState<any>(null)
+  const [result, setResult] = useState<any>(() => saved.result || null)
   const [busy, setBusy] = useState(false)
   const border = isLight ? '#E2E8F0' : '#1E293B'
   const text = isLight ? '#0F172A' : '#F8FAFC'
   const muted = isLight ? '#64748B' : '#94A3B8'
   const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
+  useEffect(() => {
+    transientModuleState.autoSplicer = { result }
+  }, [result])
   const run = async () => {
     if (files.length < 2) return toast.error('Select at least two LAS files')
     setBusy(true)
@@ -383,11 +491,15 @@ function AutoSplicerPanel({ accent, isLight }: { accent: string; isLight: boolea
         <Metric label="Depth To" value={result?.output?.depth_max ?? '--'} />
       </div>
       <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ margin: 0, color: text, fontSize: 22 }}>Merged AutoSplice Preview</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div>
+            <h2 style={{ margin: 0, color: text, fontSize: 22 }}>AutoSplice Output</h2>
+            <p style={{ margin: '8px 0 0', color: muted }}>
+              {result?.download_url ? 'Merged LAS is ready. Download the final AutoSpliced output file.' : 'Run AutoSplice to generate the downloadable merged LAS file.'}
+            </p>
+          </div>
           {result?.download_url ? <a href={petrophysicsApi.autospliceDownloadUrl(result.download_url)} style={{ ...primaryButton(accent), textDecoration: 'none', width: 180, textAlign: 'center' }}>Download LAS</a> : null}
         </div>
-        {result?.figure ? <PlotlyFigure figure={result.figure} isLight={isLight} showExport exportName="AutoSpliced_Output_preview" /> : <EmptyPlot border={border} muted={muted} text="Run AutoSplice to preview the merged output." />}
       </div>
     </section>
   )
