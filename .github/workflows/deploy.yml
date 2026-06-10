@@ -18,5 +18,5 @@ jobs:
           script: |
             cd ~/drake-ai-main
             git pull origin test
-            docker compose build backend frontend
-            docker compose up -d --no-deps backend frontend
+            docker-compose build backend frontend
+            docker-compose up -d --no-deps backend frontend
