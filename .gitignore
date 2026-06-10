@@ -1,3 +1,7 @@
 **/__pycache__/
 **/*.pyc
 frontend/node_modules/
+frontend/node_modules/
+backend/**/__pycache__/
+**/*.pyc
+backend/backend/
