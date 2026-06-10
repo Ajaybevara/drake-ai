@@ -1,0 +1,22 @@
+name: Deploy to EC2 (Test)
+
+on:
+  push:
+    branches:
+      - test
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            cd ~/drake-ai-main
+            git pull origin test
+            docker compose build backend frontend
+            docker compose up -d --no-deps backend frontend
