@@ -281,19 +281,28 @@ def calculate_screening(rows, params, units=None):
     rhob = get_curve(rows, params.get("rhob_curve"), units)
     nphi = get_curve(rows, params.get("nphi_curve"), units, porosity=True)
     rt = get_curve(rows, params.get("rt_curve"), units)
+
     gr_clean = safe_float(params.get("gr_clean"), percentile(gr, 5, 30.0))
     gr_shale = safe_float(params.get("gr_shale"), percentile(gr, 95, 120.0))
     denom = max(gr_shale - gr_clean, 1e-6)
+
     matrix_density = safe_float(params.get("matrix_density"), 2.65)
     fluid_density = safe_float(params.get("fluid_density"), 1.0)
+
     phie_curve = params.get("phie_curve")
     perm_curve = params.get("perm_curve")
     phie_input = get_curve(rows, phie_curve, units, porosity=True) if phie_curve else [None] * len(rows)
     perm_input = get_curve(rows, perm_curve, units) if perm_curve else [None] * len(rows)
+
     phie_cut = safe_float(params.get("phie_cutoff"), 0.10)
     vsh_cut = safe_float(params.get("vsh_cutoff"), 0.30)
     perm_cut = safe_float(params.get("perm_cutoff"), 15.0)
     min_thick = safe_float(params.get("min_thickness"), 10.0)
+    seal_vsh_cut = safe_float(params.get("seal_vsh_cutoff"), 0.55)
+    seal_phie_max = safe_float(params.get("seal_phie_max"), 0.12)
+    seal_perm_max = safe_float(params.get("seal_perm_max"), 5.0)
+    seal_min_thick = safe_float(params.get("seal_min_thickness"), 8.0)
+    seal_search_window = safe_float(params.get("seal_search_window"), 60.0)
 
     calculated = []
     for i, d in enumerate(depth):
@@ -317,7 +326,8 @@ def calculate_screening(rows, params, units=None):
                 sw_proxy = clamp(1 / math.sqrt(res), 0.15, 1.0)
             perm = clamp(2500 * (phie ** 3) / ((sw_proxy or 0.7) ** 2), 0, 3000) if phie is not None else None
         flag = int(phie is not None and vsh is not None and perm is not None and phie >= phie_cut and vsh <= vsh_cut and perm >= perm_cut)
-        calculated.append({"DEPTH": d, "GR": g, "VSH": vsh, "PHIE": phie, "PERM_MD": perm, "RT": res, "SCREEN_FLAG": flag})
+        seal_flag = int(phie is not None and vsh is not None and perm is not None and vsh >= seal_vsh_cut and phie <= seal_phie_max and perm <= seal_perm_max)
+        calculated.append({"DEPTH": d, "GR": g, "VSH": vsh, "PHIE": phie, "PERM_MD": perm, "RT": res, "SCREEN_FLAG": flag, "SEAL_FLAG": seal_flag})
 
     data_top = min(depth) if depth else None
     data_base = max(depth) if depth else None
@@ -332,12 +342,138 @@ def calculate_screening(rows, params, units=None):
 
     zones = _build_candidate_zones(screening_rows, phie_cut, vsh_cut, perm_cut, min_thick)
     poor_zones = _build_poor_zones(screening_rows, phie_cut, vsh_cut, perm_cut, min_thick)
-    all_zones = zones + poor_zones
+    for zone in zones:
+        zone["net_thickness_m"] = round(float(zone.get("thickness_m") or 0) * float(zone.get("net_to_gross") or 1), 2)
+        zone["quality_index"] = zone.get("screening_score")
+        zone["result_type"] = "CO2 Possible Storage Zone"
+    for zone in poor_zones:
+        zone["result_type"] = "Poor / Non-Candidate Boundary"
+
+    seal_zones = []
+    start = None
+    for i, row in enumerate(screening_rows):
+        is_seal = row.get("SEAL_FLAG") == 1
+        if is_seal and start is None:
+            start = i
+        at_end = i == len(screening_rows) - 1
+        if start is not None and ((not is_seal) or at_end):
+            end = i if is_seal and at_end else i - 1
+            zrows = screening_rows[start:end + 1]
+            top = zrows[0]["DEPTH"]
+            base = zrows[-1]["DEPTH"]
+            thickness = abs(base - top)
+            if thickness >= seal_min_thick:
+                avg_phie = mean([r["PHIE"] for r in zrows], 0)
+                avg_vsh = mean([r["VSH"] for r in zrows], 0)
+                avg_perm = mean([r["PERM_MD"] for r in zrows], 0)
+                score = (
+                    min(avg_vsh / max(seal_vsh_cut, 0.01), 1.8) * 38
+                    + min(seal_phie_max / max(avg_phie, 0.005), 2.0) * 27
+                    + min(seal_perm_max / max(avg_perm, 0.001), 2.0) * 20
+                    + min(thickness / 35, 2.0) * 15
+                )
+                score = round(min(score, 100), 1)
+                status = "Strong Seal" if score >= 85 else "Moderate Seal" if score >= 70 else "Weak Seal"
+                reason = (
+                    f"{status}: shale-rich/tight caprock candidate from logs. "
+                    f"Vsh {avg_vsh:.3f} vs seal cutoff >= {seal_vsh_cut:.2f}, "
+                    f"PHIE {avg_phie:.3f} vs max <= {seal_phie_max:.2f}, "
+                    f"permeability proxy {avg_perm:.2f} mD vs max <= {seal_perm_max:.2f} mD, "
+                    f"and continuous thickness {thickness:.1f} m vs minimum {seal_min_thick:.1f} m. "
+                    "This is preliminary logs-only seal screening, not confirmed caprock integrity."
+                )
+                seal_zones.append({
+                    "zone": f"S{len(seal_zones) + 1}",
+                    "formation": "Seal / caprock candidate",
+                    "top_m": round(top, 2),
+                    "base_m": round(base, 2),
+                    "thickness_m": round(thickness, 2),
+                    "avg_phie": round(avg_phie, 3),
+                    "avg_vsh": round(avg_vsh, 3),
+                    "avg_perm_md": round(avg_perm, 2),
+                    "avg_gr_api": round(mean([r["GR"] for r in zrows], 0), 2),
+                    "avg_rt_ohmm": round(mean([r["RT"] for r in zrows], 0), 2),
+                    "net_to_gross": round(sum(1 for r in zrows if r.get("SEAL_FLAG") == 1) / max(len(zrows), 1), 3),
+                    "net_thickness_m": round(thickness * (sum(1 for r in zrows if r.get("SEAL_FLAG") == 1) / max(len(zrows), 1)), 2),
+                    "quality_index": score,
+                    "screening_score": score,
+                    "status": status,
+                    "result_type": "Seal / Caprock Candidate",
+                    "reason": reason,
+                })
+            start = None
+
+    pair_zones = []
+    for rz in zones:
+        rtop = rz.get("top_m")
+        possible = []
+        for sz in seal_zones:
+            sbase = sz.get("base_m")
+            if rtop is not None and sbase is not None and sbase <= rtop:
+                gap = rtop - sbase
+                if gap <= seal_search_window:
+                    possible.append((gap, sz))
+        if possible:
+            gap, sz = sorted(possible, key=lambda item: (item[0], -item[1].get("screening_score", 0)))[0]
+            pair_score = round(min(100, rz.get("screening_score", 0) * 0.55 + sz.get("screening_score", 0) * 0.45 - min(gap, 60) * 0.25), 1)
+            status = "Excellent Pair" if pair_score >= 85 else "Good Pair" if pair_score >= 70 else "Review Pair"
+            net_thickness_m = round(float(rz.get("thickness_m") or 0) * float(rz.get("net_to_gross") or 1), 2)
+            reason = (
+                f"{status}: reservoir {rz.get('zone')} is paired with overlying seal {sz.get('zone')} within {gap:.1f} m. "
+                f"Reservoir Quality Index {rz.get('screening_score')}/100 and Seal Quality Index {sz.get('screening_score')}/100. "
+                f"Net storage thickness is {net_thickness_m:.2f} m from LAS-derived net-to-gross. "
+                "This is the most defensible logs-only CCUS result because it combines reservoir quality with an overlying seal candidate without unsupported capacity assumptions."
+            )
+            pair_zones.append({
+                "zone": f"P-{rz.get('zone')}/{sz.get('zone')}",
+                "formation": "Reservoir-Seal Pair",
+                "top_m": rz.get("top_m"),
+                "base_m": rz.get("base_m"),
+                "thickness_m": rz.get("thickness_m"),
+                "avg_phie": rz.get("avg_phie"),
+                "avg_vsh": rz.get("avg_vsh"),
+                "avg_perm_md": rz.get("avg_perm_md"),
+                "avg_gr_api": rz.get("avg_gr_api"),
+                "avg_rt_ohmm": rz.get("avg_rt_ohmm"),
+                "net_to_gross": rz.get("net_to_gross"),
+                "net_thickness_m": net_thickness_m,
+                "quality_index": pair_score,
+                "screening_score": pair_score,
+                "status": status,
+                "result_type": "Reservoir-Seal Pair",
+                "reservoir_zone": rz.get("zone"),
+                "seal_zone": sz.get("zone"),
+                "seal_top_m": sz.get("top_m"),
+                "seal_base_m": sz.get("base_m"),
+                "seal_gap_m": round(gap, 2),
+                "reason": reason,
+            })
+        else:
+            rz["reason"] = rz.get("reason", "") + f" No overlying seal candidate was found within {seal_search_window:.0f} m using current seal cutoffs."
+
+    required = [("GR", params.get("gr_curve")), ("RHOB", params.get("rhob_curve")), ("NPHI", params.get("nphi_curve")), ("RT", params.get("rt_curve"))]
+    missing = [name for name, curve in required if not curve]
+    used_rows = max(len(screening_rows), 1)
+    valid_pct = {
+        key: round(100 * sum(1 for r in screening_rows if r.get(key) is not None) / used_rows, 1)
+        for key in ["GR", "VSH", "PHIE", "PERM_MD", "RT"]
+    }
+    depth_gaps = 0
+    if len(screening_rows) > 2:
+        steps = [abs(screening_rows[i]["DEPTH"] - screening_rows[i - 1]["DEPTH"]) for i in range(1, len(screening_rows))]
+        med_step = percentile(steps, 50, 0)
+        depth_gaps = sum(1 for step in steps if med_step and step > med_step * 3)
+
+    confidence_score = max(0, 100 - len(missing) * 15 - depth_gaps * 5)
+    confidence_label = "High" if confidence_score >= 85 else "Moderate" if confidence_score >= 65 else "Low"
+    all_zones = pair_zones + zones + seal_zones + poor_zones
     summary = {
         "zones_found": len(zones),
         "poor_zones_found": len(poor_zones),
+        "seal_zones_found": len(seal_zones),
+        "paired_zones_found": len(pair_zones),
         "net_screened_m": round(sum(z["thickness_m"] for z in zones), 2),
-        "best_zone": zones[0]["zone"] if zones else "None",
+        "best_zone": pair_zones[0]["zone"] if pair_zones else zones[0]["zone"] if zones else "None",
         "las_depth_start_m": round(data_top, 2) if data_top is not None else None,
         "las_depth_stop_m": round(data_base, 2) if data_base is not None else None,
         "depth_used_top_m": round(req_top, 2) if req_top is not None else None,
@@ -349,9 +485,22 @@ def calculate_screening(rows, params, units=None):
         "vsh_cutoff": vsh_cut,
         "perm_cutoff_md": perm_cut,
         "min_thickness_m": min_thick,
+        "seal_vsh_cutoff": seal_vsh_cut,
+        "seal_phie_max": seal_phie_max,
+        "seal_perm_max_md": seal_perm_max,
+        "seal_min_thickness_m": seal_min_thick,
+        "seal_search_window_m": seal_search_window,
+        "total_net_storage_thickness_m": round(sum((z.get("net_thickness_m") or 0) for z in pair_zones), 2),
+        "recommended_zone": sorted(pair_zones, key=lambda z: z.get("screening_score", 0), reverse=True)[0].get("zone") if pair_zones else "None",
+        "recommendation": "Use the highest ranked reservoir-seal pair for detailed follow-up study." if pair_zones else "No final reservoir-seal pair passed current cutoffs. Review cutoffs, curve mapping, and available logs before interpretation.",
+        "log_confidence_score": round(confidence_score, 1),
+        "log_confidence_label": confidence_label,
+        "missing_required_logs": ", ".join(missing) if missing else "None",
+        "curve_validity_percent": valid_pct,
+        "depth_gap_count": depth_gaps,
         "phie_source": "LAS PHIE/porosity curve" if phie_curve else "Calculated from density/neutron and Vsh correction",
         "perm_source": "LAS permeability curve" if perm_curve else "Screening proxy from PHIE and resistivity trend",
-        "technical_note": "Preliminary CCS screening only. This is not storage capacity, injection approval, geomechanics, seal integrity, or reservoir simulation.",
+        "technical_note": "Preliminary CCS screening only. Seal/caprock screening is logs-only candidate detection. This workflow does not estimate storage capacity, injection approval, geomechanics, capillary pressure, seismic risk, or reservoir simulation.",
     }
     return calculated, all_zones, summary
 
@@ -463,8 +612,10 @@ def values_for_plot(calculated, curve):
     return [row.get(curve) for row in calculated]
 
 
-def plot_logs(calculated, curves, params=None, title="Preliminary CCS Screening Study Using Well Logs"):
+def plot_logs(calculated, curves, params=None, title="Preliminary CCS Screening Study Using Well Logs", zones=None):
     params = params or {}
+    zones = zones or []
+    viz_mode = params.get("visualization_mode") or "final_zones"
     phie_cut = safe_float(params.get("phie_cutoff"), 0.10)
     vsh_cut = safe_float(params.get("vsh_cutoff"), 0.30)
     perm_cut = safe_float(params.get("perm_cutoff"), 15.0)
@@ -525,21 +676,63 @@ def plot_logs(calculated, curves, params=None, title="Preliminary CCS Screening 
         perm = row.get("PERM_MD")
         return phie is not None and vsh is not None and perm is not None and (phie < phie_cut or vsh > vsh_cut or perm < perm_cut)
 
-    co2_intervals = intervals_by_condition(lambda r: r.get("SCREEN_FLAG") == 1)
     poor_intervals = intervals_by_condition(is_poor)
     shapes = []
     annotations = []
-    for a, _b in co2_intervals[:30]:
-        shapes.append({"type": "line", "xref": "paper", "yref": "y", "x0": 0, "x1": 1, "y0": a, "y1": a, "line": {"color": "#10b981", "width": 2.2, "dash": "solid"}, "layer": "above"})
-    for a, _b in poor_intervals[:40]:
-        shapes.append({"type": "line", "xref": "paper", "yref": "y", "x0": 0, "x1": 1, "y0": a, "y1": a, "line": {"color": "#ef4444", "width": 1.4, "dash": "dot"}, "layer": "above"})
-    for idx, (a, _b) in enumerate(co2_intervals[:8], start=1):
-        annotations.append({"xref": "paper", "yref": "y", "x": 0.01, "y": a, "text": f"CO2 Top Z{idx}", "showarrow": False, "font": {"size": 10, "color": "#bbf7d0"}, "bgcolor": "rgba(16,185,129,0.24)", "bordercolor": "rgba(16,185,129,0.75)", "borderpad": 3})
-    for _idx, (a, _b) in enumerate(poor_intervals[:6], start=1):
-        annotations.append({"xref": "paper", "yref": "y", "x": 0.99, "y": a, "text": "Poor boundary", "showarrow": False, "xanchor": "right", "font": {"size": 10, "color": "#fecaca"}, "bgcolor": "rgba(239,68,68,0.20)", "bordercolor": "rgba(239,68,68,0.70)", "borderpad": 3})
+
+    reservoir_zones = [z for z in zones if z.get("result_type") == "CO2 Possible Storage Zone"]
+    pair_zones = [z for z in zones if z.get("result_type") == "Reservoir-Seal Pair"]
+    paired_seal_keys = {(z.get("seal_top_m"), z.get("seal_base_m")) for z in pair_zones}
+    if viz_mode == "seal_caprock":
+        seal_zones = [
+            {"zone": z.get("seal_zone"), "top_m": z.get("seal_top_m"), "base_m": z.get("seal_base_m"), "screening_score": z.get("screening_score")}
+            for z in pair_zones
+            if z.get("seal_top_m") is not None and z.get("seal_base_m") is not None
+        ]
+    else:
+        seal_zones = [z for z in zones if z.get("result_type") == "Seal / Caprock Candidate" and (z.get("top_m"), z.get("base_m")) in paired_seal_keys]
+
+    show_co2 = viz_mode == "co2_zones"
+    show_seal = viz_mode == "seal_caprock"
+    show_pair = viz_mode == "reservoir_seal_pair"
+    show_final = viz_mode == "final_zones"
+
+    def add_band(top, base, color, border, x0=0, x1=1, layer="below"):
+        if top is None or base is None:
+            return
+        shapes.append({"type": "rect", "xref": "paper", "yref": "y", "x0": x0, "x1": x1, "y0": top, "y1": base, "fillcolor": color, "line": {"color": border, "width": 1.4}, "layer": layer})
+
+    def add_label(text, y, x, color, bg, border, anchor="left"):
+        if y is None:
+            return
+        annotations.append({"xref": "paper", "yref": "y", "x": x, "y": y, "text": text, "showarrow": False, "xanchor": anchor, "font": {"size": 10, "color": color}, "bgcolor": bg, "bordercolor": border, "borderpad": 3})
+
+    if show_co2:
+        for idx, z in enumerate(reservoir_zones[:25], start=1):
+            add_band(z.get("top_m"), z.get("base_m"), "rgba(16,185,129,0.16)", "rgba(16,185,129,0.88)")
+            if idx <= 8:
+                add_label(f"CO2 reservoir {z.get('zone')}", z.get("top_m"), 0.01, "#bbf7d0", "rgba(16,185,129,0.24)", "rgba(16,185,129,0.75)")
+
+    if show_seal:
+        for idx, z in enumerate(seal_zones[:25], start=1):
+            add_band(z.get("top_m"), z.get("base_m"), "rgba(59,130,246,0.18)", "rgba(59,130,246,0.80)")
+            if idx <= 8:
+                add_label(f"Paired seal {z.get('zone') or idx}", z.get("top_m"), 0.50, "#bfdbfe", "rgba(59,130,246,0.24)", "rgba(59,130,246,0.75)")
+
+    if show_pair or show_final:
+        for idx, z in enumerate(pair_zones[:20], start=1):
+            add_band(z.get("seal_top_m"), z.get("seal_base_m"), "rgba(59,130,246,0.18)", "rgba(59,130,246,0.75)", 0.02, 0.98)
+            add_band(z.get("top_m"), z.get("base_m"), "rgba(16,185,129,0.16)", "rgba(16,185,129,0.85)", 0.02, 0.98)
+            if idx <= 8:
+                label = f"Final pair {z.get('zone')} | Score {z.get('screening_score')}" if show_final else f"Pair {z.get('zone')} | Score {z.get('screening_score')}"
+                add_label(label, z.get("top_m"), 0.02, "#fef3c7", "rgba(245,158,11,0.24)", "rgba(245,158,11,0.80)")
+
+    if show_final:
+        for a, _b in poor_intervals[:20]:
+            shapes.append({"type": "line", "xref": "paper", "yref": "y", "x0": 0, "x1": 1, "y0": a, "y1": a, "line": {"color": "#ef4444", "width": 1.1, "dash": "dot"}, "layer": "above"})
 
     layout = {
-        "title": {"text": title, "font": {"size": 14, "color": "#e2e8f0"}},
+        "title": {"text": f"{title} - {viz_mode.replace('_', ' ').title()}", "font": {"size": 14, "color": "#e2e8f0"}},
         "paper_bgcolor": "#0b1220",
         "plot_bgcolor": "#0f172a",
         "font": {"color": "#cbd5e1", "size": 11},
@@ -682,12 +875,28 @@ def build_calculation_response(session, payload):
     units = session.get("units", {})
     calc, zones, summary = calculate_screening(rows, payload, units)
     selected = payload.get("plot_curves") or ["GR", "VSH", "PHIE", "PERM_MD"]
+    viz_mode = payload.get("visualization_mode") or "final_zones"
+    pair_zones = [z for z in zones if z.get("result_type") == "Reservoir-Seal Pair"]
+    paired_seal_keys = {(z.get("seal_top_m"), z.get("seal_base_m")) for z in pair_zones}
+    if viz_mode == "logs_only":
+        display_zones = []
+    elif viz_mode == "co2_zones":
+        display_zones = [z for z in zones if z.get("result_type") == "CO2 Possible Storage Zone"]
+    elif viz_mode == "seal_caprock":
+        display_zones = [z for z in zones if z.get("result_type") == "Seal / Caprock Candidate" and (z.get("top_m"), z.get("base_m")) in paired_seal_keys]
+    elif viz_mode == "reservoir_seal_pair":
+        display_zones = pair_zones
+    else:
+        display_zones = pair_zones or [z for z in zones if z.get("result_type") == "CO2 Possible Storage Zone"]
+    summary["visualization_mode"] = viz_mode
+    summary["display_zones_found"] = len(display_zones)
     preview = [{k: (round(v, 4) if isinstance(v, float) else v) for k, v in r.items()} for r in calc[:10]]
     return {
         "summary": summary,
-        "zones": zones,
+        "zones": display_zones,
+        "all_zone_count": len(zones),
         "preview": preview,
-        "log_plot": plot_logs(calc, selected, payload),
+        "log_plot": plot_logs(calc, selected, payload, zones=zones),
         "calculated": calc,
         "params": payload,
     }

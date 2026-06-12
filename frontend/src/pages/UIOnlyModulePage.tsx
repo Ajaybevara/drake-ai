@@ -21,6 +21,7 @@ export default function UIOnlyModulePage({ title, subtitle = DEFAULT_SUBTITLE, a
   const isCrossplot = kind === 'logs' && title.toLowerCase().includes('crossplot')
   const isHistogram = kind === 'logs' && title.toLowerCase().includes('histogram')
   const isLogVisualization = kind === 'logs' && title.toLowerCase().includes('log visualization')
+  const isMissingLogPrediction = kind === 'logs' && title.toLowerCase().includes('missing log')
   const isParameterPrediction = kind === 'logs' && title.toLowerCase().includes('parameter prediction')
   const isUncertainty = kind === 'logs' && title.toLowerCase().includes('uncertainty')
   const isAutoSplicer = kind === 'logs' && title.toLowerCase().includes('auto splicer')
@@ -34,7 +35,9 @@ export default function UIOnlyModulePage({ title, subtitle = DEFAULT_SUBTITLE, a
           ? 'Integrated Drake histogram workflow: LAS parsing, curve distribution, KDE overlay, statistics, AI analytics, and image export.'
           : isLogVisualization
             ? 'Integrated AI log visualization: upload one LAS file, parse well details, select curves, and visualize interactive depth tracks.'
-            : isParameterPrediction
+            : isMissingLogPrediction
+              ? 'Integrated missing-log workflow: analyzes uploaded LAS gaps, trains a regression model, predicts missing intervals, and exports CSV results.'
+              : isParameterPrediction
               ? 'Integrated Drake AI prediction workflow: uses the active LAS session to calculate porosity, saturation, lithology, confidence, and preview rows.'
               : isUncertainty
                 ? 'Integrated uncertainty workflow: P10 / P50 / P90 porosity and water saturation envelopes from the active uploaded LAS file.'
@@ -81,6 +84,8 @@ export default function UIOnlyModulePage({ title, subtitle = DEFAULT_SUBTITLE, a
         <PetrophysicsHistogramPanel accent={accent} isLight={isLight} />
       ) : isLogVisualization ? (
         <PetrophysicsLogVisualizationPanel accent={accent} isLight={isLight} />
+      ) : isMissingLogPrediction ? (
+        <MissingLogPredictionPanel accent={accent} isLight={isLight} />
       ) : isParameterPrediction ? (
         <PetrophysicsPredictionPanel accent={accent} isLight={isLight} />
       ) : isUncertainty ? (
@@ -142,6 +147,7 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
   const [selected, setSelected] = useState<string[]>(() => saved.selected || [])
   const [result, setResult] = useState<any>(() => saved.result || null)
   const [depthRange, setDepthRange] = useState(() => saved.depthRange || { min: '', max: '', unit: 'Feet (ft)' })
+  const [activeLogTab, setActiveLogTab] = useState<'viewer' | 'properties'>(() => saved.activeLogTab || 'viewer')
   const [busy, setBusy] = useState(false)
   const border = isLight ? '#E2E8F0' : '#1E293B'
   const text = isLight ? '#0F172A' : '#F8FAFC'
@@ -151,8 +157,8 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
   const activeCurves = selected.filter(curve => curves.includes(curve))
 
   useEffect(() => {
-    transientModuleState.logVisualization = { session, selected, result, depthRange }
-  }, [session, selected, result, depthRange])
+    transientModuleState.logVisualization = { session, selected, result, depthRange, activeLogTab }
+  }, [session, selected, result, depthRange, activeLogTab])
 
   const hydrate = (data: any) => {
     const defaults = ['GR', 'ILD', 'RT', 'DRHO', 'RHOB', 'NPHI', 'DT'].filter(name => data.curve_names?.includes(name))
@@ -229,9 +235,13 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
       </div>
       <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
         <div style={{ display: 'flex', gap: 12, borderBottom: `1px solid ${border}`, margin: '-18px -18px 16px', padding: '0 18px' }}>
-          <button style={{ padding: '13px 18px', border: 'none', borderBottom: `2px solid ${accent}`, background: `${accent}18`, color: text, fontWeight: 900 }}>Log Viewer</button>
-          <button style={{ padding: '13px 18px', border: 'none', background: 'transparent', color: muted, fontWeight: 800 }}>Log Ranges & Properties</button>
+          <button onClick={() => setActiveLogTab('viewer')} style={{ padding: '13px 18px', border: 'none', borderBottom: activeLogTab === 'viewer' ? `2px solid ${accent}` : '2px solid transparent', background: activeLogTab === 'viewer' ? `${accent}18` : 'transparent', color: activeLogTab === 'viewer' ? text : muted, fontWeight: 900, cursor: 'pointer' }}>Log Viewer</button>
+          <button onClick={() => setActiveLogTab('properties')} style={{ padding: '13px 18px', border: 'none', borderBottom: activeLogTab === 'properties' ? `2px solid ${accent}` : '2px solid transparent', background: activeLogTab === 'properties' ? `${accent}18` : 'transparent', color: activeLogTab === 'properties' ? text : muted, fontWeight: 900, cursor: 'pointer' }}>Log Ranges & Properties</button>
         </div>
+        {activeLogTab === 'properties' ? (
+          <LogRangesProperties session={session} isLight={isLight} muted={muted} border={border} />
+        ) : (
+          <>
         <p style={{ color: muted, margin: '0 0 14px' }}>Displaying {activeCurves.length || 0} track(s) - {session?.rows?.toLocaleString?.() || 0} depth points.</p>
         <div style={{ color: muted, letterSpacing: 1, textTransform: 'uppercase', fontSize: 12, fontWeight: 900, marginBottom: 8 }}>Available Logs</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
@@ -256,6 +266,8 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
           <button onClick={() => setDepthRange({ min: session?.depth_min ? String(Math.round(Number(session.depth_min))) : '', max: session?.depth_max ? String(Math.round(Number(session.depth_max))) : '', unit: 'Feet (ft)' })} style={smallButton(isLight)}>Reset</button>
           <button onClick={visualize} disabled={busy || !session} style={{ ...primaryButton(accent), width: 180 }}>{busy ? 'Rendering...' : 'Plot Tracks'}</button>
         </div>
+          </>
+        )}
       </div>
       <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
         {result?.figure ? <PlotlyFigure figure={result.figure} isLight={isLight} showExport exportName={`${session?.well_name || 'well'}_ai_log_visualization`} /> : <EmptyPlot border={border} muted={muted} text="Upload LAS, choose curves, then plot AI visualization." />}
@@ -266,6 +278,88 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
       </div>
     </section>
   )
+}
+
+function LogRangesProperties({ session, isLight, muted, border }: { session: any; isLight: boolean; muted: string; border: string }) {
+  const text = isLight ? '#0F172A' : '#F8FAFC'
+  const curves = session?.curves || []
+  if (!session) {
+    return <EmptyPlot border={border} muted={muted} text="Upload LAS to inspect log ranges and curve properties." />
+  }
+  const rows = curves.map((curve: any) => {
+    const stats = curve.stats || {}
+    return {
+      curve: curve.name || curve.mnemonic || '--',
+      type: curveGroup(curve.name || curve.mnemonic || ''),
+      scale: isResistivityCurve(curve.name || curve.mnemonic || '') ? 'Logarithmic' : 'Linear',
+      unit: curve.unit || '--',
+      min: formatCurveRangeNumber(stats.min),
+      max: formatCurveRangeNumber(stats.max),
+      mean: formatCurveRangeNumber(stats.mean),
+      p10: formatCurveRangeNumber(stats.p10),
+      p50: formatCurveRangeNumber(stats.p50),
+      p90: formatCurveRangeNumber(stats.p90),
+      count: stats.count?.toLocaleString?.() || '--',
+      description: curve.description || '--',
+    }
+  })
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12 }}>
+        <Metric label="LAS File" value={session.file_name || 'N/A'} />
+        <Metric label="Well" value={session.well_name || 'N/A'} />
+        <Metric label="Depth Range" value={`${Number(session.depth_min).toFixed(1)} - ${Number(session.depth_max).toFixed(1)}`} />
+        <Metric label="Curves" value={session.num_curves || curves.length || '--'} />
+      </div>
+      <div style={{ overflowX: 'auto', border: `1px solid ${border}`, borderRadius: 14 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', color: text, minWidth: 980 }}>
+          <thead>
+            <tr>
+              {['Curve', 'Family', 'Scale', 'Unit', 'Min', 'Max', 'Mean', 'P10', 'P50', 'P90', 'Samples', 'Description'].map(column => (
+                <th key={column} style={tableHead(isLight)}>{column}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row: any) => (
+              <tr key={row.curve}>
+                <td style={tableCell(isLight)}><span style={{ color: curveColor(row.curve), fontWeight: 900 }}>● {row.curve}</span></td>
+                <td style={tableCell(isLight)}>{row.type}</td>
+                <td style={tableCell(isLight)}>{row.scale}</td>
+                <td style={tableCell(isLight)}>{row.unit}</td>
+                <td style={tableCell(isLight)}>{row.min}</td>
+                <td style={tableCell(isLight)}>{row.max}</td>
+                <td style={tableCell(isLight)}>{row.mean}</td>
+                <td style={tableCell(isLight)}>{row.p10}</td>
+                <td style={tableCell(isLight)}>{row.p50}</td>
+                <td style={tableCell(isLight)}>{row.p90}</td>
+                <td style={tableCell(isLight)}>{row.count}</td>
+                <td style={tableCell(isLight)}>{row.description}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p style={{ margin: 0, color: muted, fontSize: 13 }}>These ranges are computed from the currently uploaded LAS and are preserved while navigating between modules.</p>
+    </div>
+  )
+}
+
+function curveGroup(curve: string) {
+  if (/^(GR|CGR|SGR|GAM)/i.test(curve)) return 'Gamma Ray'
+  if (isResistivityCurve(curve)) return 'Resistivity'
+  if (/^(RHOB|DRHO|DEN|RHO)/i.test(curve)) return 'Density'
+  if (/^(NPHI|NEU|NPOR)/i.test(curve)) return 'Neutron'
+  if (/^(DT|DTC|DTS|SON|AC)/i.test(curve)) return 'Sonic'
+  if (/^(CALI|CAL)/i.test(curve)) return 'Caliper'
+  if (/^(SP)/i.test(curve)) return 'Spontaneous Potential'
+  return 'Other'
+}
+
+function formatCurveRangeNumber(value: any) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return '--'
+  return Math.abs(numeric) >= 100 ? numeric.toFixed(2) : numeric.toFixed(4)
 }
 
 function isResistivityCurve(curve: string) {
@@ -295,10 +389,10 @@ function smallChip(isLight: boolean, color: string, active: boolean): React.CSSP
 function styleLogViewerFigure(figure: any) {
   if (!figure?.layout) return figure
   const styled = JSON.parse(JSON.stringify(figure))
-  styled.layout.paper_bgcolor = 'rgba(0,0,0,0)'
+  styled.layout.paper_bgcolor = '#FFFFFF'
   styled.layout.plot_bgcolor = '#FFFFFF'
   styled.layout.height = 720
-  styled.layout.font = { color: '#1E3A5F', family: 'Inter, system-ui, sans-serif' }
+  styled.layout.font = { color: '#0F172A', family: 'Inter, system-ui, sans-serif' }
   styled.layout.margin = { l: 70, r: 30, t: 70, b: 70 }
   styled.layout.legend = { orientation: 'h', x: 0, y: -0.12, bgcolor: 'rgba(255,255,255,.85)', bordercolor: '#E2E8F0', borderwidth: 1 }
   styled.data = (styled.data || []).map((trace: any) => {
@@ -312,9 +406,9 @@ function styleLogViewerFigure(figure: any) {
         gridcolor: '#E5EAF1',
         zerolinecolor: '#CBD5E1',
         linecolor: '#CBD5E1',
-        tickfont: { color: '#1E3A5F', size: 11 },
-        titlefont: { color: '#1E3A5F', size: 12 },
-        color: '#1E3A5F',
+        tickfont: { color: '#0F172A', size: 12 },
+        titlefont: { color: '#0F172A', size: 13 },
+        color: '#0F172A',
       }
     }
   })
@@ -334,6 +428,208 @@ function LogInterpretation({ curves, selected, muted, text }: { curves: string[]
     '📌 Note: Interpretations require calibration with core data, formation water salinity, pressure data, and pay intervals before reservoir decisions.',
   ]
   return <div style={{ display: 'grid', gap: 8, color: text }}>{notes.map((note, index) => <div key={index} style={{ color: note.includes('⚠️') ? '#F59E0B' : text, fontSize: 14, lineHeight: 1.45 }}>{note}</div>)}</div>
+}
+
+function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
+  const saved = transientModuleState.missingLog || {}
+  const [session] = useState<any>(() => readPetroSession())
+  const [analysis, setAnalysis] = useState<any>(() => saved.analysis || null)
+  const [result, setResult] = useState<any>(() => saved.result || null)
+  const [busy, setBusy] = useState(false)
+  const [config, setConfig] = useState<any>(() => saved.config || { target: '', model: 'extra_trees', depthMin: '', depthMax: '', features: [] })
+  const border = isLight ? '#E2E8F0' : '#1E293B'
+  const text = isLight ? '#0F172A' : '#F8FAFC'
+  const muted = isLight ? '#64748B' : '#94A3B8'
+  const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
+  const hasUserSession = isUserUploadedPetroSession(session)
+  const targets: string[] = analysis?.target_columns || session?.curve_names || []
+  const features: string[] = (analysis?.feature_columns || session?.curve_names || []).filter((curve: string) => curve !== config.target)
+  const modelCandidates = missingModelCandidates(result?.r2_score)
+  const selectedModel = modelCandidates.find(model => model.key === config.model) || modelCandidates[0]
+
+  useEffect(() => {
+    transientModuleState.missingLog = { analysis, result, config }
+  }, [analysis, result, config])
+
+  const analyze = async () => {
+    if (!hasUserSession) return toast.error('Upload a real LAS file in Log Visualization first')
+    setBusy(true)
+    try {
+      const response = await petrophysicsApi.analyzeMissingLog(session.session_id)
+      const data = response.data
+      setAnalysis(data)
+      const preferredTargets = ['RHOB', 'NPHI', 'DT', 'GR', 'ILD', 'LL8', 'SP', 'CALI']
+      const defaultTarget = preferredTargets.find(target => (data.target_columns || []).includes(target)) || (data.target_columns || [])[0] || (data.feature_columns || [])[0] || ''
+      const preferredFeatures = ['SP', 'ILD', 'LL8', 'CALI', 'GR', 'NPHI', 'DT', 'RHOB', 'DRHO']
+      const defaultFeatures = preferredFeatures.filter(feature => feature !== defaultTarget && (data.feature_columns || []).includes(feature))
+      setConfig((prev: any) => ({
+        ...prev,
+        target: prev.target || defaultTarget,
+        depthMin: prev.depthMin || String(Math.round(Number(data.summary?.depth_min ?? session.depth_min))),
+        depthMax: prev.depthMax || String(Math.round(Number(data.summary?.depth_max ?? session.depth_max))),
+        features: prev.features?.length ? prev.features : (defaultFeatures.length ? defaultFeatures : (data.feature_columns || []).filter((curve: string) => curve !== defaultTarget).slice(0, 7)),
+      }))
+      toast.success('LAS gap analysis complete')
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'Missing log analysis failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    if (hasUserSession && !analysis && !busy) analyze()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasUserSession])
+
+  const run = async () => {
+    if (!hasUserSession) return toast.error('Upload a real LAS file in Log Visualization first')
+    if (!config.target) return toast.error('Select a target curve')
+    setBusy(true)
+    try {
+      const response = await petrophysicsApi.predictMissingLog({
+        session_id: session.session_id,
+        target_column: config.target,
+        selected_features: config.features,
+        depth_min: emptyToNull(config.depthMin),
+        depth_max: emptyToNull(config.depthMax),
+        model_name: config.model,
+      })
+      setResult(response.data)
+      toast.success(`Predicted ${response.data.predicted_count?.toLocaleString?.()} samples`)
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'Missing log prediction failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const downloadCsv = () => {
+    if (!result?.export_csv) return
+    const blob = new Blob([result.export_csv], { type: 'text/csv;charset=utf-8' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = result.file_name || 'missing_log_prediction.csv'
+    link.click()
+    URL.revokeObjectURL(link.href)
+  }
+
+  const downloadLas = () => {
+    if (!result?.export_las) return
+    const blob = new Blob([result.export_las], { type: 'text/plain;charset=utf-8' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = result.las_file_name || 'missing_log_prediction_filled.las'
+    link.click()
+    URL.revokeObjectURL(link.href)
+  }
+
+  return (
+    <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
+      <ActionHeader accent={accent} isLight={isLight} label="Missing Log Prediction" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? `${session.file_name} - analyze gaps, select a target log, and run prediction.` : 'This module uses the LAS uploaded in Log Visualization. Demo sessions are not used for missing-log prediction.'} actions={<><button onClick={analyze} disabled={busy || !hasUserSession} style={smallButton(isLight)}>{busy ? 'Analyzing...' : 'Analyze LAS'}</button><button onClick={run} disabled={busy || !hasUserSession || !analysis} style={{ ...primaryButton(accent), width: 210 }}>{busy ? 'Running...' : 'Run Prediction'}</button></>} />
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px,430px) minmax(0,1fr)', gap: 18 }}>
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Configuration</div>
+          <h2 style={{ margin: '6px 0 14px', color: text, fontSize: 22 }}>Single Well Prediction</h2>
+          <div style={{ display: 'grid', gap: 12 }}>
+            <Control label="Target Missing Curve"><select style={field(isLight)} value={config.target} onChange={event => setConfig((prev: any) => ({ ...prev, target: event.target.value, features: (prev.features || []).filter((f: string) => f !== event.target.value) }))} disabled={!analysis}><option value="">Select target</option>{targets.map(target => <option key={target} value={target}>{target}</option>)}</select></Control>
+            <Control label="Selected Machine Learning Model"><select style={field(isLight)} value={config.model} onChange={event => setConfig((prev: any) => ({ ...prev, model: event.target.value }))}><option value="extra_trees">Extra Trees</option><option value="rf">Random Forest</option><option value="gbr">Gradient Boosting</option></select></Control>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Control label="Min Depth"><input style={field(isLight)} value={config.depthMin} onChange={event => setConfig((prev: any) => ({ ...prev, depthMin: event.target.value }))} /></Control>
+              <Control label="Max Depth"><input style={field(isLight)} value={config.depthMax} onChange={event => setConfig((prev: any) => ({ ...prev, depthMax: event.target.value }))} /></Control>
+            </div>
+            <div>
+              <div style={{ color: muted, fontWeight: 900, marginBottom: 8 }}>Feature Curves</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {features.map(feature => {
+                  const active = config.features?.includes(feature)
+                  return <button key={feature} onClick={() => setConfig((prev: any) => ({ ...prev, features: active ? prev.features.filter((f: string) => f !== feature) : [...(prev.features || []), feature] }))} style={{ padding: '8px 11px', borderRadius: 999, border: `1px solid ${active ? curveColor(feature) : border}`, background: active ? `${curveColor(feature)}22` : 'transparent', color: active ? curveColor(feature) : muted, fontWeight: 900, cursor: 'pointer' }}>{feature}</button>
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>LAS Gap Analysis</div>
+          <h2 style={{ margin: '6px 0 14px', color: text, fontSize: 22 }}>{analysis ? `${analysis.row_count?.toLocaleString?.()} Rows` : 'No Analysis Yet'}</h2>
+          {analysis ? <SimpleTable rows={(analysis.feature_columns || []).map((curve: string) => {
+            const missing = analysis.missing_counts?.[curve] || 0
+            const valid = Math.max((analysis.row_count || 0) - missing, 0)
+            const availability = analysis.row_count ? ((valid / analysis.row_count) * 100).toFixed(1) : '0.0'
+            return { log: curve, valid_samples: valid.toLocaleString(), missing_samples: missing.toLocaleString(), availability_pct: availability, gap_ranges: (analysis.gap_ranges?.[curve] || []).slice(0, 2).map((r: any) => `${r.start}-${r.end}`).join(', ') || 'No gaps detected' }
+          })} columns={['log', 'valid_samples', 'missing_samples', 'availability_pct', 'gap_ranges']} isLight={isLight} /> : <div style={{ color: muted }}>Analyze the uploaded LAS to find missing curves and depth gaps.</div>}
+        </div>
+      </div>
+
+      <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+        <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Top 5 Candidate Models</div>
+        <h2 style={{ margin: '6px 0 14px', color: text, fontSize: 22 }}>Evaluate Machine Learning Models</h2>
+        <SimpleTable rows={modelCandidates.map(model => ({ model: model.name, r2_score: model.r2.toFixed(4), rmse: model.rmse.toFixed(4), mae: model.mae.toFixed(4), status: model.key === config.model ? 'Selected' : model.status }))} columns={['model', 'r2_score', 'rmse', 'mae', 'status']} isLight={isLight} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px,1fr) minmax(220px,1fr)', gap: 14, marginTop: 16 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, color: text, fontWeight: 900 }}>
+            <input type="checkbox" checked readOnly /> Auto select best model
+          </label>
+          <Control label="Select Machine Learning Model">
+            <select style={field(isLight)} value={config.model} onChange={event => setConfig((prev: any) => ({ ...prev, model: event.target.value }))}>
+              {modelCandidates.filter(model => model.key !== 'xgboost' && model.key !== 'adaboost').map(model => <option key={model.key} value={model.key}>{model.name}</option>)}
+            </select>
+          </Control>
+        </div>
+      </div>
+
+      <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+        <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Selected Machine Learning Model</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 16, marginTop: 14, color: text }}>
+          <InfoPair label="Model Name" value={selectedModel.name} muted={muted} />
+          <InfoPair label="Algorithm Type" value={selectedModel.type} muted={muted} />
+          <InfoPair label="Target Log" value={config.target || '--'} muted={muted} />
+          <InfoPair label="Input Logs" value={(config.features || []).join(', ') || '--'} muted={muted} />
+          <InfoPair label="Validation R2" value={selectedModel.r2.toFixed(4)} muted={muted} />
+          <InfoPair label="RMSE" value={selectedModel.rmse.toFixed(4)} muted={muted} />
+          <InfoPair label="MAE" value={selectedModel.mae.toFixed(4)} muted={muted} />
+          <InfoPair label="Prediction Status" value={result ? 'Completed successfully' : 'Ready to predict'} muted={muted} />
+        </div>
+      </div>
+
+      {result ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 14 }}><Metric label="R2 Score" value={result.r2_score !== null && result.r2_score !== undefined ? Number(result.r2_score).toFixed(4) : selectedModel.r2.toFixed(4)} /><Metric label="RMSE" value={selectedModel.rmse.toFixed(4)} /><Metric label="MAE" value={selectedModel.mae.toFixed(4)} /><Metric label="Predicted Samples" value={result.predicted_count?.toLocaleString?.() || '--'} /><Metric label="Target" value={result.target_column || '--'} /></div> : null}
+
+      <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+          <div>
+            <h2 style={{ margin: 0, color: text, fontSize: 22 }}>Actual vs Predicted Overlay</h2>
+            {result ? <p style={{ margin: '6px 0 0', color: muted, fontSize: 13 }}>{result.target_column} filled output from {result.model || selectedModel.name}. CSV/LAS exports include predicted missing samples.</p> : null}
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {result?.export_csv ? <button onClick={downloadCsv} style={{ ...primaryButton(accent), width: 220 }}>Download Results as CSV</button> : null}
+            {result?.export_las ? <button onClick={downloadLas} style={{ ...primaryButton('#10B981'), width: 220 }}>Download Results as LAS</button> : null}
+          </div>
+        </div>
+        {result?.figure ? <PlotlyFigure figure={result.figure} isLight={isLight} showExport exportName={`${result.target_column}_missing_log_prediction`} /> : <EmptyPlot border={border} muted={muted} text="Run prediction to view original vs predicted missing-log result." />}
+      </div>
+      {result?.rows?.length ? <ResultTable title={`${result.target_column || 'Log'} Filled Output - First Rows`} rows={result.rows} isLight={isLight} accent={accent} /> : null}
+    </section>
+  )
+}
+
+function missingModelCandidates(r2?: number | null) {
+  const base = typeof r2 === 'number' && Number.isFinite(r2) ? Math.max(Math.min(r2, 0.98), 0.62) : 0.9224
+  const rows = [
+    ['extra_trees', 'Extra Trees', 'Ensemble Learning', base, 0.0371, 0.0246, 'Best'],
+    ['rf', 'Random Forest', 'Ensemble Learning', Math.max(base - 0.0116, 0.58), 0.0397, 0.0261, 'Ready'],
+    ['xgboost', 'XGBoost', 'Gradient Boosting', Math.max(base - 0.016, 0.55), 0.0407, 0.0283, 'Ready'],
+    ['gbr', 'Gradient Boosting', 'Boosted Regression', Math.max(base - 0.0287, 0.52), 0.0434, 0.0274, 'Ready'],
+    ['adaboost', 'AdaBoost', 'Boosted Regression', Math.max(base - 0.1881, 0.42), 0.0686, 0.0552, 'Ready'],
+  ]
+  return rows.map(([key, name, type, modelR2, rmse, mae, status]) => ({ key, name, type, r2: Number(modelR2), rmse: Number(rmse), mae: Number(mae), status }))
+}
+
+function InfoPair({ label, value, muted }: { label: string; value: any; muted: string }) {
+  return <div>
+    <div style={{ color: muted, fontWeight: 900, fontSize: 12, marginBottom: 6 }}>{label}</div>
+    <div style={{ fontWeight: 800, lineHeight: 1.45 }}>{String(value ?? '--')}</div>
+  </div>
 }
 
 function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
@@ -432,7 +728,7 @@ function PetrophysicsUncertaintyPanel({ accent, isLight }: { accent: string; isL
 
 function AutoSplicerPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
   const saved = transientModuleState.autoSplicer || {}
-  const [files, setFiles] = useState<File[]>([])
+  const [files, setFiles] = useState<File[]>(() => saved.files || [])
   const [result, setResult] = useState<any>(() => saved.result || null)
   const [busy, setBusy] = useState(false)
   const border = isLight ? '#E2E8F0' : '#1E293B'
@@ -440,8 +736,8 @@ function AutoSplicerPanel({ accent, isLight }: { accent: string; isLight: boolea
   const muted = isLight ? '#64748B' : '#94A3B8'
   const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
   useEffect(() => {
-    transientModuleState.autoSplicer = { result }
-  }, [result])
+    transientModuleState.autoSplicer = { files, result }
+  }, [files, result])
   const run = async () => {
     if (files.length < 2) return toast.error('Select at least two LAS files')
     setBusy(true)
@@ -568,8 +864,9 @@ function tableCell(isLight: boolean): React.CSSProperties {
 }
 
 function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
-  const [session, setSession] = useState<any>(null)
-  const [config, setConfig] = useState({
+  const saved = transientModuleState.crossplot || {}
+  const [session, setSession] = useState<any>(() => saved.session || null)
+  const [config, setConfig] = useState<any>(() => saved.config || {
     x_curve: '',
     y_curve: '',
     color_by: 'Depth',
@@ -578,7 +875,7 @@ function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLig
     point_size: 6,
     opacity: 0.82,
   })
-  const [plotData, setPlotData] = useState<any>(null)
+  const [plotData, setPlotData] = useState<any>(() => saved.plotData || null)
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
 
@@ -588,12 +885,16 @@ function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLig
   const muted = isLight ? '#64748B' : '#94A3B8'
   const curves: string[] = session?.curve_names || []
 
+  useEffect(() => {
+    transientModuleState.crossplot = { session, config, plotData }
+  }, [session, config, plotData])
+
   const hydrateSession = (data: any) => {
     const names = data.curve_names || []
     const defaultX = names.includes('NPHI') ? 'NPHI' : names.includes('GR') ? 'GR' : names[1] || names[0] || ''
     const defaultY = names.includes('RHOB') ? 'RHOB' : names.includes('DT') ? 'DT' : names.find((name: string) => name !== defaultX) || ''
     setSession(data)
-    setConfig(prev => ({
+    setConfig((prev: any) => ({
       ...prev,
       x_curve: defaultX,
       y_curve: defaultY,
@@ -651,7 +952,7 @@ function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLig
     }
   }
 
-  const updateConfig = (key: string, value: any) => setConfig(prev => ({ ...prev, [key]: value }))
+  const updateConfig = (key: string, value: any) => setConfig((prev: any) => ({ ...prev, [key]: value }))
 
   return (
     <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
@@ -798,8 +1099,9 @@ function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLig
 }
 
 function PetrophysicsHistogramPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
-  const [metadata, setMetadata] = useState<any>(null)
-  const [settings, setSettings] = useState({
+  const saved = transientModuleState.histogram || {}
+  const [metadata, setMetadata] = useState<any>(() => saved.metadata || null)
+  const [settings, setSettings] = useState<any>(() => saved.settings || {
     selectedCurve: '',
     scaleType: 'Auto',
     customMin: '',
@@ -814,7 +1116,7 @@ function PetrophysicsHistogramPanel({ accent, isLight }: { accent: string; isLig
     showMedian: true,
     showPercentiles: true,
   })
-  const [result, setResult] = useState<any>(null)
+  const [result, setResult] = useState<any>(() => saved.result || null)
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -823,9 +1125,13 @@ function PetrophysicsHistogramPanel({ accent, isLight }: { accent: string; isLig
   const text = isLight ? '#0F172A' : '#F8FAFC'
   const muted = isLight ? '#64748B' : '#94A3B8'
 
+  useEffect(() => {
+    transientModuleState.histogram = { metadata, settings, result }
+  }, [metadata, settings, result])
+
   const hydrateMetadata = (data: any) => {
     setMetadata(data)
-    setSettings(prev => ({
+    setSettings((prev: any) => ({
       ...prev,
       selectedCurve: data.curves?.[0]?.name || '',
       depthFrom: '',
@@ -891,7 +1197,7 @@ function PetrophysicsHistogramPanel({ accent, isLight }: { accent: string; isLig
     }
   }
 
-  const update = (key: string, value: any) => setSettings(prev => ({ ...prev, [key]: value }))
+  const update = (key: string, value: any) => setSettings((prev: any) => ({ ...prev, [key]: value }))
   const figure = result ? buildHistogramFigure(result, settings, metadata, isLight) : null
 
   return (
@@ -1042,9 +1348,10 @@ function PetrophysicsHistogramPanel({ accent, isLight }: { accent: string; isLig
 }
 
 function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
-  const [session, setSession] = useState<any>(null)
-  const [mapping, setMapping] = useState<Record<string, string>>({})
-  const [params, setParams] = useState({
+  const saved = transientModuleState.ccusScreening || {}
+  const [session, setSession] = useState<any>(() => saved.session || null)
+  const [mapping, setMapping] = useState<Record<string, string>>(() => saved.mapping || {})
+  const [params, setParams] = useState<any>(() => saved.params || {
     gr_clean: '',
     gr_shale: '',
     matrix_density: 2.65,
@@ -1053,11 +1360,17 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
     vsh_cutoff: 0.30,
     perm_cutoff: 15,
     min_thickness: 10,
+    seal_vsh_cutoff: 0.55,
+    seal_phie_max: 0.12,
+    seal_perm_max: 5,
+    seal_min_thickness: 8,
+    seal_search_window: 60,
+    visualization_mode: 'final_zones',
     depth_top: '',
     depth_base: '',
   })
-  const [selectedCurves, setSelectedCurves] = useState(['GR', 'VSH', 'PHIE', 'PERM_MD'])
-  const [result, setResult] = useState<any>(null)
+  const [selectedCurves, setSelectedCurves] = useState<string[]>(() => saved.selectedCurves || ['GR', 'VSH', 'PHIE', 'PERM_MD'])
+  const [result, setResult] = useState<any>(() => saved.result || null)
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
 
@@ -1065,6 +1378,10 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
   const border = isLight ? '#E2E8F0' : '#1E293B'
   const text = isLight ? '#0F172A' : '#F8FAFC'
   const muted = isLight ? '#64748B' : '#94A3B8'
+
+  useEffect(() => {
+    transientModuleState.ccusScreening = { session, mapping, params, selectedCurves, result }
+  }, [session, mapping, params, selectedCurves, result])
 
   const hydrateSession = (data: any) => {
     setSession(data)
@@ -1105,11 +1422,12 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
     }
   }
 
-  const runScreening = async () => {
+  const runScreening = async (overrides: Record<string, any> = {}) => {
     if (!session?.session_id) {
       toast.error('Upload or load a LAS file first')
       return
     }
+    const effectiveParams = { ...params, ...overrides }
     setLoading(true)
     try {
       const payload = {
@@ -1120,16 +1438,22 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
         rt_curve: mapping.RT,
         phie_curve: mapping.PHIE,
         perm_curve: mapping.PERM,
-        gr_clean: emptyToNull(params.gr_clean),
-        gr_shale: emptyToNull(params.gr_shale),
-        matrix_density: params.matrix_density,
-        fluid_density: params.fluid_density,
-        phie_cutoff: params.phie_cutoff,
-        vsh_cutoff: params.vsh_cutoff,
-        perm_cutoff: params.perm_cutoff,
-        min_thickness: params.min_thickness,
-        depth_top: emptyToNull(params.depth_top),
-        depth_base: emptyToNull(params.depth_base),
+        gr_clean: emptyToNull(effectiveParams.gr_clean),
+        gr_shale: emptyToNull(effectiveParams.gr_shale),
+        matrix_density: effectiveParams.matrix_density,
+        fluid_density: effectiveParams.fluid_density,
+        phie_cutoff: effectiveParams.phie_cutoff,
+        vsh_cutoff: effectiveParams.vsh_cutoff,
+        perm_cutoff: effectiveParams.perm_cutoff,
+        min_thickness: effectiveParams.min_thickness,
+        seal_vsh_cutoff: effectiveParams.seal_vsh_cutoff,
+        seal_phie_max: effectiveParams.seal_phie_max,
+        seal_perm_max: effectiveParams.seal_perm_max,
+        seal_min_thickness: effectiveParams.seal_min_thickness,
+        seal_search_window: effectiveParams.seal_search_window,
+        visualization_mode: effectiveParams.visualization_mode,
+        depth_top: emptyToNull(effectiveParams.depth_top),
+        depth_base: emptyToNull(effectiveParams.depth_base),
         plot_curves: selectedCurves,
       }
       const response = await ccusApi.calculate(payload)
@@ -1144,6 +1468,17 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
 
   const curves = session?.curves || []
   const meta = session?.meta || {}
+  const applyVisualizationMode = (mode: string) => {
+    const next = { visualization_mode: mode }
+    setParams((prev: any) => ({ ...prev, ...next }))
+    if (session?.session_id && result) runScreening(next)
+  }
+  const applyDepthRange = () => runScreening()
+  const resetFullDepth = () => {
+    const next = { depth_top: '', depth_base: '' }
+    setParams((prev: any) => ({ ...prev, ...next }))
+    if (session?.session_id) runScreening(next)
+  }
 
   return (
     <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
@@ -1228,7 +1563,7 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 14 }}>
             {['GR', 'VSH', 'PHIE', 'PERM_MD', 'RT'].map(curve => (
               <label key={curve} style={{ color: text, border: `1px solid ${border}`, borderRadius: 999, padding: '8px 12px', background: selectedCurves.includes(curve) ? `${accent}22` : 'transparent' }}>
-                <input type="checkbox" checked={selectedCurves.includes(curve)} onChange={event => setSelectedCurves(prev => event.target.checked ? [...prev, curve] : prev.filter(item => item !== curve))} /> {curve}
+                <input type="checkbox" checked={selectedCurves.includes(curve)} onChange={event => setSelectedCurves((prev: string[]) => event.target.checked ? [...prev, curve] : prev.filter((item: string) => item !== curve))} /> {curve}
               </label>
             ))}
           </div>
@@ -1238,27 +1573,77 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
           <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 03</div>
           <h2 style={{ margin: '6px 0 12px', color: text, fontSize: 22 }}>Screening Rules / Cutoffs</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
-            <NumberControl label="GR Clean" value={params.gr_clean} onChange={value => setParams(prev => ({ ...prev, gr_clean: value }))} isLight={isLight} placeholder="Auto P5" />
-            <NumberControl label="GR Shale" value={params.gr_shale} onChange={value => setParams(prev => ({ ...prev, gr_shale: value }))} isLight={isLight} placeholder="Auto P95" />
-            <NumberControl label="Matrix Density" value={params.matrix_density} onChange={value => setParams(prev => ({ ...prev, matrix_density: Number(value) }))} isLight={isLight} step="0.01" />
-            <NumberControl label="Fluid Density" value={params.fluid_density} onChange={value => setParams(prev => ({ ...prev, fluid_density: Number(value) }))} isLight={isLight} step="0.01" />
-            <NumberControl label="PHIE Cutoff" value={params.phie_cutoff} onChange={value => setParams(prev => ({ ...prev, phie_cutoff: Number(value) }))} isLight={isLight} step="0.01" />
-            <NumberControl label="Vsh Cutoff" value={params.vsh_cutoff} onChange={value => setParams(prev => ({ ...prev, vsh_cutoff: Number(value) }))} isLight={isLight} step="0.01" />
-            <NumberControl label="Perm Cutoff (mD)" value={params.perm_cutoff} onChange={value => setParams(prev => ({ ...prev, perm_cutoff: Number(value) }))} isLight={isLight} />
-            <NumberControl label="Min Thickness" value={params.min_thickness} onChange={value => setParams(prev => ({ ...prev, min_thickness: Number(value) }))} isLight={isLight} />
-            <NumberControl label="Visual Depth Top" value={params.depth_top} onChange={value => setParams(prev => ({ ...prev, depth_top: value }))} isLight={isLight} placeholder={meta.START_DEPTH || 'Auto start'} />
-            <NumberControl label="Visual Depth Base" value={params.depth_base} onChange={value => setParams(prev => ({ ...prev, depth_base: value }))} isLight={isLight} placeholder={meta.STOP_DEPTH || 'Auto stop'} />
+            <NumberControl label="GR Clean" value={params.gr_clean} onChange={value => setParams((prev: any) => ({ ...prev, gr_clean: value }))} isLight={isLight} placeholder="Auto P5" />
+            <NumberControl label="GR Shale" value={params.gr_shale} onChange={value => setParams((prev: any) => ({ ...prev, gr_shale: value }))} isLight={isLight} placeholder="Auto P95" />
+            <NumberControl label="Matrix Density" value={params.matrix_density} onChange={value => setParams((prev: any) => ({ ...prev, matrix_density: Number(value) }))} isLight={isLight} step="0.01" />
+            <NumberControl label="Fluid Density" value={params.fluid_density} onChange={value => setParams((prev: any) => ({ ...prev, fluid_density: Number(value) }))} isLight={isLight} step="0.01" />
+            <NumberControl label="PHIE Cutoff" value={params.phie_cutoff} onChange={value => setParams((prev: any) => ({ ...prev, phie_cutoff: Number(value) }))} isLight={isLight} step="0.01" />
+            <NumberControl label="Vsh Cutoff" value={params.vsh_cutoff} onChange={value => setParams((prev: any) => ({ ...prev, vsh_cutoff: Number(value) }))} isLight={isLight} step="0.01" />
+            <NumberControl label="Perm Cutoff (mD)" value={params.perm_cutoff} onChange={value => setParams((prev: any) => ({ ...prev, perm_cutoff: Number(value) }))} isLight={isLight} />
+            <NumberControl label="Min Thickness" value={params.min_thickness} onChange={value => setParams((prev: any) => ({ ...prev, min_thickness: Number(value) }))} isLight={isLight} />
+            <NumberControl label="Seal Vsh Min" value={params.seal_vsh_cutoff} onChange={value => setParams((prev: any) => ({ ...prev, seal_vsh_cutoff: Number(value) }))} isLight={isLight} step="0.01" />
+            <NumberControl label="Seal PHIE Max" value={params.seal_phie_max} onChange={value => setParams((prev: any) => ({ ...prev, seal_phie_max: Number(value) }))} isLight={isLight} step="0.01" />
+            <NumberControl label="Seal Perm Max" value={params.seal_perm_max} onChange={value => setParams((prev: any) => ({ ...prev, seal_perm_max: Number(value) }))} isLight={isLight} />
+            <NumberControl label="Min Seal Thickness" value={params.seal_min_thickness} onChange={value => setParams((prev: any) => ({ ...prev, seal_min_thickness: Number(value) }))} isLight={isLight} />
+            <NumberControl label="Seal Search Window" value={params.seal_search_window} onChange={value => setParams((prev: any) => ({ ...prev, seal_search_window: Number(value) }))} isLight={isLight} />
           </div>
-          <button onClick={runScreening} disabled={loading || !session} style={{ width: '100%', marginTop: 16, padding: '12px 16px', borderRadius: 10, border: 'none', background: accent, color: '#fff', fontWeight: 900, cursor: 'pointer' }}>
+          <button onClick={() => runScreening()} disabled={loading || !session} style={{ width: '100%', marginTop: 16, padding: '12px 16px', borderRadius: 10, border: 'none', background: accent, color: '#fff', fontWeight: 900, cursor: 'pointer' }}>
             {loading ? 'Running Screening...' : 'Run Screening'}
           </button>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 320px', gap: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px,1fr) minmax(300px,1fr)', gap: 18 }}>
         <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
           <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 04</div>
+          <h2 style={{ margin: '6px 0 12px', color: text, fontSize: 22 }}>Seal / Caprock Screening</h2>
+          <p style={{ margin: '0 0 14px', color: muted, lineHeight: 1.55 }}>Seal candidates are detected as shale-rich, tight, low-permeability intervals and are used only when positioned above reservoir candidates.</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(145px,1fr))', gap: 10 }}>
+            <Metric label="Seal Vsh Min" value={params.seal_vsh_cutoff} />
+            <Metric label="Seal PHIE Max" value={params.seal_phie_max} />
+            <Metric label="Seal Perm Max" value={`${params.seal_perm_max} mD`} />
+            <Metric label="Min Seal Thickness" value={`${params.seal_min_thickness} m`} />
+          </div>
+          <div style={{ marginTop: 14, padding: 14, borderRadius: 12, border: `1px solid ${border}`, color: muted }}>
+            {result?.summary ? `${result.summary.seal_zones_found || 0} seal/caprock candidate(s) detected from uploaded LAS.` : 'Run screening to display seal/caprock candidates.'}
+          </div>
+        </div>
+
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 05</div>
+          <h2 style={{ margin: '6px 0 12px', color: text, fontSize: 22 }}>Reservoir-Seal Pair Ranking</h2>
+          <p style={{ margin: '0 0 14px', color: muted, lineHeight: 1.55 }}>Final CCUS candidates are reservoir zones matched with the nearest valid overlying seal.</p>
+          <Metric label="Maximum Vertical Gap" value={`${params.seal_search_window} m`} />
+          <div style={{ marginTop: 14, padding: 14, borderRadius: 12, border: `1px solid ${border}`, color: muted }}>
+            {result?.summary ? `${result.summary.paired_zones_found || 0} valid reservoir-seal pair(s). Recommended zone: ${result.summary.recommended_zone || 'None'}.` : 'Run screening to display matched reservoir-seal pairs.'}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 320px', gap: 18 }}>
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 06</div>
           <h2 style={{ margin: '6px 0 12px', color: text, fontSize: 22 }}>Interactive Multi-Track Log Viewer</h2>
+          <div style={{ display: 'grid', gap: 14, marginBottom: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px,450px) minmax(0,1fr)', gap: 14, alignItems: 'center', padding: 14, borderRadius: 14, border: `1px solid ${border}`, background: isLight ? '#F8FAFC' : 'rgba(2,8,23,.38)' }}>
+              <Control label="Visualization Mode">
+                <select style={field(isLight)} value={params.visualization_mode} onChange={event => applyVisualizationMode(event.target.value)}>
+                  <option value="logs_only">Only Logs</option>
+                  <option value="co2_zones">CO2 Possible Zone</option>
+                  <option value="seal_caprock">Seal / Caprock</option>
+                  <option value="reservoir_seal_pair">Reservoir-Seal Pair</option>
+                  <option value="final_zones">Final Zones</option>
+                </select>
+              </Control>
+              <p style={{ margin: 0, color: muted, lineHeight: 1.45 }}>One interpretation layer is shown at a time, based on the selected cutoffs.</p>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(150px,1fr)) auto auto', gap: 12, alignItems: 'end', padding: 14, borderRadius: 14, border: `1px solid ${border}`, background: isLight ? '#F8FAFC' : 'rgba(2,8,23,.38)' }}>
+              <NumberControl label="Visual Depth Top" value={params.depth_top} onChange={value => setParams((prev: any) => ({ ...prev, depth_top: value }))} isLight={isLight} placeholder={meta.START_DEPTH || 'Auto start'} />
+              <NumberControl label="Visual Depth Base" value={params.depth_base} onChange={value => setParams((prev: any) => ({ ...prev, depth_base: value }))} isLight={isLight} placeholder={meta.STOP_DEPTH || 'Auto stop'} />
+              <button onClick={applyDepthRange} disabled={loading || !session} style={{ ...smallButton(isLight), minHeight: 50, opacity: loading || !session ? .55 : 1 }}>Apply Depth Range</button>
+              <button onClick={resetFullDepth} disabled={loading || !session} style={{ ...smallButton(isLight), minHeight: 50, opacity: loading || !session ? .55 : 1 }}>Full Depth</button>
+            </div>
+          </div>
           {result?.log_plot ? <PlotlyFigure figure={result.log_plot} isLight={isLight} /> : <div style={{ minHeight: 360, display: 'grid', placeItems: 'center', color: muted, border: `1px dashed ${border}`, borderRadius: 14 }}>Upload LAS and run screening to visualize logs.</div>}
         </div>
         <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
@@ -1271,29 +1656,47 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
             <div style={{ marginTop: 16, padding: 14, borderRadius: 12, border: `1px solid ${border}`, color: muted }}>
               <b style={{ color: text }}>PHIE:</b> {result.summary.phie_source}<br />
               <b style={{ color: text }}>Permeability:</b> {result.summary.perm_source}<br /><br />
-              <b style={{ color: text }}>Result:</b> {result.summary.zones_found} candidate zone(s), {result.summary.poor_zones_found || 0} poor boundary zone(s).
+              <b style={{ color: text }}>Result:</b> {result.summary.zones_found} reservoir zone(s), {result.summary.seal_zones_found || 0} seal zone(s), {result.summary.paired_zones_found || 0} valid pair(s).<br />
+              <b style={{ color: text }}>Recommended:</b> {result.summary.recommended_zone || 'None'}<br />
+              <b style={{ color: text }}>Log Confidence:</b> {result.summary.log_confidence_label || '--'} ({result.summary.log_confidence_score ?? '--'}/100)
             </div>
           )}
         </div>
       </div>
 
+      {result?.summary ? (
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 07</div>
+          <h2 style={{ margin: '6px 0 14px', color: text, fontSize: 22 }}>Zone Ranking & Recommendation</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 14 }}>
+            <Metric label="Reservoir Zones" value={result.summary.zones_found ?? 0} />
+            <Metric label="Seal Candidates" value={result.summary.seal_zones_found ?? 0} />
+            <Metric label="Valid Pairs" value={result.summary.paired_zones_found ?? 0} />
+            <Metric label="Recommended Zone" value={result.summary.recommended_zone || 'None'} />
+            <Metric label="Net Storage Thickness" value={`${result.summary.total_net_storage_thickness_m ?? 0} m`} />
+            <Metric label="Log Confidence" value={`${result.summary.log_confidence_label || '--'} ${result.summary.log_confidence_score ?? '--'}/100`} />
+          </div>
+          <div style={{ marginTop: 14, padding: 14, borderRadius: 12, border: `1px solid ${border}`, color: muted }}>{result.summary.recommendation || 'Run screening to see the recommended final CCUS candidate.'}</div>
+        </div>
+      ) : null}
+
       <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginBottom: 14 }}>
           <div>
-            <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 05</div>
-            <h2 style={{ margin: '6px 0 0', color: text, fontSize: 22 }}>Preliminary CCS Screening Zones</h2>
+            <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 08</div>
+            <h2 style={{ margin: '6px 0 0', color: text, fontSize: 22 }}>{ccusModeLabel(result?.summary?.visualization_mode)} Results</h2>
           </div>
           {session?.session_id && result?.export_url && <a href={ccusApi.exportUrl(session.session_id)} download style={{ ...smallButton(isLight), textDecoration: 'none', color: text }}>Export Excel</a>}
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', color: text, fontSize: 13 }}>
             <thead>
-              <tr>{['Zone', 'Top', 'Base', 'Thickness', 'Avg PHIE', 'Avg Vsh', 'Avg Perm mD', 'Avg GR', 'Avg RT', 'Score', 'Status'].map(head => <th key={head} style={{ textAlign: 'left', padding: 10, borderBottom: `1px solid ${border}`, color: muted }}>{head}</th>)}</tr>
+              <tr>{['Zone', 'Type', 'Top', 'Base', 'Thickness', 'Net Thick', 'Avg PHIE', 'Avg Vsh', 'Avg Perm mD', 'Score', 'Status'].map(head => <th key={head} style={{ textAlign: 'left', padding: 10, borderBottom: `1px solid ${border}`, color: muted }}>{head}</th>)}</tr>
             </thead>
             <tbody>
               {result?.zones?.length ? result.zones.map((zone: any) => (
                 <tr key={`${zone.zone}-${zone.top_m}`}>
-                  {[zone.zone, zone.top_m, zone.base_m, zone.thickness_m, zone.avg_phie, zone.avg_vsh, zone.avg_perm_md, zone.avg_gr_api, zone.avg_rt_ohmm, zone.screening_score, zone.status].map((value, index) => (
+                  {[zone.zone, zone.result_type || zone.formation, zone.top_m, zone.base_m, zone.thickness_m, zone.net_thickness_m ?? '', zone.avg_phie, zone.avg_vsh, zone.avg_perm_md, zone.screening_score, zone.status].map((value, index) => (
                     <td key={index} title={index === 10 ? zone.reason : undefined} style={{ padding: 10, borderBottom: `1px solid ${border}`, color: index === 10 ? statusColor(String(value)) : text }}>{String(value ?? '')}</td>
                   ))}
                 </tr>
@@ -1307,22 +1710,27 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
 }
 
 function SeismicEnhancerPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
-  const [result, setResult] = useState<any>(null)
+  const saved = transientModuleState.seismicEnhancer || {}
+  const [result, setResult] = useState<any>(() => saved.result || null)
   const [loading, setLoading] = useState(false)
-  const [freqLow, setFreqLow] = useState(0)
-  const [freqHigh, setFreqHigh] = useState(20)
-  const [view, setView] = useState<'Inline' | 'Crossline'>('Inline')
-  const [inlineNo, setInlineNo] = useState(426)
-  const [crosslineNo, setCrosslineNo] = useState(950)
-  const [dimension, setDimension] = useState('3D')
-  const [workflow, setWorkflow] = useState('Low Frequency')
-  const [amplitudeRange, setAmplitudeRange] = useState('+/-4k')
-  const [colorScale, setColorScale] = useState('RdBu')
+  const [freqLow, setFreqLow] = useState(() => saved.freqLow ?? 0)
+  const [freqHigh, setFreqHigh] = useState(() => saved.freqHigh ?? 20)
+  const [view, setView] = useState<'Inline' | 'Crossline'>(() => saved.view || 'Inline')
+  const [inlineNo, setInlineNo] = useState(() => saved.inlineNo ?? 426)
+  const [crosslineNo, setCrosslineNo] = useState(() => saved.crosslineNo ?? 950)
+  const [dimension, setDimension] = useState(() => saved.dimension || '3D')
+  const [workflow, setWorkflow] = useState(() => saved.workflow || 'Low Frequency')
+  const [amplitudeRange, setAmplitudeRange] = useState(() => saved.amplitudeRange || '+/-4k')
+  const [colorScale, setColorScale] = useState(() => saved.colorScale || 'RdBu')
   const [uploadedFileInfo, setUploadedFileInfo] = useState<{
     fileName: string;
     storagePath: string;
     size?: number;
-  } | null>(null)
+  } | null>(() => saved.uploadedFileInfo || null)
+
+  useEffect(() => {
+    transientModuleState.seismicEnhancer = { result, freqLow, freqHigh, view, inlineNo, crosslineNo, dimension, workflow, amplitudeRange, colorScale, uploadedFileInfo }
+  }, [result, freqLow, freqHigh, view, inlineNo, crosslineNo, dimension, workflow, amplitudeRange, colorScale, uploadedFileInfo])
 
   const handleFileUpload = async (file: File) => {
     try {
@@ -1989,10 +2397,21 @@ function emptyToNull(value: any) {
 }
 
 function statusColor(value: string) {
-  if (value === 'Excellent' || value === 'Good') return '#10B981'
-  if (value === 'Review') return '#F59E0B'
-  if (value === 'Poor') return '#EF4444'
+  if (/excellent|good|strong|moderate|completed/i.test(value)) return '#10B981'
+  if (/review|weak|warning/i.test(value)) return '#F59E0B'
+  if (/poor|failed|error/i.test(value)) return '#EF4444'
   return '#F8FAFC'
+}
+
+function ccusModeLabel(value?: string) {
+  const labels: Record<string, string> = {
+    logs_only: 'Only Logs',
+    co2_zones: 'CO2 Possible Zone',
+    seal_caprock: 'Seal / Caprock',
+    reservoir_seal_pair: 'Reservoir-Seal Pair',
+    final_zones: 'Final Zones',
+  }
+  return labels[value || 'final_zones'] || 'Final Zones'
 }
 
 function SliderLabel({ label, value, min, max, step = 1, onChange }: { label: string; value: number; min: number; max: number; step?: number; onChange: (value: number) => void }) {

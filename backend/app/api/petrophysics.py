@@ -20,6 +20,8 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 from scipy.stats import gaussian_kde
+from sklearn.ensemble import ExtraTreesRegressor, GradientBoostingRegressor, RandomForestRegressor
+from sklearn.metrics import r2_score
 
 router = APIRouter()
 
@@ -587,6 +589,146 @@ def _build_analysis_item(curves: list[Curve]) -> dict:
     return {'log_names': log_names, 'logs_data': logs_data}
 
 
+def _format_gap_ranges(df: pd.DataFrame, depth_col: str, target: str):
+    if depth_col not in df.columns or target not in df.columns:
+        return []
+    missing = df[target].isna().values
+    depth = pd.to_numeric(df[depth_col], errors="coerce").values
+    ranges = []
+    start = None
+    for index, is_missing in enumerate(missing):
+        if is_missing and start is None:
+            start = index
+        if start is not None and (not is_missing or index == len(missing) - 1):
+            end = index if is_missing and index == len(missing) - 1 else index - 1
+            if np.isfinite(depth[start]) and np.isfinite(depth[end]):
+                ranges.append({"start": _safe_float(depth[start]), "end": _safe_float(depth[end]), "samples": int(end - start + 1)})
+            start = None
+    return ranges
+
+
+def _missing_log_metadata(session: dict):
+    df = session["df"]
+    curves = [col for col in df.columns if col != "DEPTH"]
+    missing_counts = {col: int(df[col].isna().sum()) for col in curves}
+    potential_gap_columns = [col for col, count in missing_counts.items() if count > 0]
+    return {
+        "summary": session["summary"],
+        "depth_column": "DEPTH",
+        "columns": ["DEPTH", *curves],
+        "feature_columns": curves,
+        "target_columns": potential_gap_columns or curves,
+        "missing_counts": missing_counts,
+        "gap_ranges": {col: _format_gap_ranges(df, "DEPTH", col) for col in curves},
+        "row_count": int(len(df)),
+    }
+
+
+def _missing_model(model_name: str):
+    if str(model_name).lower() in {"gbr", "gb", "gradient_boosting"}:
+        return GradientBoostingRegressor(random_state=123), "Gradient Boosting Regressor"
+    if str(model_name).lower() in {"extra_trees", "et", "extratrees"}:
+        return ExtraTreesRegressor(n_estimators=220, random_state=123, min_samples_leaf=2, n_jobs=-1), "Extra Trees Regressor"
+    return RandomForestRegressor(n_estimators=160, random_state=123, min_samples_leaf=2, n_jobs=-1), "Random Forest Regressor"
+
+
+def _build_missing_log_las(session: dict, output: pd.DataFrame, target: str, feature_columns: list[str], model_label: str):
+    las = session.get("las")
+    summary = session.get("summary", {})
+    depth = pd.to_numeric(output["DEPTH"], errors="coerce")
+    depth_values = depth[np.isfinite(depth)]
+    step = _safe_float(summary.get("depth_step")) or 0.5
+    start = _safe_float(depth_values.min()) if len(depth_values) else _safe_float(summary.get("depth_min"))
+    stop = _safe_float(depth_values.max()) if len(depth_values) else _safe_float(summary.get("depth_max"))
+
+    def well_value(name: str, default: str = ""):
+        try:
+            value = getattr(las.well, name).value
+            return value if value not in (None, "") else default
+        except Exception:
+            return default
+
+    unit_map = {}
+    try:
+        for curve in las.curves:
+            unit_map[str(curve.mnemonic).upper()] = curve.unit or ""
+    except Exception:
+        unit_map = {}
+
+    original_curves = [col for col in output.columns if col != "DEPTH" and not col.endswith("_PRED")]
+    predicted_col = f"{target}_PRED"
+    lines = [
+        "~Version ---------------------------------------------------",
+        "VERS. 2.0 : CWLS log ASCII Standard -VERSION 2.0",
+        "WRAP.  NO : ONE LINE PER DEPTH STEP",
+        "~Well ------------------------------------------------------",
+        f"STRT.F {start if start is not None else 0:.1f} : START DEPTH",
+        f"STOP.F {stop if stop is not None else 0:.1f} : STOP DEPTH",
+        f"STEP.F {step:.4g} : STEP VALUE",
+        "NULL. -999.25 : NULL VALUE",
+        f"COMP. {well_value('COMP', summary.get('company') or 'N/A')} : COMPANY",
+        f"WELL. {well_value('WELL', summary.get('well_name') or 'Uploaded LAS Well')} : WELL",
+        f"FLD . {well_value('FLD', summary.get('field') or 'N/A')} : FIELD",
+        f"CTRY. {well_value('CTRY', summary.get('country') or 'N/A')} : COUNTRY",
+        "~Curve Information -----------------------------------------",
+        "DEPT.F : 1 DEPTH",
+    ]
+    for index, curve in enumerate(original_curves, start=2):
+        lines.append(f"{curve}.{unit_map.get(curve, '')} : {index}")
+    lines.append(f"PREDICTED_{target}. : Predicted {target}")
+    lines.extend([
+        "~Other -----------------------------------------------------",
+        f"# Model Used: {model_label.replace(' Regressor', '')}",
+        f"# Target Log: {target}",
+        f"# Selected Features: {', '.join(feature_columns)}",
+        "~ASCII",
+    ])
+    data_columns = ["DEPTH", *original_curves, predicted_col]
+    for _, row in output[data_columns].iterrows():
+        values = []
+        for column in data_columns:
+            value = _safe_float(row.get(column))
+            values.append(f"{value:.6g}" if value is not None else "-999.25")
+        lines.append(" ".join(values))
+    return "\n".join(lines) + "\n"
+
+
+def _build_missing_log_figure(depth, original, predicted, target):
+    return {
+        "data": [
+            {
+                "x": _sanitize_list(original),
+                "y": _sanitize_list(depth),
+                "type": "scatter",
+                "mode": "lines",
+                "name": f"Original {target}",
+                "line": {"color": "#38BDF8", "width": 2},
+                "hovertemplate": "Depth: %{y:.2f}<br>Original: %{x:.4f}<extra></extra>",
+            },
+            {
+                "x": _sanitize_list(predicted),
+                "y": _sanitize_list(depth),
+                "type": "scatter",
+                "mode": "lines",
+                "name": f"Predicted {target}",
+                "line": {"color": "#F59E0B", "width": 3},
+                "hovertemplate": "Depth: %{y:.2f}<br>Predicted: %{x:.4f}<extra></extra>",
+            },
+        ],
+        "layout": {
+            "paper_bgcolor": "#FFFFFF",
+            "plot_bgcolor": "#FFFFFF",
+            "height": 620,
+            "margin": {"l": 70, "r": 30, "t": 50, "b": 60},
+            "font": {"color": "#0F172A"},
+            "xaxis": {"title": target, "gridcolor": "#E2E8F0", "zeroline": False, "color": "#0F172A"},
+            "yaxis": {"title": "Depth (ft)", "autorange": "reversed", "gridcolor": "#E2E8F0", "color": "#0F172A"},
+            "legend": {"orientation": "h", "x": 0, "y": -0.12},
+            "hovermode": "closest",
+        },
+    }
+
+
 class PetroLogRequest(BaseModel):
     session_id: str
     curves: Optional[list[str]] = None
@@ -630,6 +772,132 @@ def generate_petro_log_viewer(request: PetroLogRequest):
         "summary": session["summary"],
         "selected_curves": request.curves or session["summary"]["curve_names"][:5],
         "figure": figure,
+    }
+
+
+@router.post('/missing-log/analyze')
+def analyze_missing_log_session(request: PetroSessionRequest):
+    session = _get_petro_session(request.session_id)
+    return _missing_log_metadata(session)
+
+
+@router.post('/missing-log/predict')
+def predict_missing_log_session(payload: dict):
+    session_id = payload.get("session_id")
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required.")
+    session = _get_petro_session(str(session_id))
+    df = session["df"].copy()
+    metadata = _missing_log_metadata(session)
+    target = str(payload.get("target_column") or payload.get("target") or "").upper()
+    if not target:
+        targets = metadata["target_columns"]
+        target = targets[0] if targets else ""
+    if target not in df.columns or target == "DEPTH":
+        raise HTTPException(status_code=400, detail=f"Target curve '{target}' was not found in the uploaded LAS.")
+
+    raw_features = payload.get("selected_features") or []
+    feature_columns = [
+        str(col).upper()
+        for col in raw_features
+        if str(col).upper() in df.columns
+        and str(col).upper() not in {"DEPTH", target}
+        and pd.to_numeric(df[str(col).upper()], errors="coerce").notna().sum() >= 5
+    ]
+    if not feature_columns:
+        feature_columns = [col for col in df.columns if col not in {"DEPTH", target} and df[col].notna().sum() >= 5]
+    if not feature_columns:
+        raise HTTPException(status_code=400, detail="No usable feature curves are available for prediction.")
+
+    depth_min = _safe_float(payload.get("depth_min"))
+    depth_max = _safe_float(payload.get("depth_max"))
+    if depth_min is None:
+        depth_min = _safe_float(df["DEPTH"].min())
+    if depth_max is None:
+        depth_max = _safe_float(df["DEPTH"].max())
+
+    feature_frame = df[feature_columns].apply(pd.to_numeric, errors="coerce").replace([np.inf, -np.inf], np.nan)
+    filled_features = feature_frame.interpolate(method="linear", limit_direction="both").ffill().bfill()
+    medians = filled_features.median(numeric_only=True)
+    filled_features = filled_features.fillna(medians)
+    usable_features = [col for col in feature_columns if filled_features[col].notna().sum() >= 5]
+    feature_columns = usable_features
+    if not feature_columns:
+        raise HTTPException(status_code=400, detail="No usable feature curves are available for prediction after gap filling.")
+
+    target_series = pd.to_numeric(df[target], errors="coerce").replace([np.inf, -np.inf], np.nan)
+    train_mask = target_series.notna() & filled_features[feature_columns].notna().all(axis=1)
+    if int(train_mask.sum()) < 5:
+        raise HTTPException(status_code=422, detail=f"Too few training samples for '{target}'. At least 5 valid rows are required.")
+
+    model, model_label = _missing_model(str(payload.get("model_name", "extra_trees")))
+    x_train = filled_features.loc[train_mask, feature_columns]
+    y_train = target_series.loc[train_mask]
+    model.fit(x_train, y_train)
+    train_pred = model.predict(x_train)
+    score = _safe_float(r2_score(y_train, train_pred)) if len(y_train) > 1 else None
+
+    range_mask = df["DEPTH"].between(float(depth_min), float(depth_max))
+    missing_mask = df[target].isna() & range_mask
+    candidate_mask = missing_mask.copy()
+    mode = "missing-gaps"
+    if not candidate_mask.any():
+        candidate_mask = range_mask
+        mode = "range-simulation"
+
+    candidates = filled_features.loc[candidate_mask, feature_columns].replace([np.inf, -np.inf], np.nan).dropna()
+    if candidates.empty:
+        raise HTTPException(status_code=422, detail="No rows inside the selected range can be predicted. Try widening the depth interval or selecting curves with valid data.")
+
+    predicted_values = model.predict(candidates[feature_columns])
+    output = df.copy()
+    output[f"{target}_PRED"] = np.nan
+    output.loc[candidates.index, f"{target}_PRED"] = predicted_values
+    if mode == "missing-gaps":
+        output.loc[candidates.index, target] = predicted_values
+
+    depth = pd.to_numeric(output["DEPTH"], errors="coerce").values
+    original = pd.to_numeric(df[target], errors="coerce").values
+    predicted = pd.to_numeric(output[f"{target}_PRED"], errors="coerce").values
+    rows = []
+    export_rows = []
+    for idx in candidates.index:
+        actual = _safe_float(df.loc[idx, target])
+        predicted_value = _safe_float(output.loc[idx, f"{target}_PRED"])
+        export_rows.append({
+            "Depth": _safe_float(output.loc[idx, "DEPTH"]),
+            f"Actual_{target}": actual,
+            f"Predicted_{target}": predicted_value,
+            "Prediction_Status": "Predicted" if mode == "missing-gaps" else "Simulated",
+        })
+    for row in export_rows[:10]:
+        rows.append({
+            "Depth": row["Depth"],
+            f"Actual_{target}": row[f"Actual_{target}"],
+            f"Predicted_{target}": row[f"Predicted_{target}"],
+            "Prediction_Status": row["Prediction_Status"],
+        })
+
+    csv_buffer = io.StringIO()
+    pd.DataFrame(export_rows).to_csv(csv_buffer, index=False)
+    filled_las = _build_missing_log_las(session, output, target, feature_columns, model_label)
+
+    return {
+        "summary": session["summary"],
+        "target_column": target,
+        "feature_columns": feature_columns,
+        "predicted_count": int(len(candidates)),
+        "mode": mode,
+        "model": model_label,
+        "r2_score": score,
+        "depth_min": depth_min,
+        "depth_max": depth_max,
+        "rows": rows,
+        "figure": _build_missing_log_figure(depth, original, predicted, target),
+        "export_csv": csv_buffer.getvalue(),
+        "export_las": filled_las,
+        "file_name": f"{session['summary'].get('well_name', 'well')}_{target}_filled.csv",
+        "las_file_name": f"{session['summary'].get('well_name', 'well')}_{target}_filled.las",
     }
 
 
