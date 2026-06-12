@@ -122,6 +122,8 @@ export const petrophysicsApi = {
     })
   },
   generatePetroLogViewer: (params: any) => api.post('/petrophysics/las/log-viewer', params),
+  analyzeMissingLog: (sessionId: string) => api.post('/petrophysics/missing-log/analyze', { session_id: sessionId }),
+  predictMissingLog: (params: any) => api.post('/petrophysics/missing-log/predict', params),
   generatePetroPrediction: (sessionId: string) => api.post('/petrophysics/las/prediction', { session_id: sessionId }),
   generatePetroUncertainty: (params: any) => api.post('/petrophysics/las/uncertainty', params),
   runAutoSplice: (files: File[]) => {
