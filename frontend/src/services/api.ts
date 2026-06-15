@@ -96,6 +96,7 @@ export const petrophysicsApi = {
   predictionBundle: (wellId: number) => api.get(`/petrophysics/well/${wellId}/prediction-bundle`),
   uncertainty: (wellId: number, params?: any) => api.post(`/petrophysics/well/${wellId}/uncertainty`, params || {}),
   loadCrossplotDemo: () => api.post('/petrophysics/crossplot/load-demo'),
+  loadCrossplotFromPetroSession: (sessionId: string) => api.post('/petrophysics/crossplot/load-petro-session', { session_id: sessionId }),
   uploadCrossplotLas: (file: File) => {
     const fd = new FormData()
     fd.append('file', file)
@@ -105,6 +106,7 @@ export const petrophysicsApi = {
   },
   generateCrossplot: (params: any) => api.post('/petrophysics/crossplot/generate', params),
   loadHistogramDemo: () => api.post('/petrophysics/histogram/load-demo'),
+  loadHistogramFromPetroSession: (sessionId: string) => api.post('/petrophysics/histogram/load-petro-session', { session_id: sessionId }),
   uploadHistogramLas: (file: File) => {
     const fd = new FormData()
     fd.append('file', file)
@@ -134,6 +136,23 @@ export const petrophysicsApi = {
     })
   },
   autospliceDownloadUrl: (path: string) => `${API_URL}${path}`,
+  uploadToolboxLog: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post('/petrophysics/toolbox/upload-log', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  loadToolboxFromPetroSession: (sessionId: string) => api.post('/petrophysics/toolbox/load-petro-session', { session_id: sessionId }),
+  runToolboxFacies: (params: any) => api.post('/petrophysics/toolbox/facies/run', params),
+  uploadToolboxTops: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post('/petrophysics/toolbox/upload-tops', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  runToolboxFormationTops: (params: any) => api.post('/petrophysics/toolbox/formation-tops/run', params),
 }
 
 // Seismic
@@ -192,6 +211,21 @@ export const ccusApi = {
   },
   calculate: (params: any) => api.post('/ccus/calculate', params),
   exportUrl: (sessionId: string) => `${API_URL}/api/ccus/export/${sessionId}`,
+}
+
+export const geothermalApi = {
+  uploadLas: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post('/geothermal/upload', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  loadSample: () => api.post('/geothermal/sample'),
+  exportCsvUrl: (sessionId: string) => `${API_URL}/api/geothermal/export/${sessionId}/results.csv`,
+  exportJsonUrl: (sessionId: string) => `${API_URL}/api/geothermal/export/${sessionId}/interpretation.json`,
+  exportSectionUrl: (sessionId: string, section: string, fmt: 'csv' | 'json') => `${API_URL}/api/geothermal/export/${sessionId}/${section}.${fmt}`,
+  heatFlowMapUrl: (sessionId: string) => `${API_URL}/api/geothermal/heat-flow-map/${sessionId}.png`,
 }
 
 export const localProjectsApi = {

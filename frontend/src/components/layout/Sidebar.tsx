@@ -24,8 +24,6 @@ const PETROPHYSICS_ITEMS = [
   { label: 'AI Parameter Prediction', path: '/petrophysics/ai-parameter-prediction', icon: 'fas fa-gauge-high', sub: true },
   { label: 'AI Uncertainty', path: '/petrophysics/ai-uncertainty', icon: 'fas fa-chart-area', sub: true },
   { label: 'Auto Splicer', path: '/petrophysics/auto-splicer', icon: 'fas fa-code-branch', sub: true },
-  { label: 'Crossplot', path: '/petrophysics/crossplot', icon: 'fas fa-project-diagram', sub: true },
-  { label: 'Histogram', path: '/petrophysics/histogram', icon: 'fas fa-chart-column', sub: true },
 ]
 
 const SEISMIC_ITEMS = [
@@ -39,6 +37,10 @@ const PRODUCTION_ITEMS = [
 
 const CCUS_ITEMS = [
   { label: 'AI Preliminary Screening Using Well Logs', path: '/ccus/ai-preliminary-screening', icon: 'fas fa-leaf', sub: true },
+]
+
+const GEOTHERMAL_ITEMS = [
+  { label: 'Geothermal Log-Based Screening', path: '/geothermal/log-based-screening', icon: 'fas fa-temperature-high', sub: true },
 ]
 
 const DRAKE_AI_ITEMS = [
@@ -59,6 +61,7 @@ export default function Sidebar() {
     seismic: false,
     production: false,
     ccus: false,
+    geothermal: false,
     drake_ai: false,
   })
 
@@ -110,6 +113,7 @@ export default function Sidebar() {
     : location.pathname.startsWith('/seismic') ? 'seismic'
     : location.pathname.startsWith('/production') ? 'production'
     : location.pathname.startsWith('/ccus') ? 'ccus'
+    : location.pathname.startsWith('/geothermal') ? 'geothermal'
     : location.pathname.startsWith('/digitizer') ? 'drake_ai'
     : 'petrophysics'
 
@@ -118,6 +122,7 @@ export default function Sidebar() {
     { id: 'seismic', label: 'Seismic', items: SEISMIC_ITEMS },
     { id: 'production', label: 'Production', items: PRODUCTION_ITEMS },
     { id: 'ccus', label: 'CCUS', items: CCUS_ITEMS },
+    { id: 'geothermal', label: 'Geothermal', items: GEOTHERMAL_ITEMS },
     { id: 'drake_ai', label: 'Drake AI Digitizer', items: DRAKE_AI_ITEMS },
   ]
 
