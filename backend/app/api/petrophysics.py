@@ -5,6 +5,12 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models import Well, Curve
 from app.ml.drake_uncertainty import build_prediction_bundle, compute_uncertainty_analysis
+from app.ml.mini_petrophysics_toolbox import (
+    dataframe_summary,
+    read_well_log_bytes,
+    run_facies_classification,
+    run_formation_tops_detection,
+)
 from pydantic import BaseModel
 from typing import Optional
 import os
@@ -29,6 +35,8 @@ crossplot_las_store: dict[str, pd.DataFrame] = {}
 histogram_las_store: dict[str, lasio.LASFile] = {}
 petro_las_store: dict[str, dict] = {}
 autosplice_store: dict[str, dict] = {}
+toolbox_log_store: dict[str, dict] = {}
+toolbox_tops_store: dict[str, dict] = {}
 
 
 class CrossPlotRequest(BaseModel):
@@ -58,6 +66,30 @@ class HistogramRequest(BaseModel):
     show_mean: bool = True
     show_median: bool = True
     show_percentiles: bool = True
+
+
+class FaciesRunRequest(BaseModel):
+    session_id: str
+    depth_col: str
+    features: list[str]
+    algorithm: str = "kmeans"
+    target_present: bool = False
+    facies_col: Optional[str] = None
+    n_clusters: int = 5
+
+
+class FormationTopsRunRequest(BaseModel):
+    session_id: str
+    depth_col: str
+    curves: list[str]
+    mode: str = "unsupervised"
+    tops_session_id: Optional[str] = None
+    tops_depth_col: Optional[str] = None
+    formation_col: Optional[str] = None
+    sensitivity: float = 18
+    min_thickness: float = 20
+    smooth_window: int = 21
+    manual_tops: Optional[list[dict]] = None
 
 
 def _safe_float(value):
@@ -1166,9 +1198,145 @@ def download_autosplice_file(run_id: str, file_name: str):
     return FileResponse(str(path), filename=safe_name)
 
 
+@router.post('/toolbox/upload-log')
+async def upload_toolbox_log(file: UploadFile = File(...)):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Please upload a valid well-log file.")
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    try:
+        df, well_name, las = read_well_log_bytes(file.filename, content)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Unable to parse well-log file: {exc}")
+    session_id = str(uuid.uuid4())
+    toolbox_log_store[session_id] = {"df": df, "well_name": well_name, "file_name": file.filename, "las": las}
+    return dataframe_summary(df, file.filename, well_name, session_id)
+
+
+@router.post('/toolbox/load-petro-session')
+def load_toolbox_log_from_petro_session(request: PetroSessionRequest):
+    petro_session = _get_petro_session(request.session_id)
+    df = petro_session["df"].copy()
+    summary_src = petro_session.get("summary", {})
+    session_id = str(uuid.uuid4())
+    file_name = summary_src.get("file_name") or "active_petrophysics_las.las"
+    well_name = summary_src.get("well_name") or "Active Petrophysics Well"
+    toolbox_log_store[session_id] = {"df": df, "well_name": well_name, "file_name": file_name, "las": petro_session.get("las")}
+    return dataframe_summary(df, file_name, well_name, session_id)
+
+
+@router.post('/toolbox/facies/run')
+def run_toolbox_facies(request: FaciesRunRequest):
+    session = toolbox_log_store.get(request.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Well-log session not found. Upload the file again.")
+    try:
+        return run_facies_classification(
+            session["df"],
+            request.depth_col,
+            request.features,
+            request.algorithm,
+            request.target_present,
+            request.facies_col,
+            request.n_clusters,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Facies classification failed: {exc}")
+
+
+@router.post('/toolbox/upload-tops')
+async def upload_toolbox_tops(file: UploadFile = File(...)):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Please upload a valid tops file.")
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded tops file is empty.")
+    try:
+        if file.filename.lower().endswith(".csv"):
+            df = pd.read_csv(io.BytesIO(content))
+        elif file.filename.lower().endswith(".xlsx"):
+            df = pd.read_excel(io.BytesIO(content))
+        else:
+            raise ValueError("Tops file must be CSV or XLSX.")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Unable to parse tops file: {exc}")
+    session_id = str(uuid.uuid4())
+    toolbox_tops_store[session_id] = {"df": df, "file_name": file.filename}
+    return {
+        "session_id": session_id,
+        "file_name": file.filename,
+        "rows": int(len(df)),
+        "columns": [str(c) for c in df.columns],
+        "numeric_columns": df.select_dtypes(include=np.number).columns.astype(str).tolist(),
+    }
+
+
+@router.post('/toolbox/formation-tops/run')
+def run_toolbox_formation_tops(request: FormationTopsRunRequest):
+    session = toolbox_log_store.get(request.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Well-log session not found. Upload the file again.")
+    tops_df = None
+    if request.tops_session_id:
+        tops_session = toolbox_tops_store.get(request.tops_session_id)
+        if not tops_session:
+            raise HTTPException(status_code=404, detail="Tops session not found. Upload the tops file again.")
+        tops_df = tops_session["df"]
+    try:
+        return run_formation_tops_detection(
+            session["df"],
+            request.depth_col,
+            request.curves,
+            request.mode,
+            tops_df,
+            request.tops_depth_col,
+            request.formation_col,
+            request.sensitivity,
+            request.min_thickness,
+            request.smooth_window,
+            request.manual_tops,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Formation tops detection failed: {exc}")
+
+
 @router.post('/crossplot/load-demo')
 def load_crossplot_demo():
     return _parse_crossplot_las(_build_demo_las().encode("utf-8"), "drake_crossplot_demo.las")
+
+
+@router.post('/crossplot/load-petro-session')
+def load_crossplot_from_petro_session(request: PetroSessionRequest):
+    petro_session = _get_petro_session(request.session_id)
+    df = petro_session["df"].copy()
+    session_id = str(uuid.uuid4())
+    crossplot_las_store[session_id] = df
+    summary = petro_session.get("summary", {})
+    curves = [
+        {
+            "mnemonic": curve.get("name"),
+            "unit": curve.get("unit") or "",
+            "description": curve.get("description") or "",
+        }
+        for curve in summary.get("curves", [])
+    ]
+    depth_col = str(df.columns[0])
+    return {
+        "session_id": session_id,
+        "file_name": summary.get("file_name") or "active_petrophysics_las.las",
+        "well_name": summary.get("well_name") or "Active Petrophysics Well",
+        "field": summary.get("field") or "N/A",
+        "company": summary.get("company") or "N/A",
+        "country": summary.get("country") or "N/A",
+        "num_curves": summary.get("num_curves") or len(curves),
+        "depth_min": summary.get("depth_min"),
+        "depth_max": summary.get("depth_max"),
+        "curves": curves,
+        "curve_names": [str(col) for col in df.columns if str(col) != depth_col],
+        "depth_curve": depth_col,
+        "rows": int(len(df)),
+    }
 
 
 @router.post('/crossplot/upload-las')
@@ -1274,6 +1442,18 @@ def load_histogram_demo():
     file_id = str(uuid.uuid4())
     histogram_las_store[file_id] = las
     return _histogram_metadata(las, "drake_histogram_demo.las", file_id)
+
+
+@router.post('/histogram/load-petro-session')
+def load_histogram_from_petro_session(request: PetroSessionRequest):
+    petro_session = _get_petro_session(request.session_id)
+    las = petro_session.get("las")
+    if las is None:
+        raise HTTPException(status_code=400, detail="Active LAS session is not available for histogram analysis.")
+    file_id = str(uuid.uuid4())
+    histogram_las_store[file_id] = las
+    summary = petro_session.get("summary", {})
+    return _histogram_metadata(las, summary.get("file_name") or "active_petrophysics_las.las", file_id)
 
 
 @router.post('/histogram/upload-las')

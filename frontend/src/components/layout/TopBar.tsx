@@ -9,13 +9,17 @@ const NAV_ITEMS = [
   { label: 'Seismic', path: '/seismic/frequency-enhancer' },
   { label: 'Production', path: '/production/optimization' },
   { label: 'CCUS', path: '/ccus/ai-preliminary-screening' },
+  { label: 'Geothermal', path: '/geothermal/log-based-screening' },
   { label: 'Drake AI Digitizer', path: '/digitizer/drake-slm-gpt' },
 ]
 
 export default function TopBar() {
   const { user, logout, theme, toggleTheme, activeLocalProject, activeProjectFileHandle, setActiveProjectFileHandle, markProjectSaved, projectDirty } = useStore()
   const [profileOpen, setProfileOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
   const profileRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
   const location = useLocation()
   const isLight = theme === 'light'
@@ -41,6 +45,18 @@ export default function TopBar() {
     }
   }
 
+  const submitSearch = () => {
+    const query = searchTerm.trim()
+    if (!query) {
+      setSearchOpen(true)
+      setTimeout(() => searchRef.current?.focus(), 0)
+      return
+    }
+    localStorage.setItem('drake_global_search_query', query)
+    navigate(`/projects?search=${encodeURIComponent(query)}`)
+    toast.success(`Searching for "${query}"`)
+  }
+
   useEffect(() => {
     const onClick = (event: MouseEvent) => {
       if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
@@ -56,13 +72,14 @@ export default function TopBar() {
     if (item.label === 'Seismic') return location.pathname.startsWith('/seismic')
     if (item.label === 'Production') return location.pathname.startsWith('/production')
     if (item.label === 'CCUS') return location.pathname.startsWith('/ccus')
+    if (item.label === 'Geothermal') return location.pathname.startsWith('/geothermal')
     if (item.label === 'Drake AI Digitizer') return location.pathname.startsWith('/digitizer')
     return location.pathname === item.path
   }
 
   return (
-    <div style={{ height: 42, background: isLight ? '#FFFFFF' : '#0B111A', borderBottom: `1px solid ${isLight ? '#CBD5E1' : '#1F2A3A'}`, display: 'flex', alignItems: 'center', padding: '0 14px', gap: 0, flexShrink: 0, zIndex: 100, boxShadow: isLight ? '0 1px 0 rgba(15,23,42,.06)' : '0 1px 0 rgba(255,255,255,.03)' }}>
-      <nav style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 10px', flex: 1, overflowX: 'auto' }}>
+    <div style={{ height: 42, background: isLight ? '#FFFFFF' : '#0B111A', borderBottom: `1px solid ${isLight ? '#CBD5E1' : '#1F2A3A'}`, display: 'flex', alignItems: 'center', padding: '0 10px', gap: 0, flexShrink: 0, zIndex: 100, overflow: 'hidden', boxShadow: isLight ? '0 1px 0 rgba(15,23,42,.06)' : '0 1px 0 rgba(255,255,255,.03)' }}>
+      <nav style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 6px', flex: '1 1 auto', minWidth: 0, overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'none' }}>
         {NAV_ITEMS.map(item => {
           const active = isActive(item)
           return (
@@ -70,8 +87,8 @@ export default function TopBar() {
               key={item.label}
               onClick={() => navigate(item.path)}
               style={{
-                padding: '10px 16px',
-                fontSize: 14,
+                padding: '10px 12px',
+                fontSize: 13,
                 fontWeight: 700,
                 cursor: 'pointer',
                 border: 'none',
@@ -90,14 +107,28 @@ export default function TopBar() {
         })}
       </nav>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 8, flexShrink: 0 }}>
         <button onClick={handleSaveProject} title="Save Project to Local Disk" style={{ height: 30, borderRadius: 6, background: projectDirty ? 'linear-gradient(135deg,#EF4444,#DA2626)' : isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${projectDirty ? '#EF4444' : isLight ? '#CBD5E1' : '#223047'}`, color: projectDirty ? '#FFFFFF' : isLight ? '#0F172A' : '#F8FAFC', display: 'flex', alignItems: 'center', gap: 7, padding: '0 12px', cursor: 'pointer', fontWeight: 800, whiteSpace: 'nowrap' }}>
           <i className="fas fa-save" style={{ fontSize: 12 }}></i>
           Save Project
         </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: isLight ? '#F8FAFC' : '#070B12', border: `1px solid ${isLight ? '#CBD5E1' : '#223047'}`, borderRadius: 6, padding: '8px 14px', width: 280 }}>
-          <i className="fas fa-search" style={{ color: isLight ? '#64748B' : '#E2E8F0', fontSize: 14 }}></i>
-          <input type="text" placeholder="Search wells, projects..." onKeyDown={e => { if (e.key === 'Enter') toast.success(`Searching for "${e.currentTarget.value}"`) }} style={{ background: 'none', border: 'none', outline: 'none', color: isLight ? '#0F172A' : '#E2E8F0', fontSize: 14, width: '100%' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          {searchOpen && (
+            <input
+              ref={searchRef}
+              value={searchTerm}
+              onChange={event => setSearchTerm(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter') submitSearch()
+                if (event.key === 'Escape') setSearchOpen(false)
+              }}
+              placeholder="Search..."
+              style={{ width: 180, height: 30, borderRadius: 6, border: `1px solid ${isLight ? '#CBD5E1' : '#223047'}`, background: isLight ? '#F8FAFC' : '#070B12', color: isLight ? '#0F172A' : '#F8FAFC', outline: 'none', padding: '0 10px', fontSize: 13 }}
+            />
+          )}
+          <button onClick={searchOpen ? submitSearch : () => { setSearchOpen(true); setTimeout(() => searchRef.current?.focus(), 0) }} title="Search wells and projects" style={{ width: 30, height: 30, borderRadius: 6, background: isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${isLight ? '#CBD5E1' : '#223047'}`, color: isLight ? '#0F172A' : '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <i className="fas fa-search" style={{ fontSize: 12 }}></i>
+          </button>
         </div>
         <button onClick={toggleTheme} title="Toggle theme" style={{ width: 30, height: 30, borderRadius: 6, background: isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${isLight ? '#CBD5E1' : '#223047'}`, color: isLight ? '#0F172A' : '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           <i className="fas fa-circle-half-stroke" style={{ fontSize: 12 }}></i>

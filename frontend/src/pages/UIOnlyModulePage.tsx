@@ -147,7 +147,7 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
   const [selected, setSelected] = useState<string[]>(() => saved.selected || [])
   const [result, setResult] = useState<any>(() => saved.result || null)
   const [depthRange, setDepthRange] = useState(() => saved.depthRange || { min: '', max: '', unit: 'Feet (ft)' })
-  const [activeLogTab, setActiveLogTab] = useState<'viewer' | 'properties'>(() => saved.activeLogTab || 'viewer')
+  const [activeLogTab, setActiveLogTab] = useState<'viewer' | 'properties' | 'histogram' | 'crossplot'>(() => saved.activeLogTab || 'viewer')
   const [busy, setBusy] = useState(false)
   const border = isLight ? '#E2E8F0' : '#1E293B'
   const text = isLight ? '#0F172A' : '#F8FAFC'
@@ -235,11 +235,21 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
       </div>
       <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
         <div style={{ display: 'flex', gap: 12, borderBottom: `1px solid ${border}`, margin: '-18px -18px 16px', padding: '0 18px' }}>
-          <button onClick={() => setActiveLogTab('viewer')} style={{ padding: '13px 18px', border: 'none', borderBottom: activeLogTab === 'viewer' ? `2px solid ${accent}` : '2px solid transparent', background: activeLogTab === 'viewer' ? `${accent}18` : 'transparent', color: activeLogTab === 'viewer' ? text : muted, fontWeight: 900, cursor: 'pointer' }}>Log Viewer</button>
-          <button onClick={() => setActiveLogTab('properties')} style={{ padding: '13px 18px', border: 'none', borderBottom: activeLogTab === 'properties' ? `2px solid ${accent}` : '2px solid transparent', background: activeLogTab === 'properties' ? `${accent}18` : 'transparent', color: activeLogTab === 'properties' ? text : muted, fontWeight: 900, cursor: 'pointer' }}>Log Ranges & Properties</button>
+          {[
+            ['viewer', 'Log Viewer'],
+            ['properties', 'Log Ranges & Properties'],
+            ['histogram', 'Histogram'],
+            ['crossplot', 'Crossplot'],
+          ].map(([key, label]) => (
+            <button key={key} onClick={() => setActiveLogTab(key as any)} style={{ padding: '13px 18px', border: 'none', borderBottom: activeLogTab === key ? `2px solid ${accent}` : '2px solid transparent', background: activeLogTab === key ? `${accent}18` : 'transparent', color: activeLogTab === key ? text : muted, fontWeight: 900, cursor: 'pointer' }}>{label}</button>
+          ))}
         </div>
         {activeLogTab === 'properties' ? (
           <LogRangesProperties session={session} isLight={isLight} muted={muted} border={border} />
+        ) : activeLogTab === 'histogram' ? (
+          <LogVisualizationHistogramTab session={session} accent={accent} isLight={isLight} />
+        ) : activeLogTab === 'crossplot' ? (
+          <LogVisualizationCrossplotTab session={session} accent={accent} isLight={isLight} />
         ) : (
           <>
         <p style={{ color: muted, margin: '0 0 14px' }}>Displaying {activeCurves.length || 0} track(s) - {session?.rows?.toLocaleString?.() || 0} depth points.</p>
@@ -269,14 +279,191 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
           </>
         )}
       </div>
-      <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
-        {result?.figure ? <PlotlyFigure figure={result.figure} isLight={isLight} showExport exportName={`${session?.well_name || 'well'}_ai_log_visualization`} /> : <EmptyPlot border={border} muted={muted} text="Upload LAS, choose curves, then plot AI visualization." />}
-      </div>
+      {activeLogTab === 'viewer' && (
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          {result?.figure ? <PlotlyFigure figure={result.figure} isLight={isLight} showExport exportName={`${session?.well_name || 'well'}_ai_log_visualization`} /> : <EmptyPlot border={border} muted={muted} text="Upload LAS, choose curves, then plot AI visualization." />}
+        </div>
+      )}
       <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
         <h2 style={{ margin: '0 0 14px', color: text, fontSize: 22 }}>AI Assisted Log Interpretation</h2>
         <LogInterpretation curves={curves} selected={activeCurves} muted={muted} text={text} />
       </div>
     </section>
+  )
+}
+
+function LogVisualizationCrossplotTab({ session, accent, isLight }: { session: any; accent: string; isLight: boolean }) {
+  const saved = transientModuleState.logVisualizationCrossplot || {}
+  const [bridge, setBridge] = useState<any>(() => saved.bridge || null)
+  const [plotData, setPlotData] = useState<any>(() => saved.plotData || null)
+  const [loading, setLoading] = useState(false)
+  const curves: string[] = session?.curve_names || []
+  const [config, setConfig] = useState<any>(() => saved.config || {
+    x_curve: curves.includes('NPHI') ? 'NPHI' : curves.includes('GR') ? 'GR' : curves[0] || '',
+    y_curve: curves.includes('RHOB') ? 'RHOB' : curves.includes('DT') ? 'DT' : curves.find(curve => curve !== (curves[0] || '')) || '',
+    color_by: curves.includes('GR') ? 'GR' : 'Depth',
+    x_scale: 'Linear',
+    y_scale: 'Linear',
+    point_size: 6,
+    opacity: 0.82,
+  })
+  const border = isLight ? '#E2E8F0' : '#1E293B'
+  const text = isLight ? '#0F172A' : '#F8FAFC'
+  const muted = isLight ? '#64748B' : '#94A3B8'
+
+  useEffect(() => {
+    transientModuleState.logVisualizationCrossplot = { sourceSessionId: session?.session_id, bridge, config, plotData }
+  }, [session?.session_id, bridge, config, plotData])
+
+  useEffect(() => {
+    if (!session?.session_id) return
+    const stored = transientModuleState.logVisualizationCrossplot || {}
+    if (stored.sourceSessionId === session.session_id) return
+    setBridge(null)
+    setPlotData(null)
+    const nextX = curves.includes('NPHI') ? 'NPHI' : curves.includes('GR') ? 'GR' : curves[0] || ''
+    const nextY = curves.includes('RHOB') ? 'RHOB' : curves.includes('DT') ? 'DT' : curves.find(curve => curve !== nextX) || ''
+    setConfig((prev: any) => ({ ...prev, x_curve: nextX, y_curve: nextY, color_by: curves.includes('GR') ? 'GR' : 'Depth' }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.session_id])
+
+  const run = async () => {
+    if (!session?.session_id) return toast.error('Upload LAS in Log Visualization first')
+    if (!config.x_curve || !config.y_curve || config.x_curve === config.y_curve) return toast.error('Select two different curves')
+    setLoading(true)
+    try {
+      const activeBridge = bridge?.source_session_id === session.session_id ? bridge : (await petrophysicsApi.loadCrossplotFromPetroSession(session.session_id)).data
+      setBridge({ ...activeBridge, source_session_id: session.session_id })
+      const response = await petrophysicsApi.generateCrossplot({ ...config, session_id: activeBridge.session_id })
+      const data = response.data
+      data.figure = applyCrossplotFigureStyle(data.figure, config, isLight, accent)
+      setPlotData(data)
+      transientModuleState.logVisualizationCrossplot = { sourceSessionId: session.session_id, bridge: { ...activeBridge, source_session_id: session.session_id }, config, plotData: data }
+      toast.success(`Crossplot generated from ${session.file_name}`)
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'Crossplot generation failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const update = (key: string, value: any) => setConfig((prev: any) => ({ ...prev, [key]: value }))
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px,360px) minmax(0,1fr)', gap: 18 }}>
+      <div style={{ display: 'grid', gap: 12 }}>
+        <div style={{ color: muted, fontSize: 13 }}>Using active LAS: <b style={{ color: text }}>{session?.file_name || 'No LAS loaded'}</b></div>
+        <Control label="X Axis Curve"><select style={field(isLight)} value={config.x_curve} onChange={event => update('x_curve', event.target.value)} disabled={!session}>{curves.map(curve => <option key={curve}>{curve}</option>)}</select></Control>
+        <Control label="Y Axis Curve"><select style={field(isLight)} value={config.y_curve} onChange={event => update('y_curve', event.target.value)} disabled={!session}>{curves.map(curve => <option key={curve}>{curve}</option>)}</select></Control>
+        <Control label="Color By"><select style={field(isLight)} value={config.color_by} onChange={event => update('color_by', event.target.value)} disabled={!session}>{['Depth', ...curves].map(curve => <option key={curve}>{curve}</option>)}</select></Control>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <Control label="X Scale"><select style={field(isLight)} value={config.x_scale} onChange={event => update('x_scale', event.target.value)}><option>Linear</option><option>Logarithmic</option></select></Control>
+          <Control label="Y Scale"><select style={field(isLight)} value={config.y_scale} onChange={event => update('y_scale', event.target.value)}><option>Linear</option><option>Logarithmic</option></select></Control>
+        </div>
+        <SliderLabel label="Point Size" value={config.point_size} min={2} max={12} step={1} onChange={value => update('point_size', value)} />
+        <SliderLabel label="Opacity" value={config.opacity} min={0.2} max={1} step={0.05} onChange={value => update('opacity', value)} />
+        <button onClick={run} disabled={loading || !session} style={{ ...primaryButton(accent), width: '100%' }}>{loading ? 'Generating...' : 'Generate Crossplot'}</button>
+      </div>
+      <div style={{ minWidth: 0 }}>
+        {plotData?.figure ? <PlotlyFigure figure={plotData.figure} isLight={isLight} showExport exportName={`crossplot_${plotData.x_curve}_vs_${plotData.y_curve}`} /> : <EmptyPlot border={border} muted={muted} text="Generate a crossplot from the uploaded Log Visualization LAS." />}
+      </div>
+    </div>
+  )
+}
+
+function LogVisualizationHistogramTab({ session, accent, isLight }: { session: any; accent: string; isLight: boolean }) {
+  const saved = transientModuleState.logVisualizationHistogram || {}
+  const [metadata, setMetadata] = useState<any>(() => saved.metadata || null)
+  const [result, setResult] = useState<any>(() => saved.result || null)
+  const [loading, setLoading] = useState(false)
+  const curves: string[] = session?.curve_names || []
+  const [settings, setSettings] = useState<any>(() => saved.settings || {
+    selectedCurve: curves.includes('GR') ? 'GR' : curves[0] || '',
+    scaleType: 'Auto',
+    customMin: '',
+    customMax: '',
+    depthFrom: '',
+    depthTo: '',
+    bins: 30,
+    colorTheme: 'Auto by Curve',
+    opacity: 0.75,
+    kdeEnabled: true,
+    showMean: true,
+    showMedian: true,
+    showPercentiles: true,
+  })
+  const border = isLight ? '#E2E8F0' : '#1E293B'
+  const text = isLight ? '#0F172A' : '#F8FAFC'
+  const muted = isLight ? '#64748B' : '#94A3B8'
+
+  useEffect(() => {
+    transientModuleState.logVisualizationHistogram = { sourceSessionId: session?.session_id, metadata, settings, result }
+  }, [session?.session_id, metadata, settings, result])
+
+  useEffect(() => {
+    if (!session?.session_id) return
+    const stored = transientModuleState.logVisualizationHistogram || {}
+    if (stored.sourceSessionId === session.session_id) return
+    setMetadata(null)
+    setResult(null)
+    setSettings((prev: any) => ({ ...prev, selectedCurve: curves.includes('GR') ? 'GR' : curves[0] || '', depthFrom: '', depthTo: '' }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.session_id])
+
+  const update = (key: string, value: any) => setSettings((prev: any) => ({ ...prev, [key]: value }))
+
+  const generate = async () => {
+    if (!session?.session_id) return toast.error('Upload LAS in Log Visualization first')
+    if (!settings.selectedCurve) return toast.error('Select a curve')
+    setLoading(true)
+    try {
+      const activeMetadata = metadata?.source_session_id === session.session_id ? metadata : (await petrophysicsApi.loadHistogramFromPetroSession(session.session_id)).data
+      setMetadata({ ...activeMetadata, source_session_id: session.session_id })
+      const response = await petrophysicsApi.generateHistogram({
+        file_id: activeMetadata.file_id,
+        curve_name: settings.selectedCurve,
+        scale_type: settings.scaleType,
+        custom_min: emptyToNull(settings.customMin),
+        custom_max: emptyToNull(settings.customMax),
+        depth_from: emptyToNull(settings.depthFrom),
+        depth_to: emptyToNull(settings.depthTo),
+        bins: settings.bins,
+        opacity: settings.opacity,
+        kde_enabled: settings.kdeEnabled,
+        show_mean: settings.showMean,
+        show_median: settings.showMedian,
+        show_percentiles: settings.showPercentiles,
+      })
+      setResult(response.data)
+      transientModuleState.logVisualizationHistogram = { sourceSessionId: session.session_id, metadata: { ...activeMetadata, source_session_id: session.session_id }, settings, result: response.data }
+      toast.success(`Histogram generated from ${session.file_name}`)
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'Histogram generation failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const figure = result ? buildHistogramFigure(result, settings, metadata || session, isLight) : null
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px,360px) minmax(0,1fr)', gap: 18 }}>
+      <div style={{ display: 'grid', gap: 12 }}>
+        <div style={{ color: muted, fontSize: 13 }}>Using active LAS: <b style={{ color: text }}>{session?.file_name || 'No LAS loaded'}</b></div>
+        <Control label="Curve"><select style={field(isLight)} value={settings.selectedCurve} onChange={event => update('selectedCurve', event.target.value)} disabled={!session}>{curves.map(curve => <option key={curve}>{curve}</option>)}</select></Control>
+        <Control label="Scale Type"><select style={field(isLight)} value={settings.scaleType} onChange={event => update('scaleType', event.target.value)}><option>Auto</option><option>Linear</option><option>Logarithmic</option></select></Control>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <Control label="Depth From"><input style={field(isLight)} value={settings.depthFrom} onChange={event => update('depthFrom', event.target.value)} placeholder={session?.depth_min ? String(Math.round(Number(session.depth_min))) : ''} /></Control>
+          <Control label="Depth To"><input style={field(isLight)} value={settings.depthTo} onChange={event => update('depthTo', event.target.value)} placeholder={session?.depth_max ? String(Math.round(Number(session.depth_max))) : ''} /></Control>
+        </div>
+        <SliderLabel label="Bins" value={settings.bins} min={10} max={80} step={1} onChange={value => update('bins', value)} />
+        <SliderLabel label="Opacity" value={settings.opacity} min={0.2} max={1} step={0.05} onChange={value => update('opacity', value)} />
+        <button onClick={generate} disabled={loading || !session} style={{ ...primaryButton(accent), width: '100%' }}>{loading ? 'Generating...' : 'Generate Histogram'}</button>
+      </div>
+      <div style={{ minWidth: 0 }}>
+        {figure ? <PlotlyFigure figure={figure} isLight={isLight} showExport exportName={`${settings.selectedCurve}_histogram`} /> : <EmptyPlot border={border} muted={muted} text="Generate a histogram from the uploaded Log Visualization LAS." />}
+      </div>
+    </div>
   )
 }
 
@@ -432,7 +619,7 @@ function LogInterpretation({ curves, selected, muted, text }: { curves: string[]
 
 function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
   const saved = transientModuleState.missingLog || {}
-  const [session] = useState<any>(() => readPetroSession())
+  const [session, setSession] = useState<any>(() => saved.session || readPetroSession())
   const [analysis, setAnalysis] = useState<any>(() => saved.analysis || null)
   const [result, setResult] = useState<any>(() => saved.result || null)
   const [busy, setBusy] = useState(false)
@@ -448,8 +635,15 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
   const selectedModel = modelCandidates.find(model => model.key === config.model) || modelCandidates[0]
 
   useEffect(() => {
-    transientModuleState.missingLog = { analysis, result, config }
-  }, [analysis, result, config])
+    transientModuleState.missingLog = { session, analysis, result, config }
+  }, [session, analysis, result, config])
+
+  const replaceSession = (nextSession: any) => {
+    setSession(nextSession)
+    setAnalysis(null)
+    setResult(null)
+    setConfig({ target: '', model: 'extra_trees', depthMin: '', depthMax: '', features: [] })
+  }
 
   const analyze = async () => {
     if (!hasUserSession) return toast.error('Upload a real LAS file in Log Visualization first')
@@ -526,7 +720,7 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
 
   return (
     <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
-      <ActionHeader accent={accent} isLight={isLight} label="Missing Log Prediction" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? `${session.file_name} - analyze gaps, select a target log, and run prediction.` : 'This module uses the LAS uploaded in Log Visualization. Demo sessions are not used for missing-log prediction.'} actions={<><button onClick={analyze} disabled={busy || !hasUserSession} style={smallButton(isLight)}>{busy ? 'Analyzing...' : 'Analyze LAS'}</button><button onClick={run} disabled={busy || !hasUserSession || !analysis} style={{ ...primaryButton(accent), width: 210 }}>{busy ? 'Running...' : 'Run Prediction'}</button></>} />
+      <ActionHeader accent={accent} isLight={isLight} label="Missing Log Prediction" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? `${session.file_name} - analyze gaps, select a target log, and run prediction.` : 'This module uses the LAS uploaded in Log Visualization. Demo sessions are not used for missing-log prediction.'} actions={<><SharedLasActions isLight={isLight} busy={busy} setBusy={setBusy} onSession={replaceSession} /><button onClick={analyze} disabled={busy || !hasUserSession} style={smallButton(isLight)}>{busy ? 'Analyzing...' : 'Analyze LAS'}</button><button onClick={run} disabled={busy || !hasUserSession || !analysis} style={{ ...primaryButton(accent), width: 210 }}>{busy ? 'Running...' : 'Run Prediction'}</button></>} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px,430px) minmax(0,1fr)', gap: 18 }}>
         <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
@@ -632,9 +826,63 @@ function InfoPair({ label, value, muted }: { label: string; value: any; muted: s
   </div>
 }
 
+function SharedLasActions({
+  isLight,
+  busy,
+  setBusy,
+  onSession,
+}: {
+  isLight: boolean
+  busy: boolean
+  setBusy: (value: boolean) => void
+  onSession: (session: any) => void
+}) {
+  const uploadLas = async (file?: File) => {
+    if (!file) return
+    setBusy(true)
+    try {
+      const response = await petrophysicsApi.uploadPetroLas(file)
+      savePetroSession({ ...response.data, is_demo: false })
+      onSession({ ...response.data, is_demo: false })
+      transientModuleState.prediction = {}
+      transientModuleState.uncertainty = {}
+      transientModuleState.missingLog = {}
+      toast.success(`LAS "${file.name}" uploaded and active`)
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'LAS upload failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const loadLas = () => {
+    const active = readPetroSession()
+    if (!active?.session_id) return toast.error('Upload LAS in Log Visualization first')
+    onSession(active)
+    toast.success(`Loaded active LAS: ${active.file_name || active.well_name}`)
+  }
+
+  return <>
+    <button
+      onClick={() => {
+        const input = document.createElement('input')
+        input.type = 'file'
+        input.accept = '.las'
+        input.onchange = event => uploadLas((event.target as HTMLInputElement).files?.[0])
+        input.click()
+      }}
+      disabled={busy}
+      style={smallButton(isLight)}
+    >
+      Upload LAS
+    </button>
+    <button onClick={loadLas} disabled={busy} style={smallButton(isLight)}>Load LAS</button>
+  </>
+}
+
 function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
   const saved = transientModuleState.prediction || {}
-  const [session, setSession] = useState<any>(() => readPetroSession())
+  const [session, setSession] = useState<any>(() => saved.session || readPetroSession())
   const [result, setResult] = useState<any>(() => saved.result || null)
   const [busy, setBusy] = useState(false)
   const border = isLight ? '#E2E8F0' : '#1E293B'
@@ -642,14 +890,26 @@ function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLi
   const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
   const hasUserSession = isUserUploadedPetroSession(session)
   useEffect(() => {
-    transientModuleState.prediction = { result }
-  }, [result])
+    const latest = readPetroSession()
+    if (latest?.session_id && latest.session_id !== session?.session_id) {
+      setSession(latest)
+      setResult(null)
+    }
+  }, [])
+  useEffect(() => {
+    transientModuleState.prediction = { session, result }
+  }, [session, result])
+  const replaceSession = (nextSession: any) => {
+    setSession(nextSession)
+    setResult(null)
+  }
   const run = async () => {
     if (!hasUserSession) return toast.error('Upload a real LAS file in Log Visualization first')
     setBusy(true)
     try {
       const response = await petrophysicsApi.generatePetroPrediction(session.session_id)
       setResult(response.data)
+      transientModuleState.prediction = { session, result: response.data }
       toast.success('AI parameter prediction complete')
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'AI prediction failed')
@@ -660,7 +920,7 @@ function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLi
   const cards = result?.summary_cards || {}
   return (
     <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
-      <ActionHeader accent={accent} isLight={isLight} label="AI Parameter Prediction" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? `${session.file_name} - ${session.rows?.toLocaleString?.()} samples` : 'Prediction uses only the user uploaded LAS from Log Visualization. Demo data is not used here.'} actions={<button onClick={run} disabled={busy || !hasUserSession} style={{ ...primaryButton(accent), width: 210 }}>{busy ? 'Calculating...' : 'Calculate Prediction'}</button>} />
+      <ActionHeader accent={accent} isLight={isLight} label="AI Parameter Prediction" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? `${session.file_name} - ${session.rows?.toLocaleString?.()} samples` : 'Prediction uses only the user uploaded LAS from Log Visualization. Demo data is not used here.'} actions={<><SharedLasActions isLight={isLight} busy={busy} setBusy={setBusy} onSession={replaceSession} /><button onClick={run} disabled={busy || !hasUserSession} style={{ ...primaryButton(accent), width: 210 }}>{busy ? 'Calculating...' : 'Calculate Prediction'}</button></>} />
       {result ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 14 }}>
         <Metric label="Avg PHI P50" value={cards.avg_phi_p50 ?? '--'} />
         <Metric label="Avg SW P50" value={cards.avg_sw_p50 ?? '--'} />
@@ -677,7 +937,7 @@ function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLi
 
 function PetrophysicsUncertaintyPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
   const saved = transientModuleState.uncertainty || {}
-  const [session, setSession] = useState<any>(() => readPetroSession())
+  const [session, setSession] = useState<any>(() => saved.session || readPetroSession())
   const [result, setResult] = useState<any>(() => saved.result || null)
   const [busy, setBusy] = useState(false)
   const [params, setParams] = useState(() => saved.params || { phi_unc: 0.03, phi_pct: 0.1, sw_unc: 0.05, sw_pct: 0.1 })
@@ -686,14 +946,31 @@ function PetrophysicsUncertaintyPanel({ accent, isLight }: { accent: string; isL
   const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
   const hasUserSession = isUserUploadedPetroSession(session)
   useEffect(() => {
-    transientModuleState.uncertainty = { result, params }
-  }, [result, params])
+    const latest = readPetroSession()
+    if (latest?.session_id && latest.session_id !== session?.session_id) {
+      setSession(latest)
+      setResult(null)
+    }
+  }, [])
+  useEffect(() => {
+    transientModuleState.uncertainty = { session, result, params }
+  }, [session, result, params])
+  const replaceSession = (nextSession: any) => {
+    setSession(nextSession)
+    setResult(null)
+  }
   const run = async () => {
     if (!hasUserSession) return toast.error('Upload a real LAS file in Log Visualization first')
     setBusy(true)
     try {
+      const prediction = transientModuleState.prediction || {}
+      if (!prediction.result || prediction.session?.session_id !== session.session_id) {
+        const predictionResponse = await petrophysicsApi.generatePetroPrediction(session.session_id)
+        transientModuleState.prediction = { session, result: predictionResponse.data }
+      }
       const response = await petrophysicsApi.generatePetroUncertainty({ session_id: session.session_id, ...params })
       setResult(response.data)
+      transientModuleState.uncertainty = { session, result: response.data, params }
       toast.success('Uncertainty calculated')
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'Uncertainty calculation failed')
@@ -704,7 +981,7 @@ function PetrophysicsUncertaintyPanel({ accent, isLight }: { accent: string; isL
   const cards = result?.summary_cards || {}
   return (
     <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
-      <ActionHeader accent={accent} isLight={isLight} label="AI Uncertainty" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? 'P10 / P50 / P90 envelopes are computed from uploaded LAS-derived prediction curves.' : 'Uncertainty uses only the user uploaded LAS from Log Visualization. Demo data is not used here.'} actions={<button onClick={run} disabled={busy || !hasUserSession} style={{ ...primaryButton(accent), width: 220 }}>{busy ? 'Calculating...' : 'Calculate Uncertainty'}</button>} />
+      <ActionHeader accent={accent} isLight={isLight} label="AI Uncertainty" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? 'P10 / P50 / P90 envelopes are computed from uploaded LAS-derived prediction curves.' : 'Uncertainty uses only the user uploaded LAS from Log Visualization. Demo data is not used here.'} actions={<><SharedLasActions isLight={isLight} busy={busy} setBusy={setBusy} onSession={replaceSession} /><button onClick={run} disabled={busy || !hasUserSession} style={{ ...primaryButton(accent), width: 220 }}>{busy ? 'Calculating...' : 'Calculate Uncertainty'}</button></>} />
       <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
         <Control label="Porosity Fixed +/-"><input style={field(isLight)} type="number" step="0.01" value={params.phi_unc} onChange={e => setParams((prev: any) => ({ ...prev, phi_unc: Number(e.target.value) }))} /></Control>
         <Control label="Porosity Pct"><input style={field(isLight)} type="number" step="0.01" value={params.phi_pct} onChange={e => setParams((prev: any) => ({ ...prev, phi_pct: Number(e.target.value) }))} /></Control>

@@ -9,6 +9,9 @@ import DataManagementPage from './pages/DataManagementPage'
 import ReportsPage from './pages/ReportsPage'
 import SettingsPage from './pages/SettingsPage'
 import UIOnlyModulePage from './pages/UIOnlyModulePage'
+import FaciesClassificationPage from './pages/FaciesClassificationPage'
+import FormationTopsPage from './pages/FormationTopsPage'
+import GeothermalPage from './pages/GeothermalPage'
 import { useStore } from './store'
 
 const queryClient = new QueryClient({
@@ -39,8 +42,8 @@ const router = createBrowserRouter([
 
       { path: 'petrophysics/log-visualization', element: <UIOnlyModulePage title="Log Visualization" kind="logs" /> },
       { path: 'petrophysics/missing-log-prediction', element: <UIOnlyModulePage title="Missing Log Prediction" kind="logs" accent="#8B5CF6" /> },
-      { path: 'petrophysics/ai-facies-classification', element: <UIOnlyModulePage title="AI Facies Classification" kind="logs" accent="#F59E0B" /> },
-      { path: 'petrophysics/ai-formation-tops', element: <UIOnlyModulePage title="AI Formation Tops" kind="logs" accent="#10B981" /> },
+      { path: 'petrophysics/ai-facies-classification', element: <FaciesClassificationPage /> },
+      { path: 'petrophysics/ai-formation-tops', element: <FormationTopsPage /> },
       { path: 'petrophysics/ai-parameter-prediction', element: <UIOnlyModulePage title="AI Parameter Prediction" kind="logs" accent="#DA2626" /> },
       { path: 'petrophysics/ai-uncertainty', element: <UIOnlyModulePage title="AI Uncertainty" kind="logs" accent="#EF4444" /> },
       { path: 'petrophysics/auto-splicer', element: <UIOnlyModulePage title="Auto Splicer" kind="logs" accent="#10B981" /> },
@@ -53,6 +56,7 @@ const router = createBrowserRouter([
       { path: 'production/ai-artificial-lift', element: <UIOnlyModulePage title="AI Artificial Lift" kind="production" accent="#DA2626" /> },
 
       { path: 'ccus/ai-preliminary-screening', element: <UIOnlyModulePage title="AI Preliminary Screening Using Well Logs" kind="ccus" accent="#10B981" /> },
+      { path: 'geothermal/log-based-screening', element: <GeothermalPage /> },
 
       { path: 'digitizer/drake-slm-gpt', element: <UIOnlyModulePage title="Drake SLM/GPT" kind="digitizer" accent="#EF4444" /> },
       { path: 'digitizer/drake-ocr', element: <UIOnlyModulePage title="Drake OCR" kind="digitizer" accent="#DA2626" /> },
