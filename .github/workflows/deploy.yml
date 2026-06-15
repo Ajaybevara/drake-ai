@@ -8,6 +8,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -17,6 +18,18 @@ jobs:
           key: ${{ secrets.EC2_KEY }}
           script: |
             cd ~/drake-ai-main
-            git pull origin test
+
+            echo "Updating code..."
+            git fetch origin
+            git reset --hard origin/test
+
+            echo "Stopping old containers..."
+            docker-compose down --remove-orphans || true
+
+            echo "Building images..."
             docker-compose build backend frontend
-            docker-compose up -d --no-deps backend frontend
+
+            echo "Starting containers..."
+            docker-compose up -d
+
+            echo "Deployment completed."
