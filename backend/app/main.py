@@ -8,7 +8,7 @@ import os
 from backend.app.core.config import settings
 from backend.app.core.database import engine, Base
 from backend.app.core.seed import seed_db
-from backend.app.api import auth, projects, wells, curves, files, ai_jobs, reports, gpt, petrophysics, seismic, geothermal
+from backend.app.api import auth, projects, wells, curves, files, ai_jobs, reports, gpt, petrophysics, seismic, geothermal, production
 from backend.ccus.router import router as ccus_router
 
 
@@ -62,6 +62,7 @@ app.include_router(gpt.router,      prefix="/api/gpt",      tags=["Drake GPT"])
 app.include_router(petrophysics.router, prefix="/api/petrophysics", tags=["Petrophysics"])
 app.include_router(seismic.router, prefix="/api/seismic", tags=["Seismic"])
 app.include_router(geothermal.router, prefix="/api/geothermal", tags=["Geothermal"])
+app.include_router(production.router, prefix="/api/production", tags=["Production"])
 app.include_router(ccus_router)
 
 

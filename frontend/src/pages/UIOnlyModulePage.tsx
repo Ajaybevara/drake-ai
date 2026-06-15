@@ -2,7 +2,7 @@ import { useStore } from '../store'
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
-import { ccusApi, petrophysicsApi, seismicApi } from '../services/api'
+import { ccusApi, petrophysicsApi, productionApi, seismicApi } from '../services/api'
 
 interface Props {
   title: string
@@ -25,6 +25,7 @@ export default function UIOnlyModulePage({ title, subtitle = DEFAULT_SUBTITLE, a
   const isParameterPrediction = kind === 'logs' && title.toLowerCase().includes('parameter prediction')
   const isUncertainty = kind === 'logs' && title.toLowerCase().includes('uncertainty')
   const isAutoSplicer = kind === 'logs' && title.toLowerCase().includes('auto splicer')
+  const isProductionIntelligence = kind === 'production'
   const displaySubtitle = isSeismicEnhancer
     ? 'Fetched from the integrated GitHub seismic backend: SEG-Y 3D low-frequency enhancement with inline/crossline/time visualization.'
     : isCcusScreening
@@ -92,6 +93,8 @@ export default function UIOnlyModulePage({ title, subtitle = DEFAULT_SUBTITLE, a
         <PetrophysicsUncertaintyPanel accent={accent} isLight={isLight} />
       ) : isAutoSplicer ? (
         <AutoSplicerPanel accent={accent} isLight={isLight} />
+      ) : isProductionIntelligence ? (
+        <ProductionIntelligencePanel accent={accent} isLight={isLight} />
       ) : (
 
         <section style={gridStyle}>
@@ -304,6 +307,8 @@ function LogVisualizationCrossplotTab({ session, accent, isLight }: { session: a
     color_by: curves.includes('GR') ? 'GR' : 'Depth',
     x_scale: 'Linear',
     y_scale: 'Linear',
+    depth_from: '',
+    depth_to: '',
     point_size: 6,
     opacity: 0.82,
   })
@@ -327,27 +332,51 @@ function LogVisualizationCrossplotTab({ session, accent, isLight }: { session: a
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.session_id])
 
-  const run = async () => {
+  const run = async (silent = false) => {
     if (!session?.session_id) return toast.error('Upload LAS in Log Visualization first')
     if (!config.x_curve || !config.y_curve || config.x_curve === config.y_curve) return toast.error('Select two different curves')
+    const requestedFrom = config.depth_from === '' ? null : Number(config.depth_from)
+    const requestedTo = config.depth_to === '' ? null : Number(config.depth_to)
+    if (requestedFrom != null && requestedTo != null && requestedFrom > requestedTo) {
+      if (!silent) toast.error('From Depth must be less than or equal to To Depth')
+      return
+    }
+    const sessionMin = session?.depth_min != null ? Number(session.depth_min) : null
+    const sessionMax = session?.depth_max != null ? Number(session.depth_max) : null
+    if (sessionMin != null && sessionMax != null && ((requestedTo != null && requestedTo < sessionMin) || (requestedFrom != null && requestedFrom > sessionMax))) {
+      if (!silent) toast.error(`Depth range must overlap ${sessionMin.toFixed(2)} - ${sessionMax.toFixed(2)}`)
+      return
+    }
     setLoading(true)
     try {
       const activeBridge = bridge?.source_session_id === session.session_id ? bridge : (await petrophysicsApi.loadCrossplotFromPetroSession(session.session_id)).data
       setBridge({ ...activeBridge, source_session_id: session.session_id })
-      const response = await petrophysicsApi.generateCrossplot({ ...config, session_id: activeBridge.session_id })
+      const response = await petrophysicsApi.generateCrossplot({
+        ...config,
+        depth_from: requestedFrom,
+        depth_to: requestedTo,
+        session_id: activeBridge.session_id,
+      })
       const data = response.data
       data.figure = applyCrossplotFigureStyle(data.figure, config, isLight, accent)
       setPlotData(data)
       transientModuleState.logVisualizationCrossplot = { sourceSessionId: session.session_id, bridge: { ...activeBridge, source_session_id: session.session_id }, config, plotData: data }
-      toast.success(`Crossplot generated from ${session.file_name}`)
+      if (!silent) toast.success(`Crossplot generated from ${session.file_name}`)
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Crossplot generation failed')
+      if (!silent) toast.error(error?.response?.data?.detail || 'Crossplot generation failed')
     } finally {
       setLoading(false)
     }
   }
 
   const update = (key: string, value: any) => setConfig((prev: any) => ({ ...prev, [key]: value }))
+
+  useEffect(() => {
+    if (!plotData?.figure || !session?.session_id || loading) return
+    const timer = window.setTimeout(() => run(true), 300)
+    return () => window.clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.point_size, config.opacity])
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px,360px) minmax(0,1fr)', gap: 18 }}>
@@ -357,12 +386,16 @@ function LogVisualizationCrossplotTab({ session, accent, isLight }: { session: a
         <Control label="Y Axis Curve"><select style={field(isLight)} value={config.y_curve} onChange={event => update('y_curve', event.target.value)} disabled={!session}>{curves.map(curve => <option key={curve}>{curve}</option>)}</select></Control>
         <Control label="Color By"><select style={field(isLight)} value={config.color_by} onChange={event => update('color_by', event.target.value)} disabled={!session}>{['Depth', ...curves].map(curve => <option key={curve}>{curve}</option>)}</select></Control>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <Control label="From Depth"><input style={field(isLight)} type="number" value={config.depth_from} placeholder={session?.depth_min != null ? String(Number(session.depth_min).toFixed(2)) : 'Auto'} onChange={event => update('depth_from', event.target.value)} disabled={!session} /></Control>
+          <Control label="To Depth"><input style={field(isLight)} type="number" value={config.depth_to} placeholder={session?.depth_max != null ? String(Number(session.depth_max).toFixed(2)) : 'Auto'} onChange={event => update('depth_to', event.target.value)} disabled={!session} /></Control>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <Control label="X Scale"><select style={field(isLight)} value={config.x_scale} onChange={event => update('x_scale', event.target.value)}><option>Linear</option><option>Logarithmic</option></select></Control>
           <Control label="Y Scale"><select style={field(isLight)} value={config.y_scale} onChange={event => update('y_scale', event.target.value)}><option>Linear</option><option>Logarithmic</option></select></Control>
         </div>
         <SliderLabel label="Point Size" value={config.point_size} min={2} max={12} step={1} onChange={value => update('point_size', value)} />
         <SliderLabel label="Opacity" value={config.opacity} min={0.2} max={1} step={0.05} onChange={value => update('opacity', value)} />
-        <button onClick={run} disabled={loading || !session} style={{ ...primaryButton(accent), width: '100%' }}>{loading ? 'Generating...' : 'Generate Crossplot'}</button>
+        <button onClick={() => run()} disabled={loading || !session} style={{ ...primaryButton(accent), width: '100%' }}>{loading ? 'Generating...' : 'Generate Crossplot'}</button>
       </div>
       <div style={{ minWidth: 0 }}>
         {plotData?.figure ? <PlotlyFigure figure={plotData.figure} isLight={isLight} showExport exportName={`crossplot_${plotData.x_curve}_vs_${plotData.y_curve}`} /> : <EmptyPlot border={border} muted={muted} text="Generate a crossplot from the uploaded Log Visualization LAS." />}
@@ -884,11 +917,31 @@ function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLi
   const saved = transientModuleState.prediction || {}
   const [session, setSession] = useState<any>(() => saved.session || readPetroSession())
   const [result, setResult] = useState<any>(() => saved.result || null)
+  const [activeTab, setActiveTab] = useState<string>(() => saved.activeTab || 'Vsh')
+  const [config, setConfig] = useState<any>(() => saved.config || {
+    ai_model: 'random_forest',
+    gr_curve: '',
+    gr_min: 20,
+    gr_max: 120,
+    vsh_method: 'Linear',
+    porosity_curve: '',
+    matrix_density: 2.65,
+    fluid_density: 1.0,
+    saturation_curve: '',
+    rw: 0.1,
+    archie_a: 1,
+    archie_m: 2,
+    archie_n: 2,
+    permeability_method: 'Timur',
+  })
   const [busy, setBusy] = useState(false)
   const border = isLight ? '#E2E8F0' : '#1E293B'
   const muted = isLight ? '#64748B' : '#94A3B8'
+  const text = isLight ? '#0F172A' : '#F8FAFC'
   const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
   const hasUserSession = isUserUploadedPetroSession(session)
+  const curves: string[] = session?.curve_names || []
+  const groups = curveGroups(curves)
   useEffect(() => {
     const latest = readPetroSession()
     if (latest?.session_id && latest.session_id !== session?.session_id) {
@@ -897,8 +950,17 @@ function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLi
     }
   }, [])
   useEffect(() => {
-    transientModuleState.prediction = { session, result }
-  }, [session, result])
+    transientModuleState.prediction = { session, result, activeTab, config }
+  }, [session, result, activeTab, config])
+  useEffect(() => {
+    if (!curves.length) return
+    setConfig((prev: any) => ({
+      ...prev,
+      gr_curve: prev.gr_curve || groups.gamma[0] || curves[0] || '',
+      porosity_curve: prev.porosity_curve || groups.porosity[0] || groups.density[0] || curves[0] || '',
+      saturation_curve: prev.saturation_curve || groups.saturation[0] || groups.resistivity[0] || curves[0] || '',
+    }))
+  }, [session?.session_id])
   const replaceSession = (nextSession: any) => {
     setSession(nextSession)
     setResult(null)
@@ -907,9 +969,9 @@ function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLi
     if (!hasUserSession) return toast.error('Upload a real LAS file in Log Visualization first')
     setBusy(true)
     try {
-      const response = await petrophysicsApi.generatePetroPrediction(session.session_id)
+      const response = await petrophysicsApi.generatePetroPrediction({ session_id: session.session_id, ...config })
       setResult(response.data)
-      transientModuleState.prediction = { session, result: response.data }
+      transientModuleState.prediction = { session, result: response.data, activeTab, config }
       toast.success('AI parameter prediction complete')
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'AI prediction failed')
@@ -918,19 +980,49 @@ function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLi
     }
   }
   const cards = result?.summary_cards || {}
+  const records = result?.all_records || []
+  const tabs = ['Vsh', 'Porosity', 'Saturation', 'Permeability', 'Lithology', 'Final Export']
+  const activeRows = predictionRowsForTab(result, activeTab)
   return (
     <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
       <ActionHeader accent={accent} isLight={isLight} label="AI Parameter Prediction" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? `${session.file_name} - ${session.rows?.toLocaleString?.()} samples` : 'Prediction uses only the user uploaded LAS from Log Visualization. Demo data is not used here.'} actions={<><SharedLasActions isLight={isLight} busy={busy} setBusy={setBusy} onSession={replaceSession} /><button onClick={run} disabled={busy || !hasUserSession} style={{ ...primaryButton(accent), width: 210 }}>{busy ? 'Calculating...' : 'Calculate Prediction'}</button></>} />
       {result ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 14 }}>
-        <Metric label="Avg PHI P50" value={cards.avg_phi_p50 ?? '--'} />
-        <Metric label="Avg SW P50" value={cards.avg_sw_p50 ?? '--'} />
-        <Metric label="Avg PHI Spread" value={cards.avg_phi_spread ?? '--'} />
+        <Metric label="Avg AI PHIE" value={cards.avg_phi_p50 ?? '--'} />
+        <Metric label="Avg AI SW" value={cards.avg_sw_p50 ?? '--'} />
+        <Metric label="Avg AI Perm" value={cards.avg_perm_md ?? '--'} />
+        <Metric label="Avg Confidence" value={cards.avg_confidence ?? '--'} />
         <Metric label="Rows Processed" value={cards.rows?.toLocaleString?.() || '--'} />
       </div> : null}
-      <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
-        {result?.figure ? <PlotlyFigure figure={result.figure} isLight={isLight} showExport exportName={`${session?.well_name || 'well'}_ai_parameter_prediction`} /> : <EmptyPlot border={border} muted={muted} text="Upload a real LAS in Log Visualization, then run prediction." />}
-      </div>
-      {result?.records?.length ? <ResultTable title="AI Prediction - First 5 Rows" rows={result.records} isLight={isLight} accent={accent} /> : null}
+      {result ? (
+        <>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: 8, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+            {tabs.map(tab => (
+              <button key={tab} onClick={() => setActiveTab(tab)} style={{ padding: '11px 18px', borderRadius: 12, border: `1px solid ${activeTab === tab ? '#60A5FA' : border}`, background: activeTab === tab ? 'rgba(37,99,235,.18)' : 'transparent', color: activeTab === tab ? '#93C5FD' : muted, fontWeight: 800, cursor: 'pointer' }}>{tab}</button>
+            ))}
+          </div>
+          <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+            <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>{activeTab} Calculation</div>
+            <h2 style={{ margin: '8px 0 12px', color: isLight ? '#0F172A' : '#F8FAFC', fontSize: 24 }}>{predictionTitle(activeTab)}</h2>
+            <p style={{ margin: '0 0 14px', color: muted }}>{predictionNote(activeTab, records.length)}</p>
+            <PredictionFormulaForm activeTab={activeTab} config={config} setConfig={setConfig} groups={groups} curves={curves} isLight={isLight} accent={accent} />
+            {result ? <div style={{ marginTop: 18, padding: 16, borderRadius: 14, border: `1px solid ${border}`, background: isLight ? '#F8FAFC' : '#07111F' }}>
+              <div style={{ color: accent, fontWeight: 900, marginBottom: 8 }}>Active Formula</div>
+              <div style={{ color: text, lineHeight: 1.6 }}>{predictionFormula(activeTab, config)}</div>
+            </div> : null}
+          </div>
+          <ResultTable title={`${activeTab} - First 5 Rows`} rows={activeRows.slice(0, 5)} isLight={isLight} accent={accent} />
+          {activeTab === 'Final Export' ? (
+            <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+              <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Export Preview</div>
+              <p style={{ color: muted, margin: '8px 0 0' }}>Final export combines VSH, PHIT, PHIE, SW, permeability, lithology, confidence, and reliability from the integrated standalone prediction engine.</p>
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <EmptyPlot border={border} muted={muted} text="Upload or load a real LAS, then calculate AI Parameter Prediction." />
+        </div>
+      )}
     </section>
   )
 }
@@ -939,12 +1031,15 @@ function PetrophysicsUncertaintyPanel({ accent, isLight }: { accent: string; isL
   const saved = transientModuleState.uncertainty || {}
   const [session, setSession] = useState<any>(() => saved.session || readPetroSession())
   const [result, setResult] = useState<any>(() => saved.result || null)
-  const [busy, setBusy] = useState(false)
-  const [params, setParams] = useState(() => saved.params || { phi_unc: 0.03, phi_pct: 0.1, sw_unc: 0.05, sw_pct: 0.1 })
+  const [busy, setBusy] = useState<string | null>(null)
+  const [params, setParams] = useState(() => saved.params || { phi_method: 'fixed', phi_unc: 0.03, phi_pct: 0.1, sw_method: 'fixed', sw_unc: 0.05, sw_pct: 0.1, depthFrom: '', depthTo: '', phiDisplay: 'Fraction', swDisplay: 'Fraction', phiMin: '', phiMax: '', swMin: '', swMax: '', aiModel: 'Random Forest AI', phi_curve: '', sw_curve: '' })
   const border = isLight ? '#E2E8F0' : '#1E293B'
   const muted = isLight ? '#64748B' : '#94A3B8'
+  const text = isLight ? '#0F172A' : '#F8FAFC'
   const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
   const hasUserSession = isUserUploadedPetroSession(session)
+  const curves: string[] = session?.curve_names || []
+  const groups = curveGroups(curves)
   useEffect(() => {
     const latest = readPetroSession()
     if (latest?.session_id && latest.session_id !== session?.session_id) {
@@ -955,38 +1050,92 @@ function PetrophysicsUncertaintyPanel({ accent, isLight }: { accent: string; isL
   useEffect(() => {
     transientModuleState.uncertainty = { session, result, params }
   }, [session, result, params])
-  const replaceSession = (nextSession: any) => {
+  useEffect(() => {
+    if (!curves.length) return
+    setParams((prev: any) => ({
+      ...prev,
+      phi_curve: prev.phi_curve || groups.porosity[0] || groups.density[0] || curves[0] || '',
+      sw_curve: prev.sw_curve || groups.saturation[0] || groups.resistivity[0] || curves[0] || '',
+    }))
+  }, [session?.session_id])
+  const loadPredictionLas = () => {
+    const prediction = transientModuleState.prediction || {}
+    const nextSession = prediction.session || readPetroSession()
+    if (!nextSession?.session_id || !isUserUploadedPetroSession(nextSession)) {
+      toast.error('Run AI Parameter Prediction or load a real LAS from Log Visualization first')
+      return
+    }
     setSession(nextSession)
     setResult(null)
+    toast.success(`Loaded LAS for uncertainty: ${nextSession.file_name}`)
   }
-  const run = async () => {
+  const run = async (target: 'porosity' | 'saturation') => {
     if (!hasUserSession) return toast.error('Upload a real LAS file in Log Visualization first')
-    setBusy(true)
+    setBusy(target)
     try {
       const prediction = transientModuleState.prediction || {}
       if (!prediction.result || prediction.session?.session_id !== session.session_id) {
-        const predictionResponse = await petrophysicsApi.generatePetroPrediction(session.session_id)
+        const predictionResponse = await petrophysicsApi.generatePetroPrediction({ session_id: session.session_id, ai_model: params.aiModel })
         transientModuleState.prediction = { session, result: predictionResponse.data }
       }
       const response = await petrophysicsApi.generatePetroUncertainty({ session_id: session.session_id, ...params })
       setResult(response.data)
       transientModuleState.uncertainty = { session, result: response.data, params }
-      toast.success('Uncertainty calculated')
+      toast.success(`${target === 'porosity' ? 'Porosity' : 'Saturation'} uncertainty calculated`)
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'Uncertainty calculation failed')
     } finally {
-      setBusy(false)
+      setBusy(null)
     }
   }
   const cards = result?.summary_cards || {}
+  const filteredRecords = filterDepthRecords(result?.all_records || [], params.depthFrom, params.depthTo)
+  const phiFigure = uncertaintyFigure(filteredRecords, 'porosity', isLight)
+  const swFigure = uncertaintyFigure(filteredRecords, 'saturation', isLight)
+  const depthMin = result?.all_records?.[0]?.DEPTH ?? session?.depth_min
+  const depthMax = result?.all_records?.[result?.all_records?.length - 1]?.DEPTH ?? session?.depth_max
   return (
     <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
-      <ActionHeader accent={accent} isLight={isLight} label="AI Uncertainty" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? 'P10 / P50 / P90 envelopes are computed from uploaded LAS-derived prediction curves.' : 'Uncertainty uses only the user uploaded LAS from Log Visualization. Demo data is not used here.'} actions={<><SharedLasActions isLight={isLight} busy={busy} setBusy={setBusy} onSession={replaceSession} /><button onClick={run} disabled={busy || !hasUserSession} style={{ ...primaryButton(accent), width: 220 }}>{busy ? 'Calculating...' : 'Calculate Uncertainty'}</button></>} />
-      <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
-        <Control label="Porosity Fixed +/-"><input style={field(isLight)} type="number" step="0.01" value={params.phi_unc} onChange={e => setParams((prev: any) => ({ ...prev, phi_unc: Number(e.target.value) }))} /></Control>
-        <Control label="Porosity Pct"><input style={field(isLight)} type="number" step="0.01" value={params.phi_pct} onChange={e => setParams((prev: any) => ({ ...prev, phi_pct: Number(e.target.value) }))} /></Control>
-        <Control label="Sw Fixed +/-"><input style={field(isLight)} type="number" step="0.01" value={params.sw_unc} onChange={e => setParams((prev: any) => ({ ...prev, sw_unc: Number(e.target.value) }))} /></Control>
-        <Control label="Sw Pct"><input style={field(isLight)} type="number" step="0.01" value={params.sw_pct} onChange={e => setParams((prev: any) => ({ ...prev, sw_pct: Number(e.target.value) }))} /></Control>
+      <ActionHeader accent={accent} isLight={isLight} label="AI Uncertainty" title={hasUserSession ? session?.well_name : 'Load Prediction LAS First'} subtitle={hasUserSession ? 'Use separate porosity and saturation calculators with LAS-aware log selections.' : 'Uncertainty loads the LAS used by AI Parameter Prediction, or the active LAS from Log Visualization.'} actions={<button onClick={loadPredictionLas} disabled={!!busy} style={smallButton(isLight)}>Load LAS</button>} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(360px,1fr))', gap: 18 }}>
+        <UncertaintyConfigCard title="Porosity Uncertainty" tone="#2563EB" isLight={isLight}>
+          <Control label="AI Model"><select style={field(isLight)} value={params.aiModel} onChange={e => setParams((prev: any) => ({ ...prev, aiModel: e.target.value }))}><option>Random Forest AI</option><option>Gradient Boosting AI</option><option>Decision Tree AI</option></select></Control>
+          <Control label="Select Porosity Log"><select style={field(isLight)} value={params.phi_curve} onChange={e => setParams((prev: any) => ({ ...prev, phi_curve: e.target.value }))}>{(groups.porosity.length ? groups.porosity : groups.density.length ? groups.density : curves.length ? curves : ['NPHI']).map(curve => <option key={curve}>{curve}</option>)}</select></Control>
+          <div style={{ color: muted, fontSize: 13 }}>porosity / density / neutron logs from uploaded LAS</div>
+          <Control label="Depth Unit"><select style={field(isLight)} value="Feet (ft)" disabled><option>Feet (ft)</option></select></Control>
+          <div style={{ color: muted, fontSize: 13, fontStyle: 'italic' }}>LAS range: {depthMin ?? '--'} - {depthMax ?? '--'} ft</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <Control label="Min Depth"><input style={field(isLight)} value={params.depthFrom} onChange={e => setParams((prev: any) => ({ ...prev, depthFrom: e.target.value }))} placeholder={depthMin ?? 'Auto'} /></Control>
+            <Control label="Max Depth"><input style={field(isLight)} value={params.depthTo} onChange={e => setParams((prev: any) => ({ ...prev, depthTo: e.target.value }))} placeholder={depthMax ?? 'Auto'} /></Control>
+          </div>
+          <Control label="Curve Display"><select style={field(isLight)} value={params.phiDisplay} onChange={e => setParams((prev: any) => ({ ...prev, phiDisplay: e.target.value }))}><option>Fraction</option><option>Percent</option></select></Control>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <Control label="Min Porosity"><input style={field(isLight)} value={params.phiMin} onChange={e => setParams((prev: any) => ({ ...prev, phiMin: e.target.value }))} placeholder="Auto" /></Control>
+            <Control label="Max Porosity"><input style={field(isLight)} value={params.phiMax} onChange={e => setParams((prev: any) => ({ ...prev, phiMax: e.target.value }))} placeholder="Auto" /></Control>
+          </div>
+          <Control label="Porosity Method"><select style={field(isLight)} value={params.phi_method} onChange={e => setParams((prev: any) => ({ ...prev, phi_method: e.target.value }))}><option value="fixed">Fixed +/-</option><option value="percent">Percent</option></select></Control>
+          <Control label={params.phi_method === 'fixed' ? 'Fixed +/-' : 'Percent'}><input style={field(isLight)} type="number" step="0.01" value={params.phi_method === 'fixed' ? params.phi_unc : params.phi_pct} onChange={e => setParams((prev: any) => params.phi_method === 'fixed' ? { ...prev, phi_unc: Number(e.target.value) } : { ...prev, phi_pct: Number(e.target.value) })} /></Control>
+          <button onClick={() => run('porosity')} disabled={!!busy || !hasUserSession} style={{ ...primaryButton('#2563EB'), width: '100%' }}>{busy === 'porosity' ? 'Calculating...' : 'Calculate Porosity Uncertainty'}</button>
+        </UncertaintyConfigCard>
+        <UncertaintyConfigCard title="Saturation Uncertainty" tone="#B45309" isLight={isLight}>
+          <Control label="AI Model"><select style={field(isLight)} value={params.aiModel} onChange={e => setParams((prev: any) => ({ ...prev, aiModel: e.target.value }))}><option>Random Forest AI</option><option>Gradient Boosting AI</option><option>Decision Tree AI</option></select></Control>
+          <Control label="Select Saturation Log"><select style={field(isLight)} value={params.sw_curve} onChange={e => setParams((prev: any) => ({ ...prev, sw_curve: e.target.value }))}>{(groups.saturation.length ? groups.saturation : groups.resistivity.length ? groups.resistivity : curves.length ? curves : ['ILD']).map(curve => <option key={curve}>{curve}</option>)}</select></Control>
+          <div style={{ color: muted, fontSize: 13 }}>resistivity / saturation logs from uploaded LAS</div>
+          <Control label="Depth Unit"><select style={field(isLight)} value="Feet (ft)" disabled><option>Feet (ft)</option></select></Control>
+          <div style={{ color: muted, fontSize: 13, fontStyle: 'italic' }}>LAS range: {depthMin ?? '--'} - {depthMax ?? '--'} ft</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <Control label="Min Depth"><input style={field(isLight)} value={params.depthFrom} onChange={e => setParams((prev: any) => ({ ...prev, depthFrom: e.target.value }))} placeholder={depthMin ?? 'Auto'} /></Control>
+            <Control label="Max Depth"><input style={field(isLight)} value={params.depthTo} onChange={e => setParams((prev: any) => ({ ...prev, depthTo: e.target.value }))} placeholder={depthMax ?? 'Auto'} /></Control>
+          </div>
+          <Control label="Curve Display"><select style={field(isLight)} value={params.swDisplay} onChange={e => setParams((prev: any) => ({ ...prev, swDisplay: e.target.value }))}><option>Fraction</option><option>Percent</option></select></Control>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <Control label="Min Saturation"><input style={field(isLight)} value={params.swMin} onChange={e => setParams((prev: any) => ({ ...prev, swMin: e.target.value }))} placeholder="Auto" /></Control>
+            <Control label="Max Saturation"><input style={field(isLight)} value={params.swMax} onChange={e => setParams((prev: any) => ({ ...prev, swMax: e.target.value }))} placeholder="Auto" /></Control>
+          </div>
+          <Control label="Saturation Method"><select style={field(isLight)} value={params.sw_method} onChange={e => setParams((prev: any) => ({ ...prev, sw_method: e.target.value }))}><option value="fixed">Fixed +/-</option><option value="percent">Percent</option></select></Control>
+          <Control label={params.sw_method === 'fixed' ? 'Fixed +/-' : 'Percent'}><input style={field(isLight)} type="number" step="0.01" value={params.sw_method === 'fixed' ? params.sw_unc : params.sw_pct} onChange={e => setParams((prev: any) => params.sw_method === 'fixed' ? { ...prev, sw_unc: Number(e.target.value) } : { ...prev, sw_pct: Number(e.target.value) })} /></Control>
+          <button onClick={() => run('saturation')} disabled={!!busy || !hasUserSession} style={{ ...primaryButton('#B45309'), width: '100%' }}>{busy === 'saturation' ? 'Calculating...' : 'Calculate Saturation Uncertainty'}</button>
+        </UncertaintyConfigCard>
       </div>
       {result ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 14 }}>
         <Metric label="Avg PHI P50" value={cards.avg_phi_p50 ?? '--'} />
@@ -995,12 +1144,225 @@ function PetrophysicsUncertaintyPanel({ accent, isLight }: { accent: string; isL
         <Metric label="Avg SW Spread" value={cards.avg_sw_spread ?? '--'} />
       </div> : null}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(420px,1fr))', gap: 18 }}>
-        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>{result?.porosity_figure ? <PlotlyFigure figure={result.porosity_figure} isLight={isLight} showExport exportName="porosity_uncertainty" /> : <EmptyPlot border={border} muted={muted} text="Upload a real LAS in Log Visualization, then run uncertainty." />}</div>
-        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>{result?.saturation_figure ? <PlotlyFigure figure={result.saturation_figure} isLight={isLight} showExport exportName="saturation_uncertainty" /> : <EmptyPlot border={border} muted={muted} text="Upload a real LAS in Log Visualization, then run uncertainty." />}</div>
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}><h2 style={{ margin: 0, color: '#60A5FA' }}>Porosity Uncertainty: P10 / P50 / P90</h2>{phiFigure ? <PlotlyFigure figure={phiFigure} isLight={isLight} showExport exportName="porosity_uncertainty" /> : <EmptyPlot border={border} muted={muted} text="Calculate porosity uncertainty to display P10/P50/P90." />}</div>
+        <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}><h2 style={{ margin: 0, color: '#D97706' }}>Saturation Uncertainty: P10 / P50 / P90</h2>{swFigure ? <PlotlyFigure figure={swFigure} isLight={isLight} showExport exportName="saturation_uncertainty" /> : <EmptyPlot border={border} muted={muted} text="Calculate saturation uncertainty to display P10/P50/P90." />}</div>
       </div>
-      {result?.records?.length ? <ResultTable title="Uncertainty - First 5 Rows" rows={result.records} isLight={isLight} accent={accent} /> : null}
+      {result?.records?.length ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(420px,1fr))', gap: 18 }}>
+        <ResultTable title="Porosity Uncertainty - First 5 Rows" rows={filteredRecords.slice(0, 5).map((row: any, index: number) => ({ '#': index + 1, DEPTH: row.DEPTH, PHI_P10: row.PHI_P10, PHI_P50: row.PHI_P50, PHI_P90: row.PHI_P90, SPREAD: row.PHI_UNCERTAINTY_SPREAD }))} isLight={isLight} accent="#60A5FA" />
+        <ResultTable title="Saturation Uncertainty - First 5 Rows" rows={filteredRecords.slice(0, 5).map((row: any, index: number) => ({ '#': index + 1, DEPTH: row.DEPTH, SW_P10: row.SW_P10, SW_P50: row.SW_P50, SW_P90: row.SW_P90, SPREAD: row.SW_UNCERTAINTY_SPREAD }))} isLight={isLight} accent="#D97706" />
+      </div> : null}
+      {result ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(420px,1fr))', gap: 18 }}>
+        <InterpretationCard title="Porosity Uncertainty Interpretation" items={result.phi_interp || []} tone="#60A5FA" isLight={isLight} />
+        <InterpretationCard title="Saturation Uncertainty Interpretation" items={result.sw_interp || []} tone="#D97706" isLight={isLight} />
+      </div> : null}
     </section>
   )
+}
+
+function UncertaintyConfigCard({ title, tone, isLight, children }: { title: string; tone: string; isLight: boolean; children: React.ReactNode }) {
+  return (
+    <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${isLight ? '#D7E6F8' : '#233249'}`, background: isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.92),rgba(7,17,31,.96))', display: 'grid', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 10, borderBottom: `1px solid ${isLight ? '#E2E8F0' : '#1E293B'}` }}>
+        <span style={{ width: 10, height: 28, borderRadius: 6, background: `linear-gradient(180deg,${tone},#22C55E)` }} />
+        <h2 style={{ margin: 0, color: tone, fontSize: 20 }}>{title}</h2>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function InterpretationCard({ title, items, tone, isLight }: { title: string; items: string[]; tone: string; isLight: boolean }) {
+  return (
+    <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${isLight ? '#E2E8F0' : '#1E293B'}`, background: isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))' }}>
+      <h2 style={{ margin: '0 0 14px', color: tone, fontSize: 22 }}>{title}</h2>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {(items.length ? items : ['Run the uncertainty calculation to generate interpretation notes.']).map((item, index) => (
+          <div key={index} style={{ color: isLight ? '#334155' : '#CBD5E1', lineHeight: 1.5, display: 'flex', gap: 10 }}>
+            <span style={{ color: tone, fontWeight: 900 }}>*</span>
+            <span>{item}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function curveGroups(curves: string[]) {
+  const has = (name: string, keys: string[]) => keys.some(key => name.toUpperCase().includes(key))
+  return {
+    gamma: curves.filter(name => has(name, ['GR', 'GAMMA', 'CGR', 'SGR'])),
+    density: curves.filter(name => has(name, ['RHOB', 'RHOZ', 'DEN', 'ZDEN'])),
+    porosity: curves.filter(name => has(name, ['NPHI', 'PHI', 'POR', 'DPHI', 'PHIE', 'PHIT', 'TNPH'])),
+    resistivity: curves.filter(name => has(name, ['ILD', 'LLD', 'LL8', 'RESD', 'RT', 'RDEP', 'RES'])),
+    saturation: curves.filter(name => has(name, ['SW', 'SWT', 'WATER'])),
+    sonic: curves.filter(name => has(name, ['DT', 'DTC', 'DTP', 'SONIC', 'AC'])),
+  }
+}
+
+function PredictionFormulaForm({ activeTab, config, setConfig, groups, curves, isLight, accent }: { activeTab: string; config: any; setConfig: any; groups: any; curves: string[]; isLight: boolean; accent: string }) {
+  const update = (patch: any) => setConfig((prev: any) => ({ ...prev, ...patch }))
+  const options = (items: string[], fallback: string[]) => (items.length ? items : curves.length ? curves : fallback)
+  const grid3: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10 }
+  return (
+    <div style={{ display: 'grid', gap: 14 }}>
+      <div style={grid3}>
+        <Control label="AI Model">
+          <select style={field(isLight)} value={config.ai_model} onChange={e => update({ ai_model: e.target.value })}>
+            <option value="random_forest">Random Forest AI</option>
+            <option value="gradient_boosting">Gradient Boosting AI</option>
+            <option value="decision_tree">Decision Tree AI</option>
+            <option value="xgboost">XGBoost AI</option>
+          </select>
+        </Control>
+        <Control label="Depth Unit"><select style={field(isLight)} value="Feet (ft)" disabled><option>Feet (ft)</option></select></Control>
+      </div>
+      {activeTab === 'Vsh' ? (
+        <>
+          <div style={grid3}>
+            <Control label="GR Log"><select style={field(isLight)} value={config.gr_curve} onChange={e => update({ gr_curve: e.target.value })}>{options(groups.gamma, ['GR']).map(curve => <option key={curve}>{curve}</option>)}</select></Control>
+            <Control label="GRmin Clean Sand"><input style={field(isLight)} type="number" value={config.gr_min} onChange={e => update({ gr_min: Number(e.target.value) })} /></Control>
+            <Control label="GRmax Shale"><input style={field(isLight)} type="number" value={config.gr_max} onChange={e => update({ gr_max: Number(e.target.value) })} /></Control>
+          </div>
+          <Control label="Vsh Method"><select style={field(isLight)} value={config.vsh_method} onChange={e => update({ vsh_method: e.target.value })}><option>Linear</option><option>Larionov Tertiary</option><option>Larionov Older Rock</option><option>Clavier</option></select></Control>
+        </>
+      ) : null}
+      {activeTab === 'Porosity' ? (
+        <div style={grid3}>
+          <Control label="Porosity / Density Log"><select style={field(isLight)} value={config.porosity_curve} onChange={e => update({ porosity_curve: e.target.value })}>{options([...groups.porosity, ...groups.density, ...groups.sonic], ['NPHI']).map(curve => <option key={curve}>{curve}</option>)}</select></Control>
+          <Control label="Matrix Density"><input style={field(isLight)} type="number" step="0.01" value={config.matrix_density} onChange={e => update({ matrix_density: Number(e.target.value) })} /></Control>
+          <Control label="Fluid Density"><input style={field(isLight)} type="number" step="0.01" value={config.fluid_density} onChange={e => update({ fluid_density: Number(e.target.value) })} /></Control>
+        </div>
+      ) : null}
+      {activeTab === 'Saturation' ? (
+        <div style={grid3}>
+          <Control label="Resistivity / Saturation Log"><select style={field(isLight)} value={config.saturation_curve} onChange={e => update({ saturation_curve: e.target.value })}>{options([...groups.saturation, ...groups.resistivity], ['ILD']).map(curve => <option key={curve}>{curve}</option>)}</select></Control>
+          <Control label="Rw"><input style={field(isLight)} type="number" step="0.01" value={config.rw} onChange={e => update({ rw: Number(e.target.value) })} /></Control>
+          <Control label="Archie a / m / n"><input style={field(isLight)} value={`${config.archie_a}, ${config.archie_m}, ${config.archie_n}`} onChange={e => {
+            const [a, m, n] = e.target.value.split(',').map(value => Number(value.trim()))
+            update({ archie_a: Number.isFinite(a) ? a : config.archie_a, archie_m: Number.isFinite(m) ? m : config.archie_m, archie_n: Number.isFinite(n) ? n : config.archie_n })
+          }} /></Control>
+        </div>
+      ) : null}
+      {activeTab === 'Permeability' ? (
+        <div style={grid3}>
+          <Control label="Permeability Method"><select style={field(isLight)} value={config.permeability_method} onChange={e => update({ permeability_method: e.target.value })}><option>Timur</option><option>Coates</option><option>AI Ensemble</option></select></Control>
+          <Control label="Uses Porosity"><select style={field(isLight)} value={config.porosity_curve} onChange={e => update({ porosity_curve: e.target.value })}>{options([...groups.porosity, ...groups.density], ['NPHI']).map(curve => <option key={curve}>{curve}</option>)}</select></Control>
+          <Control label="Uses Saturation"><select style={field(isLight)} value={config.saturation_curve} onChange={e => update({ saturation_curve: e.target.value })}>{options([...groups.saturation, ...groups.resistivity], ['ILD']).map(curve => <option key={curve}>{curve}</option>)}</select></Control>
+        </div>
+      ) : null}
+      {activeTab === 'Lithology' || activeTab === 'Final Export' ? (
+        <div style={{ padding: 12, borderRadius: 12, border: `1px solid ${isLight ? '#D7E6F8' : '#233249'}`, color: isLight ? '#334155' : '#CBD5E1', background: isLight ? '#F8FAFC' : '#07111F' }}>
+          Lithology and final export are calculated from VSH, PHIE, SW, density, and confidence outputs generated by the selected AI model.
+        </div>
+      ) : null}
+      <div style={{ color: accent, fontSize: 13, fontWeight: 800 }}>Uploaded LAS curves available: {curves.length ? curves.join(', ') : 'No LAS loaded'}</div>
+    </div>
+  )
+}
+
+function predictionTitle(tab: string) {
+  if (tab === 'Vsh') return 'Vsh Calculation'
+  if (tab === 'Porosity') return 'Porosity Prediction'
+  if (tab === 'Saturation') return 'Water Saturation Prediction'
+  if (tab === 'Permeability') return 'Permeability Prediction'
+  if (tab === 'Lithology') return 'Lithology Classification'
+  return 'Final Export Preview'
+}
+
+function predictionNote(tab: string, rows: number) {
+  if (tab === 'Vsh') return `VSH calculated for ${rows.toLocaleString()} depth points from gamma-ray and AI-assisted curve context.`
+  if (tab === 'Porosity') return 'PHIT, PHIE and P10/P50/P90 porosity outputs from the integrated standalone prediction engine.'
+  if (tab === 'Saturation') return 'Water saturation estimates and P10/P50/P90 uncertainty-ready bands.'
+  if (tab === 'Permeability') return 'AI permeability in mD using nonlinear PHI/SW relationships from the standalone workflow.'
+  if (tab === 'Lithology') return 'Rule-assisted lithology labels using VSH, density and porosity conditions.'
+  return 'Combined export rows used by downstream uncertainty and reporting workflows.'
+}
+
+function predictionFormula(tab: string, config: any) {
+  if (tab === 'Vsh') return `IGR = (${config.gr_curve || 'GR'} - ${config.gr_min}) / (${config.gr_max} - ${config.gr_min}) -> VSH = IGR (${config.vsh_method})`
+  if (tab === 'Porosity') return `Density/neutron/sonic AI blend -> PHIT, then PHIE = PHIT x (1 - VSH). Density fallback: PHID = (${config.matrix_density} - RHOB) / (${config.matrix_density} - ${config.fluid_density}).`
+  if (tab === 'Saturation') return `Archie water saturation: SW = ((a x Rw) / (PHIE^m x Rt))^(1/n), using a=${config.archie_a}, Rw=${config.rw}, m=${config.archie_m}, n=${config.archie_n}.`
+  if (tab === 'Permeability') return `${config.permeability_method} / AI ensemble permeability from PHIE and SW. Timur style: K = 8581 x PHIE^4.4 / SW^2.`
+  if (tab === 'Lithology') return 'Lithology rules: density + VSH + PHIE -> Coal, Dolomite, Limestone, Shale, Shaly Sand, Clean Sandstone, or Unknown.'
+  return 'Final export = depth + VSH + PHIT/PHIE + SW + permeability + lithology + confidence + reliability.'
+}
+
+function predictionRowsForTab(result: any, tab: string) {
+  const bundle = result?.bundle || {}
+  const rows = result?.all_records || []
+  if (tab === 'Vsh') return rows.map((row: any, index: number) => ({ '#': index + 1, DEPTH: row.DEPTH, VSH: row.VSH, CONFIDENCE: row.CONFIDENCE }))
+  if (tab === 'Porosity') return bundle.porosity || []
+  if (tab === 'Saturation') return bundle.saturation || []
+  if (tab === 'Permeability') return bundle.permeability || []
+  if (tab === 'Lithology') return bundle.lithology || []
+  return bundle.preview || rows
+}
+
+function predictionFigureForTab(result: any, tab: string, isLight: boolean): any {
+  const records = result?.all_records || []
+  if (!records.length) return null
+  const depth = records.map((row: any) => row.DEPTH)
+  const paper = 'rgba(0,0,0,0)'
+  const plot = isLight ? '#FFFFFF' : '#06111F'
+  const grid = isLight ? '#E2E8F0' : '#1E293B'
+  const font = isLight ? '#0F172A' : '#BBD7FF'
+  const baseLayout = {
+    paper_bgcolor: paper,
+    plot_bgcolor: plot,
+    height: 520,
+    margin: { l: 70, r: 30, t: 35, b: 55 },
+    yaxis: { title: 'Depth (ft)', autorange: 'reversed', gridcolor: grid, color: font },
+    xaxis: { gridcolor: grid, color: font },
+    legend: { orientation: 'h', x: 0, y: 1.1 },
+    hovermode: 'closest',
+  }
+  const line = (key: string, name: string, color: string, dash = 'solid') => ({ x: records.map((row: any) => row[key]), y: depth, type: 'scatter', mode: 'lines', name, line: { color, width: 3, dash }, hovertemplate: `Depth: %{y:.2f}<br>${name}: %{x}<extra></extra>` })
+  if (tab === 'Vsh') return { data: [line('VSH', 'VSH', '#22C55E')], layout: { ...baseLayout, xaxis: { ...baseLayout.xaxis, title: 'VSH' } } }
+  if (tab === 'Porosity') return { data: [line('PHI_P10', 'P10', '#F97316', 'dot'), line('PHI_P50', 'P50', '#2563EB'), line('PHI_P90', 'P90', '#16A34A', 'dash')], layout: { ...baseLayout, xaxis: { ...baseLayout.xaxis, title: 'Porosity' } } }
+  if (tab === 'Saturation') return { data: [line('SW_P10', 'P10', '#F97316', 'dot'), line('SW_P50', 'P50', '#2563EB'), line('SW_P90', 'P90', '#16A34A', 'dash')], layout: { ...baseLayout, xaxis: { ...baseLayout.xaxis, title: 'Water Saturation' } } }
+  if (tab === 'Permeability') return { data: [line('PERM_P10', 'P10', '#F97316', 'dot'), line('PERM_P50', 'P50', '#2563EB'), line('PERM_P90', 'P90', '#16A34A', 'dash')], layout: { ...baseLayout, xaxis: { ...baseLayout.xaxis, title: 'Permeability (mD)', type: 'log' } } }
+  if (tab === 'Lithology') {
+    const labels = Array.from(new Set(records.map((row: any) => row.LITHOLOGY || 'Unknown')))
+    return { data: [{ x: records.map((row: any) => labels.indexOf(row.LITHOLOGY || 'Unknown')), y: depth, text: records.map((row: any) => row.LITHOLOGY), type: 'scattergl', mode: 'markers', name: 'Lithology', marker: { color: records.map((row: any) => labels.indexOf(row.LITHOLOGY || 'Unknown')), colorscale: 'Turbo', size: 7 }, hovertemplate: 'Depth: %{y:.2f}<br>%{text}<extra></extra>' }], layout: { ...baseLayout, xaxis: { ...baseLayout.xaxis, title: 'Lithology', tickmode: 'array', tickvals: labels.map((_, i) => i), ticktext: labels } } }
+  }
+  return { data: [line('PHI_P50', 'PHI P50', '#2563EB'), line('SW_P50', 'SW P50', '#D97706')], layout: { ...baseLayout, xaxis: { ...baseLayout.xaxis, title: 'Export Curves' } } }
+}
+
+function filterDepthRecords(records: any[], depthFrom: any, depthTo: any) {
+  const from = depthFrom === '' || depthFrom == null ? null : Number(depthFrom)
+  const to = depthTo === '' || depthTo == null ? null : Number(depthTo)
+  return records.filter(row => {
+    const depth = Number(row.DEPTH)
+    if (!Number.isFinite(depth)) return false
+    if (from != null && depth < from) return false
+    if (to != null && depth > to) return false
+    return true
+  })
+}
+
+function uncertaintyFigure(records: any[], kind: 'porosity' | 'saturation', isLight: boolean) {
+  if (!records.length) return null
+  const depth = records.map(row => row.DEPTH)
+  const isSat = kind === 'saturation'
+  const keys = isSat ? ['SW_P10', 'SW_P50', 'SW_P90'] : ['PHI_P10', 'PHI_P50', 'PHI_P90']
+  const names = isSat ? ['P10 (Low Sw)', 'P50 (Best Estimate)', 'P90 (High Sw)'] : ['P10 (Optimistic)', 'P50 (Best Estimate)', 'P90 (Conservative)']
+  const colors = ['#F97316', '#2563EB', '#16A34A']
+  const dashes = ['dot', 'solid', 'dash']
+  const grid = isLight ? '#E2E8F0' : '#1E293B'
+  const font = isLight ? '#0F172A' : '#BBD7FF'
+  return {
+    data: keys.map((key, index) => ({ x: records.map(row => row[key]), y: depth, type: 'scatter', mode: 'lines', name: names[index], line: { color: colors[index], width: index === 1 ? 3 : 2, dash: dashes[index] } })),
+    layout: {
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: isLight ? '#FFFFFF' : '#06111F',
+      height: 560,
+      margin: { l: 70, r: 25, t: 35, b: 55 },
+      yaxis: { title: 'Depth (ft)', autorange: 'reversed', gridcolor: grid, color: font },
+      xaxis: { title: isSat ? 'Water Saturation' : 'Porosity', gridcolor: grid, color: font },
+      legend: { x: 0.62, y: 0.08, bgcolor: isLight ? 'rgba(255,255,255,.88)' : 'rgba(15,23,42,.88)', bordercolor: grid, borderwidth: 1 },
+      hovermode: 'closest',
+    },
+  }
 }
 
 function AutoSplicerPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
@@ -1128,6 +1490,157 @@ function ResultTable({ title, rows, isLight, accent }: { title: string; rows: an
   return <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${isLight ? '#E2E8F0' : '#1E293B'}`, background: isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))' }}><div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>{title}</div><SimpleTable rows={rows} columns={columns} isLight={isLight} /></div>
 }
 
+function ProductionIntelligencePanel({ accent, isLight }: { accent: string; isLight: boolean }) {
+  const saved = transientModuleState.production || {}
+  const [result, setResult] = useState<any>(() => saved.result || null)
+  const [selectedModule, setSelectedModule] = useState<string>(() => saved.selectedModule || 'optimizer')
+  const [busy, setBusy] = useState(false)
+  const border = isLight ? '#E2E8F0' : '#1E293B'
+  const muted = isLight ? '#64748B' : '#94A3B8'
+  const text = isLight ? '#0F172A' : '#F8FAFC'
+  const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
+  useEffect(() => {
+    transientModuleState.production = { result, selectedModule }
+  }, [result, selectedModule])
+  const runSample = async () => {
+    setBusy(true)
+    try {
+      const response = await productionApi.sample()
+      setResult(response.data)
+      toast.success('Production sample analyzed')
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'Production analysis failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const uploadAndAnalyze = async (file?: File) => {
+    if (!file) return
+    setBusy(true)
+    try {
+      const response = await productionApi.analyze(file)
+      setResult(response.data)
+      toast.success(`Production file analyzed: ${file.name}`)
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'Production file analysis failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const modules = result?.modules || {}
+  const moduleEntries = Object.entries(modules) as any[]
+  const trend = result?.trend || []
+  const trendFigure = trend.length ? {
+    data: [
+      { x: trend.map((row: any) => row.Date), y: trend.map((row: any) => row['Oil Production (bbl/day)']), type: 'scatter', mode: 'lines', name: 'Oil', line: { color: '#22C55E', width: 3 } },
+      { x: trend.map((row: any) => row.Date), y: trend.map((row: any) => row['Water Production (bbl/day)']), type: 'scatter', mode: 'lines', name: 'Water', line: { color: '#38BDF8', width: 3 } },
+      { x: trend.map((row: any) => row.Date), y: trend.map((row: any) => Number(row['Gas Production (mcf/day)']) / 10), type: 'scatter', mode: 'lines', name: 'Gas / 10', line: { color: '#F59E0B', width: 3 } },
+    ],
+    layout: {
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: isLight ? '#FFFFFF' : '#06111F',
+      height: 420,
+      margin: { l: 55, r: 20, t: 25, b: 50 },
+      xaxis: { title: 'Date', gridcolor: isLight ? '#E2E8F0' : '#1E293B', color: isLight ? '#0F172A' : '#BBD7FF' },
+      yaxis: { title: 'Rate', gridcolor: isLight ? '#E2E8F0' : '#1E293B', color: isLight ? '#0F172A' : '#BBD7FF' },
+      legend: { orientation: 'h', x: 0, y: 1.1 },
+    },
+  } : null
+  const selected = modules[selectedModule] || moduleEntries[0]?.[1]
+  const selectedFigure = selected ? productionModuleFigure(selectedModule, selected.rows || [], isLight) : null
+  return (
+    <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
+      <ActionHeader
+        accent={accent}
+        isLight={isLight}
+        label="Production Intelligence"
+        title="Integrated Production Module"
+        subtitle="Runs artificial lift failure, optimizer, decline, performance, downtime, and workover ranking in one section."
+        actions={<>
+          <button onClick={runSample} disabled={busy} style={smallButton(isLight)}>{busy ? 'Loading...' : 'Load Sample'}</button>
+          <button
+            disabled={busy}
+            style={primaryButton(accent)}
+            onClick={() => {
+              const input = document.createElement('input')
+              input.type = 'file'
+              input.accept = '.csv,.xlsx,.xls'
+              input.onchange = event => uploadAndAnalyze((event.target as HTMLInputElement).files?.[0])
+              input.click()
+            }}
+          >
+            Upload Production File
+          </button>
+        </>}
+      />
+      {result ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 14 }}>
+        <Metric label="Wells" value={result.summary?.wells ?? '--'} />
+        <Metric label="Records" value={result.summary?.records?.toLocaleString?.() || '--'} />
+        <Metric label="Total Oil" value={result.summary?.total_oil?.toLocaleString?.() || '--'} />
+        <Metric label="Avg Water Cut" value={`${result.summary?.avg_water_cut ?? '--'}%`} />
+        <Metric label="Downtime Hours" value={result.summary?.downtime_hours?.toLocaleString?.() || '--'} />
+        <Metric label="Failure Events" value={result.summary?.failure_events ?? '--'} />
+      </div> : null}
+      <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+        {trendFigure ? <PlotlyFigure figure={trendFigure} isLight={isLight} showExport exportName="production_trend" /> : <EmptyPlot border={border} muted={muted} text="Load sample data or upload production data to run Production Intelligence." />}
+      </div>
+      {moduleEntries.length ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(270px,1fr))', gap: 18 }}>
+        {moduleEntries.map(([key, module]: any) => (
+          <button key={key} onClick={() => setSelectedModule(key)} style={{ textAlign: 'left', padding: 18, borderRadius: 16, border: `1px solid ${selectedModule === key ? accent : border}`, background: selectedModule === key ? `${accent}18` : panelBg, cursor: 'pointer' }}>
+            <h3 style={{ margin: 0, color: text, fontSize: 20 }}>{module.title}</h3>
+            <p style={{ margin: '12px 0', color: muted, lineHeight: 1.45 }}>{module.note}</p>
+            <span style={{ display: 'inline-flex', padding: '10px 14px', borderRadius: 12, background: isLight ? '#E2E8F0' : '#0B1628', color: text, fontWeight: 900 }}>Open Module</span>
+          </button>
+        ))}
+      </div> : null}
+      {selected ? <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div>
+            <h2 style={{ margin: 0, color: text, fontSize: 26 }}>{selected.title}</h2>
+            <p style={{ margin: '8px 0 0', color: muted }}>{selected.note}</p>
+          </div>
+          <button style={smallButton(isLight)}>Download Results CSV</button>
+        </div>
+        {selectedFigure ? <PlotlyFigure figure={selectedFigure} isLight={isLight} showExport exportName={`production_${selectedModule}`} /> : null}
+      </div> : null}
+      {selected ? <ResultTable title={`${selected.title} Results`} rows={selected.rows || []} isLight={isLight} accent={accent} /> : null}
+    </section>
+  )
+}
+
+function productionModuleFigure(moduleKey: string, rows: any[], isLight: boolean): any {
+  if (!rows.length) return null
+  const grid = isLight ? '#E2E8F0' : '#1E293B'
+  const font = isLight ? '#0F172A' : '#BBD7FF'
+  const layout = (title: string, yTitle: string) => ({
+    title,
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: isLight ? '#FFFFFF' : '#06111F',
+    height: 460,
+    margin: { l: 70, r: 25, t: 55, b: 85 },
+    xaxis: { gridcolor: grid, color: font, tickangle: -35 },
+    yaxis: { title: yTitle, gridcolor: grid, color: font },
+    font: { color: font },
+  })
+  const wells = rows.map(row => row.Well || row.well || '')
+  if (moduleKey === 'lift_failure') {
+    return { data: [{ x: wells, y: rows.map(row => row['Failure Risk (%)']), type: 'bar', marker: { color: '#EF4444' }, name: 'Failure Risk' }], layout: layout('AI Artificial Lift Failure Risk', 'Failure Risk (%)') }
+  }
+  if (moduleKey === 'optimizer') {
+    return { data: [{ x: wells, y: rows.map(row => row['Estimated Gain (%)']), type: 'bar', marker: { color: '#2563EB' }, name: 'Estimated Gain' }], layout: layout('Estimated Production Gain', 'Estimated Gain (%)') }
+  }
+  if (moduleKey === 'decline') {
+    return { data: [{ x: wells, y: rows.map(row => row['Annual Decline (%)']), type: 'bar', marker: { color: '#F97316' }, name: 'Annual Decline' }, { x: wells, y: rows.map(row => row['Remaining Oil Estimate (bbl)']), type: 'scatter', mode: 'lines+markers', yaxis: 'y2', marker: { color: '#22C55E' }, name: 'Remaining Oil' }], layout: { ...layout('Decline Curve Analysis', 'Annual Decline (%)'), yaxis2: { title: 'Remaining Oil (bbl)', overlaying: 'y', side: 'right', gridcolor: grid, color: font } } }
+  }
+  if (moduleKey === 'performance') {
+    return { data: [{ x: wells, y: rows.map(row => row['Health Score']), type: 'bar', marker: { color: '#10B981' }, name: 'Health Score' }], layout: layout('Well Performance Monitoring', 'Health Score') }
+  }
+  if (moduleKey === 'downtime') {
+    return { data: [{ x: wells, y: rows.map(row => row['Lost Revenue ($)']), type: 'bar', marker: { color: '#F59E0B' }, name: 'Lost Revenue' }], layout: layout('Downtime & Loss Production Analysis', 'Lost Revenue ($)') }
+  }
+  return { data: [{ x: wells, y: rows.map(row => row['Workover Score']), type: 'bar', marker: { color: '#8B5CF6' }, name: 'Workover Score' }], layout: layout('Workover Candidate Ranking', 'Workover Score') }
+}
+
 function primaryButton(accent: string): React.CSSProperties {
   return { padding: '13px 16px', borderRadius: 12, border: 'none', background: accent, color: '#fff', fontWeight: 900, cursor: 'pointer', boxShadow: `0 12px 34px ${accent}33` }
 }
@@ -1149,6 +1662,8 @@ function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLig
     color_by: 'Depth',
     x_scale: 'Linear',
     y_scale: 'Linear',
+    depth_from: '',
+    depth_to: '',
     point_size: 6,
     opacity: 0.82,
   })
@@ -1206,7 +1721,7 @@ function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLig
     }
   }
 
-  const runCrossplot = async () => {
+  const runCrossplot = async (silent = false) => {
     if (!session?.session_id) {
       toast.error('Upload or load a LAS file first')
       return
@@ -1215,21 +1730,45 @@ function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLig
       toast.error('Select two different curves')
       return
     }
+    const requestedFrom = config.depth_from === '' ? null : Number(config.depth_from)
+    const requestedTo = config.depth_to === '' ? null : Number(config.depth_to)
+    if (requestedFrom != null && requestedTo != null && requestedFrom > requestedTo) {
+      if (!silent) toast.error('From Depth must be less than or equal to To Depth')
+      return
+    }
+    const sessionMin = session?.depth_min != null ? Number(session.depth_min) : null
+    const sessionMax = session?.depth_max != null ? Number(session.depth_max) : null
+    if (sessionMin != null && sessionMax != null && ((requestedTo != null && requestedTo < sessionMin) || (requestedFrom != null && requestedFrom > sessionMax))) {
+      if (!silent) toast.error(`Depth range must overlap ${sessionMin.toFixed(2)} - ${sessionMax.toFixed(2)}`)
+      return
+    }
     setLoading(true)
     try {
-      const response = await petrophysicsApi.generateCrossplot({ ...config, session_id: session.session_id })
+      const response = await petrophysicsApi.generateCrossplot({
+        ...config,
+        depth_from: requestedFrom,
+        depth_to: requestedTo,
+        session_id: session.session_id,
+      })
       const data = response.data
       data.figure = applyCrossplotFigureStyle(data.figure, config, isLight, accent)
       setPlotData(data)
-      toast.success(`Crossplot generated: ${data.point_count?.toLocaleString()} points`)
+      if (!silent) toast.success(`Crossplot generated: ${data.point_count?.toLocaleString()} points`)
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Crossplot generation failed')
+      if (!silent) toast.error(error?.response?.data?.detail || 'Crossplot generation failed')
     } finally {
       setLoading(false)
     }
   }
 
   const updateConfig = (key: string, value: any) => setConfig((prev: any) => ({ ...prev, [key]: value }))
+
+  useEffect(() => {
+    if (!plotData?.figure || !session?.session_id || loading) return
+    const timer = window.setTimeout(() => runCrossplot(true), 300)
+    return () => window.clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.point_size, config.opacity])
 
   return (
     <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
@@ -1315,6 +1854,10 @@ function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLig
               </select>
             </Control>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <NumberControl label="From Depth" value={config.depth_from} onChange={value => updateConfig('depth_from', value)} isLight={isLight} placeholder={session?.depth_min != null ? String(Number(session.depth_min).toFixed(2)) : 'Auto'} />
+              <NumberControl label="To Depth" value={config.depth_to} onChange={value => updateConfig('depth_to', value)} isLight={isLight} placeholder={session?.depth_max != null ? String(Number(session.depth_max).toFixed(2)) : 'Auto'} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <Control label="X Scale">
                 <select style={field(isLight)} value={config.x_scale} onChange={event => updateConfig('x_scale', event.target.value)}>
                   {['Linear', 'Logarithmic'].map(scale => <option key={scale}>{scale}</option>)}
@@ -1328,7 +1871,7 @@ function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLig
             </div>
             <SliderLabel label="Point Size" value={config.point_size} min={2} max={12} step={1} onChange={value => updateConfig('point_size', value)} />
             <SliderLabel label="Opacity" value={config.opacity} min={0.2} max={1} step={0.05} onChange={value => updateConfig('opacity', value)} />
-            <button onClick={runCrossplot} disabled={loading || !session} style={{ width: '100%', marginTop: 6, padding: '13px 16px', borderRadius: 12, border: 'none', background: accent, color: '#fff', fontWeight: 900, cursor: 'pointer', boxShadow: `0 12px 34px ${accent}33` }}>
+            <button onClick={() => runCrossplot()} disabled={loading || !session} style={{ width: '100%', marginTop: 6, padding: '13px 16px', borderRadius: 12, border: 'none', background: accent, color: '#fff', fontWeight: 900, cursor: 'pointer', boxShadow: `0 12px 34px ${accent}33` }}>
               {loading ? 'Generating Crossplot...' : 'Generate Crossplot'}
             </button>
           </div>

@@ -91,6 +91,17 @@ export const reportsApi = {
   generate: (wellId: number, type: string) => api.post(`/reports/generate?well_id=${wellId}&report_type=${type}`),
 }
 
+export const productionApi = {
+  sample: () => api.get('/production/sample'),
+  analyze: (file?: File) => {
+    const fd = new FormData()
+    if (file) fd.append('file', file)
+    return api.post('/production/analyze', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+}
+
 // ── Petrophysics ─────────────────────────────────────────────────────────
 export const petrophysicsApi = {
   predictionBundle: (wellId: number) => api.get(`/petrophysics/well/${wellId}/prediction-bundle`),
@@ -126,7 +137,7 @@ export const petrophysicsApi = {
   generatePetroLogViewer: (params: any) => api.post('/petrophysics/las/log-viewer', params),
   analyzeMissingLog: (sessionId: string) => api.post('/petrophysics/missing-log/analyze', { session_id: sessionId }),
   predictMissingLog: (params: any) => api.post('/petrophysics/missing-log/predict', params),
-  generatePetroPrediction: (sessionId: string) => api.post('/petrophysics/las/prediction', { session_id: sessionId }),
+  generatePetroPrediction: (params: string | any) => api.post('/petrophysics/las/prediction', typeof params === 'string' ? { session_id: params } : params),
   generatePetroUncertainty: (params: any) => api.post('/petrophysics/las/uncertainty', params),
   runAutoSplice: (files: File[]) => {
     const fd = new FormData()
