@@ -18,6 +18,7 @@ from typing import Optional
 import os
 import io
 import json
+import pickle
 import re
 import tempfile
 import uuid
@@ -31,14 +32,89 @@ from scipy.stats import gaussian_kde
 from sklearn.ensemble import ExtraTreesRegressor, GradientBoostingRegressor, RandomForestRegressor
 from sklearn.metrics import r2_score
 
+try:
+    import redis
+except Exception:  # pragma: no cover - redis is optional for local single-worker dev
+    redis = None
+
 router = APIRouter()
 
-crossplot_las_store: dict[str, pd.DataFrame] = {}
-histogram_las_store: dict[str, lasio.LASFile] = {}
-petro_las_store: dict[str, dict] = {}
-autosplice_store: dict[str, dict] = {}
-toolbox_log_store: dict[str, dict] = {}
-toolbox_tops_store: dict[str, dict] = {}
+
+def _redis_url_candidates() -> list[str]:
+    configured_url = os.getenv("REDIS_URL")
+    candidates = [configured_url] if configured_url else []
+    candidates.extend(["redis://redis:6379/0", "redis://localhost:6379/0"])
+    return [url for index, url in enumerate(candidates) if url and url not in candidates[:index]]
+
+
+def _build_redis_client():
+    if redis is None:
+        return None
+    for url in _redis_url_candidates():
+        try:
+            client = redis.Redis.from_url(
+                url,
+                decode_responses=False,
+                socket_connect_timeout=0.25,
+                socket_timeout=1.0,
+            )
+            client.ping()
+            return client
+        except Exception:
+            continue
+    return None
+
+
+_REDIS_CLIENT = _build_redis_client()
+_SESSION_TTL_SECONDS = int(os.getenv("PETRO_SESSION_TTL_SECONDS", "3600"))
+
+
+class RedisBackedSessionStore:
+    """Small dict-like store that survives multiple Uvicorn worker processes."""
+
+    def __init__(self, namespace: str, ttl_seconds: int = _SESSION_TTL_SECONDS):
+        self.namespace = namespace
+        self.ttl_seconds = ttl_seconds
+        self._local_cache: dict[str, object] = {}
+
+    def _key(self, session_id: str) -> str:
+        return f"drake:petrophysics:{self.namespace}:{session_id}"
+
+    def __setitem__(self, session_id: str, value) -> None:
+        self.set(session_id, value)
+
+    def set(self, session_id: str, value) -> None:
+        self._local_cache[session_id] = value
+        if _REDIS_CLIENT is None:
+            return
+        try:
+            payload = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
+            _REDIS_CLIENT.setex(self._key(session_id), self.ttl_seconds, payload)
+        except Exception:
+            # Keep local single-worker behavior if Redis cannot serialize/store a value.
+            return
+
+    def get(self, session_id: str, default=None):
+        if not session_id:
+            return default
+        if _REDIS_CLIENT is not None:
+            try:
+                payload = _REDIS_CLIENT.get(self._key(session_id))
+                if payload is not None:
+                    value = pickle.loads(payload)
+                    self._local_cache[session_id] = value
+                    return value
+            except Exception:
+                pass
+        return self._local_cache.get(session_id, default)
+
+
+crossplot_las_store = RedisBackedSessionStore("crossplot_las")
+histogram_las_store = RedisBackedSessionStore("histogram_las")
+petro_las_store = RedisBackedSessionStore("petro_las")
+autosplice_store = RedisBackedSessionStore("autosplice")
+toolbox_log_store = RedisBackedSessionStore("toolbox_log")
+toolbox_tops_store = RedisBackedSessionStore("toolbox_tops")
 
 
 class CrossPlotRequest(BaseModel):
