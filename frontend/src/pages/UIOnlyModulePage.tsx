@@ -2894,7 +2894,7 @@ function SeismicEnhancerPanel({ accent, isLight }: { accent: string; isLight: bo
             <Metric label="Source" value={result.source} />
             <Metric label="Model Stack" value={result.model_stack} />
             {result.outputs?.download_url && (
-              <a href={`http://127.0.0.1:8002${result.outputs.download_url}`} download style={{ padding: 12, borderRadius: 12, border: '1px solid #2563EB', background: 'rgba(37,99,235,.18)', color: '#BFDBFE', fontWeight: 900, textDecoration: 'none', display: 'grid', alignItems: 'center', textAlign: 'center' }}>
+              <a href={`${result.outputs.download_url}`} download style={{ padding: 12, borderRadius: 12, border: '1px solid #2563EB', background: 'rgba(37,99,235,.18)', color: '#BFDBFE', fontWeight: 900, textDecoration: 'none', display: 'grid', alignItems: 'center', textAlign: 'center' }}>
                 Download Enhanced SEG-Y
               </a>
             )}
