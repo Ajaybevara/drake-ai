@@ -139,10 +139,19 @@ export default function FaciesClassificationPage() {
   const numeric = (meta?.numeric_columns || []).filter((c: string) => c !== depthCol)
 
   return (
-    <div style={{ padding: 24, minHeight: '100%', overflow: 'auto', background: '#F8FAFC' }}>
-      <h1 style={{ margin: '0 0 16px', color: '#0F172A' }}>AI-Powered Facies Classification</h1>
+    <div style={{ padding: 24, minHeight: '100%', overflow: 'auto', background: '#07111F' }}>
+      <section style={{ ...card, marginBottom: 18, display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
+        <div>
+          <div style={eyebrow}>AI Facies Classification</div>
+          <h1 style={pageTitle}>AI-Powered Facies Classification</h1>
+          <p style={pageSubtitle}>Cluster or classify facies from the active LAS session using selected petrophysical curves.</p>
+        </div>
+        <div style={accentTile} />
+      </section>
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 18, alignItems: 'start' }}>
         <section style={card}>
+          <div style={eyebrow}>Input Controls</div>
+          <h2 style={cardTitle}>Well Log Setup</h2>
           <label style={label}>Well-log file</label>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: 10, alignItems: 'center' }}>
             <input type="file" accept=".las,.csv,.xlsx,.sgy,.segy" onChange={e => upload(e.target.files?.[0])} />
@@ -188,7 +197,7 @@ export default function FaciesClassificationPage() {
               <label style={label}>Predictor curves (3-5)</label>
               <div style={{ display: 'grid', gap: 8, maxHeight: 220, overflow: 'auto' }}>
                 {numeric.map((c: string) => (
-                  <label key={c} style={{ color: '#334155', fontSize: 13 }}>
+                  <label key={c} style={{ color: '#CBD5E1', fontSize: 13 }}>
                     <input
                       type="checkbox"
                       checked={features.includes(c)}
@@ -205,12 +214,14 @@ export default function FaciesClassificationPage() {
         </section>
 
         <section style={card}>
+          <div style={eyebrow}>Facies Result</div>
+          <h2 style={cardTitle}>{result ? 'Classification Output' : 'Waiting for Input'}</h2>
           {result ? (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
                 <div>
-                  <h2 style={{ margin: 0, color: '#0F172A' }}>{result.algorithm}</h2>
-                  <p style={{ margin: '6px 0 0', color: '#64748B' }}>{result.classified_rows.toLocaleString()} classified rows</p>
+                  <h2 style={{ margin: 0, color: '#F8FAFC' }}>{result.algorithm}</h2>
+                  <p style={{ margin: '6px 0 0', color: '#94A3B8' }}>{result.classified_rows.toLocaleString()} classified rows</p>
                 </div>
                 <button onClick={() => downloadCsv(result.csv, 'facies_results.csv')} style={secondaryButton}>Download CSV</button>
               </div>
@@ -218,7 +229,7 @@ export default function FaciesClassificationPage() {
               <PlotlyFigure figure={result.figure} />
             </>
           ) : (
-            <div style={{ minHeight: 520, display: 'grid', placeItems: 'center', color: '#64748B' }}>
+            <div style={{ minHeight: 520, display: 'grid', placeItems: 'center', color: '#94A3B8' }}>
               Upload a well log, choose depth and predictors, then run classification.
             </div>
           )}
@@ -228,10 +239,15 @@ export default function FaciesClassificationPage() {
   )
 }
 
-const card: React.CSSProperties = { padding: 18, background: '#fff', borderRadius: 14, border: '1px solid #E2E8F0', color: '#475569' }
-const label: React.CSSProperties = { display: 'block', margin: '14px 0 6px', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: '#334155' }
-const control: React.CSSProperties = { width: '100%', padding: '10px 12px', border: '1px solid #CBD5E1', borderRadius: 8, background: '#fff', color: '#0F172A' }
+const card: React.CSSProperties = { padding: 18, background: 'linear-gradient(180deg,rgba(15,23,42,.92),rgba(7,17,31,.96))', borderRadius: 14, border: '1px solid #1E293B', color: '#CBD5E1' }
+const eyebrow: React.CSSProperties = { color: '#EF4444', letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }
+const pageTitle: React.CSSProperties = { margin: '8px 0 8px', color: '#F8FAFC', fontSize: 38, fontWeight: 500 }
+const pageSubtitle: React.CSSProperties = { margin: 0, color: '#9FC5F8', fontSize: 18, lineHeight: 1.45 }
+const cardTitle: React.CSSProperties = { margin: '6px 0 14px', color: '#F8FAFC', fontSize: 24, fontWeight: 700 }
+const accentTile: React.CSSProperties = { width: 72, height: 72, borderRadius: 18, border: '1px solid rgba(239,68,68,.45)', background: 'linear-gradient(135deg,rgba(239,68,68,.18),rgba(2,8,23,.45))', flex: '0 0 auto' }
+const label: React.CSSProperties = { display: 'block', margin: '14px 0 6px', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: '#94A3B8' }
+const control: React.CSSProperties = { width: '100%', padding: '10px 12px', border: '1px solid #26364D', borderRadius: 8, background: '#08111F', color: '#F8FAFC' }
 const button: React.CSSProperties = { width: '100%', marginTop: 18, padding: '12px 14px', border: 0, borderRadius: 8, background: '#F59E0B', color: '#111827', fontWeight: 900, cursor: 'pointer' }
-const secondaryButton: React.CSSProperties = { padding: '10px 12px', border: '1px solid #CBD5E1', borderRadius: 8, background: '#fff', color: '#0F172A', fontWeight: 800, cursor: 'pointer' }
-const metaBox: React.CSSProperties = { marginTop: 14, padding: 12, borderRadius: 10, background: '#F1F5F9', color: '#334155', fontSize: 13 }
+const secondaryButton: React.CSSProperties = { padding: '10px 12px', border: '1px solid #26364D', borderRadius: 8, background: '#08111F', color: '#F8FAFC', fontWeight: 800, cursor: 'pointer' }
+const metaBox: React.CSSProperties = { marginTop: 14, padding: 12, borderRadius: 10, background: '#0E1622', color: '#CBD5E1', fontSize: 13 }
 const pre: React.CSSProperties = { maxHeight: 220, overflow: 'auto', padding: 12, borderRadius: 10, background: '#0F172A', color: '#E2E8F0', fontSize: 12 }

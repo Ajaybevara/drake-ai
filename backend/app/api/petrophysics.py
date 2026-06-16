@@ -5,6 +5,8 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models import Well, Curve
 from app.ml.drake_uncertainty import build_prediction_bundle, compute_uncertainty_analysis
+from app.ml.drake_prediction_standalone import compute_prediction_sections
+from app.ml.drake_uncertainty_standalone import compute_uncertainty_sections
 from app.ml.mini_petrophysics_toolbox import (
     dataframe_summary,
     read_well_log_bytes,
@@ -50,6 +52,8 @@ class CrossPlotRequest(BaseModel):
     x_max: Optional[float] = None
     y_min: Optional[float] = None
     y_max: Optional[float] = None
+    depth_from: Optional[float] = None
+    depth_to: Optional[float] = None
 
 
 class HistogramRequest(BaseModel):
@@ -934,18 +938,22 @@ def predict_missing_log_session(payload: dict):
 
 
 @router.post('/las/prediction')
-def generate_petro_prediction(request: PetroSessionRequest):
-    session = _get_petro_session(request.session_id)
+def generate_petro_prediction(request: dict):
+    session_id = request.get("session_id")
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required.")
+    session = _get_petro_session(str(session_id))
     item = _analysis_item_from_df(session["df"])
-    bundle = build_prediction_bundle(item)
-    uncertainty = compute_uncertainty_analysis(item, {"phi_method": "percent", "sw_method": "percent", "phi_pct": 0.12, "sw_pct": 0.15})
-    records = uncertainty.get("all_records", []) if uncertainty.get("success") else []
+    prediction = compute_prediction_sections(item, request)
+    if not prediction.get("success"):
+        raise HTTPException(status_code=400, detail=prediction.get("message", "AI parameter prediction failed."))
+    records = prediction.get("all_records", [])
     return {
         "summary": session["summary"],
-        "bundle": bundle,
-        "records": records[:5],
+        "bundle": prediction.get("bundle", {}),
+        "records": prediction.get("records", []),
         "all_records": records,
-        "summary_cards": uncertainty.get("summary_cards", {}),
+        "summary_cards": prediction.get("summary_cards", {}),
         "figure": {
             "data": [
                 {
@@ -953,7 +961,7 @@ def generate_petro_prediction(request: PetroSessionRequest):
                     "y": _depth_from_records(records, "PHIE"),
                     "type": "scatter",
                     "mode": "lines",
-                    "name": "Effective Porosity",
+                    "name": "AI PHIE",
                     "line": {"color": "#38BDF8", "width": 3},
                     "hovertemplate": "Depth: %{y:.2f}<br>PHIE: %{x:.5f}<extra></extra>",
                 },
@@ -962,10 +970,20 @@ def generate_petro_prediction(request: PetroSessionRequest):
                     "y": _depth_from_records(records, "SW"),
                     "type": "scatter",
                     "mode": "lines",
-                    "name": "Water Saturation",
+                    "name": "AI Water Saturation",
                     "line": {"color": "#F59E0B", "width": 3},
                     "xaxis": "x2",
                     "hovertemplate": "Depth: %{y:.2f}<br>SW: %{x:.5f}<extra></extra>",
+                },
+                {
+                    "x": _series_from_records(records, "PERMEABILITY_MD"),
+                    "y": _depth_from_records(records, "PERMEABILITY_MD"),
+                    "type": "scatter",
+                    "mode": "lines",
+                    "name": "AI Permeability",
+                    "line": {"color": "#22C55E", "width": 3},
+                    "xaxis": "x3",
+                    "hovertemplate": "Depth: %{y:.2f}<br>Perm: %{x:.4f} mD<extra></extra>",
                 },
             ],
             "layout": {
@@ -974,8 +992,9 @@ def generate_petro_prediction(request: PetroSessionRequest):
                 "height": 560,
                 "margin": {"l": 70, "r": 40, "t": 40, "b": 50},
                 "yaxis": {"title": "Depth", "autorange": "reversed", "gridcolor": "#1E293B", "color": "#BBD7FF"},
-                "xaxis": {"title": "PHIE", "domain": [0, 0.47], "gridcolor": "#1E293B", "color": "#BBD7FF"},
-                "xaxis2": {"title": "SW", "domain": [0.53, 1], "gridcolor": "#1E293B", "color": "#BBD7FF"},
+                "xaxis": {"title": "PHIE", "domain": [0, 0.30], "gridcolor": "#1E293B", "color": "#BBD7FF"},
+                "xaxis2": {"title": "SW", "domain": [0.35, 0.65], "gridcolor": "#1E293B", "color": "#BBD7FF"},
+                "xaxis3": {"title": "Perm mD", "domain": [0.70, 1], "type": "log", "gridcolor": "#1E293B", "color": "#BBD7FF"},
                 "legend": {"orientation": "h", "x": 0, "y": 1.08},
                 "hovermode": "closest",
             },
@@ -998,7 +1017,7 @@ def generate_petro_uncertainty(request: dict):
         "sw_unc": float(request.get("sw_unc", 0.05)),
         "sw_pct": float(request.get("sw_pct", 0.10)),
     }
-    analysis = compute_uncertainty_analysis(item, payload)
+    analysis = compute_uncertainty_sections(item, payload)
     if not analysis.get("success"):
         raise HTTPException(status_code=400, detail=analysis.get("message", "Uncertainty calculation failed."))
     records = analysis.get("all_records", [])
@@ -1364,6 +1383,24 @@ def generate_crossplot(request: CrossPlotRequest):
     plot_df[depth_col] = pd.to_numeric(plot_df[depth_col], errors="coerce")
     plot_df[request.x_curve] = pd.to_numeric(plot_df[request.x_curve], errors="coerce")
     plot_df[request.y_curve] = pd.to_numeric(plot_df[request.y_curve], errors="coerce")
+    valid_depth = plot_df[depth_col].dropna()
+    data_min = float(valid_depth.min()) if not valid_depth.empty else None
+    data_max = float(valid_depth.max()) if not valid_depth.empty else None
+
+    if request.depth_from is not None and request.depth_to is not None and request.depth_from > request.depth_to:
+        raise HTTPException(status_code=400, detail="From Depth must be less than or equal to To Depth.")
+    if data_min is not None and data_max is not None:
+        if (request.depth_to is not None and request.depth_to < data_min) or (request.depth_from is not None and request.depth_from > data_max):
+            raise HTTPException(status_code=400, detail=f"Depth range must overlap the LAS interval {data_min:.2f} - {data_max:.2f}.")
+
+    if request.depth_from is not None:
+        plot_df = plot_df[plot_df[depth_col] >= request.depth_from]
+    if request.depth_to is not None:
+        plot_df = plot_df[plot_df[depth_col] <= request.depth_to]
+    if request.x_scale == "Logarithmic":
+        plot_df = plot_df[plot_df[request.x_curve] > 0]
+    if request.y_scale == "Logarithmic":
+        plot_df = plot_df[plot_df[request.y_curve] > 0]
 
     color_name = request.color_by or "Depth"
     if color_name != "Depth" and color_name in df.columns:
@@ -1374,7 +1411,7 @@ def generate_crossplot(request: CrossPlotRequest):
 
     plot_df = plot_df.dropna(subset=[depth_col, request.x_curve, request.y_curve])
     if plot_df.empty:
-        raise HTTPException(status_code=400, detail="No valid numeric data points found for the selected curves.")
+        raise HTTPException(status_code=400, detail="No valid numeric data points found for the selected curves and depth/log-scale settings.")
 
     x_vals = plot_df[request.x_curve].astype(float).to_numpy()
     y_vals = plot_df[request.y_curve].astype(float).to_numpy()
@@ -1401,6 +1438,8 @@ def generate_crossplot(request: CrossPlotRequest):
         "y_curve": request.y_curve,
         "color_by": color_name,
         "point_count": int(len(x_vals)),
+        "depth_from": _safe_float(np.nanmin(depth_vals)) if len(depth_vals) else None,
+        "depth_to": _safe_float(np.nanmax(depth_vals)) if len(depth_vals) else None,
         "statistics": {
             "x": _curve_stats(x_vals, request.x_curve),
             "y": _curve_stats(y_vals, request.y_curve),

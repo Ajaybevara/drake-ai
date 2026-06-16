@@ -7,7 +7,7 @@ import { saveProjectFile } from '../../utils/drakeProjectFile'
 const NAV_ITEMS = [
   { label: 'Petrophysics', path: '/petrophysics/log-visualization' },
   { label: 'Seismic', path: '/seismic/frequency-enhancer' },
-  { label: 'Production', path: '/production/optimization' },
+  { label: 'Production', path: '/production/intelligence' },
   { label: 'CCUS', path: '/ccus/ai-preliminary-screening' },
   { label: 'Geothermal', path: '/geothermal/log-based-screening' },
   { label: 'Drake AI Digitizer', path: '/digitizer/drake-slm-gpt' },

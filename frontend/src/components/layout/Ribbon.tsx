@@ -75,10 +75,6 @@ export default function Ribbon() {
         <Dropdown label="Well" items={[
           { label: 'Well Logs', icon: 'fas fa-file-lines', onClick: () => { setActiveTab('Log Viewer'); navigate('/petrophysics/log-visualization') } },
         ]} />
-        <Dropdown label="Plotting" items={[
-          { label: 'Crossplot', icon: 'fas fa-chart-line', onClick: () => navigate('/petrophysics/crossplot') },
-          { label: 'Histogram', icon: 'fas fa-chart-bar', onClick: () => navigate('/petrophysics/histogram') },
-        ]} />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', paddingRight: 12 }}>
         <RibbonBtn icon="fas fa-info-circle" label="Well Information" onClick={() => setShowWellInfo(!showWellInfo)} />

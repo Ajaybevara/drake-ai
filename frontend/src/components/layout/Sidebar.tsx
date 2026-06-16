@@ -31,8 +31,7 @@ const SEISMIC_ITEMS = [
 ]
 
 const PRODUCTION_ITEMS = [
-  { label: 'Production Optimization', path: '/production/optimization', icon: 'fas fa-chart-line', sub: true },
-  { label: 'AI Artificial Lift', path: '/production/ai-artificial-lift', icon: 'fas fa-oil-well', sub: true },
+  { label: 'Production Intelligence', path: '/production/intelligence', icon: 'fas fa-chart-line', sub: true },
 ]
 
 const CCUS_ITEMS = [

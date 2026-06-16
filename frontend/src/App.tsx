@@ -52,8 +52,9 @@ const router = createBrowserRouter([
 
       { path: 'seismic/frequency-enhancer', element: <UIOnlyModulePage title="Seismic Frequency Enhancer" kind="seismic" accent="#8B5CF6" /> },
 
-      { path: 'production/optimization', element: <UIOnlyModulePage title="Production Optimization" kind="production" accent="#10B981" /> },
-      { path: 'production/ai-artificial-lift', element: <UIOnlyModulePage title="AI Artificial Lift" kind="production" accent="#DA2626" /> },
+      { path: 'production/intelligence', element: <UIOnlyModulePage title="Production Intelligence" kind="production" accent="#10B981" /> },
+      { path: 'production/optimization', element: <Navigate to="/production/intelligence" replace /> },
+      { path: 'production/ai-artificial-lift', element: <Navigate to="/production/intelligence" replace /> },
 
       { path: 'ccus/ai-preliminary-screening', element: <UIOnlyModulePage title="AI Preliminary Screening Using Well Logs" kind="ccus" accent="#10B981" /> },
       { path: 'geothermal/log-based-screening', element: <GeothermalPage /> },

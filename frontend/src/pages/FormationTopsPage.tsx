@@ -178,10 +178,19 @@ export default function FormationTopsPage() {
   const numeric = (meta?.numeric_columns || []).filter((c: string) => c !== depthCol)
 
   return (
-    <div style={{ padding: 24, minHeight: '100%', overflow: 'auto', background: '#F8FAFC' }}>
-      <h1 style={{ margin: '0 0 16px', color: '#0F172A' }}>Formation Tops Detection</h1>
+    <div style={{ padding: 24, minHeight: '100%', overflow: 'auto', background: '#07111F' }}>
+      <section style={{ ...card, marginBottom: 18, display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
+        <div>
+          <div style={eyebrow}>AI Formation Tops</div>
+          <h1 style={pageTitle}>Formation Tops Detection</h1>
+          <p style={pageSubtitle}>Detect formation boundaries from uploaded or active LAS curves with supervised, unsupervised, and manual-top support.</p>
+        </div>
+        <div style={accentTile} />
+      </section>
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 18, alignItems: 'start' }}>
         <section style={card}>
+          <div style={eyebrow}>Input Controls</div>
+          <h2 style={cardTitle}>Formation Setup</h2>
           <label style={label}>Well-log file</label>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: 10, alignItems: 'center' }}>
             <input type="file" accept=".las,.csv,.xlsx,.sgy,.segy" onChange={e => uploadLog(e.target.files?.[0])} />
@@ -241,7 +250,7 @@ export default function FormationTopsPage() {
               <label style={label}>Curves (2-6)</label>
               <div style={{ display: 'grid', gap: 8, maxHeight: 240, overflow: 'auto' }}>
                 {numeric.map((c: string) => (
-                  <label key={c} style={{ color: '#334155', fontSize: 13 }}>
+                  <label key={c} style={{ color: '#CBD5E1', fontSize: 13 }}>
                     <input
                       type="checkbox"
                       checked={curves.includes(c)}
@@ -260,12 +269,14 @@ export default function FormationTopsPage() {
         </section>
 
         <section style={card}>
+          <div style={eyebrow}>Formation Result</div>
+          <h2 style={cardTitle}>{result ? 'Detected Tops' : 'Waiting for Input'}</h2>
           {result ? (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
                 <div>
-                  <h2 style={{ margin: 0, color: '#0F172A' }}>{result.mode} Detection</h2>
-                  <p style={{ margin: '6px 0 0', color: '#64748B' }}>{result.tops_count.toLocaleString()} tops detected</p>
+                  <h2 style={{ margin: 0, color: '#F8FAFC' }}>{result.mode} Detection</h2>
+                  <p style={{ margin: '6px 0 0', color: '#94A3B8' }}>{result.tops_count.toLocaleString()} tops detected</p>
                 </div>
                 <button onClick={() => downloadCsv(result.csv, 'formation_tops.csv')} style={secondaryButton}>Download CSV</button>
               </div>
@@ -280,7 +291,7 @@ export default function FormationTopsPage() {
                     {result.tops.slice(0, 100).map((row: any, index: number) => (
                       <tr key={index}>
                         {Object.values(row).map((value: any, i) => (
-                          <td key={i} style={{ padding: 8, borderBottom: '1px solid #E2E8F0', color: '#334155' }}>{String(value ?? '')}</td>
+                          <td key={i} style={{ padding: 8, borderBottom: '1px solid #1E293B', color: '#CBD5E1' }}>{String(value ?? '')}</td>
                         ))}
                       </tr>
                     ))}
@@ -290,7 +301,7 @@ export default function FormationTopsPage() {
               <PlotlyFigure figure={result.figure} />
             </>
           ) : (
-            <div style={{ minHeight: 520, display: 'grid', placeItems: 'center', color: '#64748B' }}>
+            <div style={{ minHeight: 520, display: 'grid', placeItems: 'center', color: '#94A3B8' }}>
               Upload a well log, choose depth and curves, then detect formation tops.
             </div>
           )}
@@ -300,9 +311,14 @@ export default function FormationTopsPage() {
   )
 }
 
-const card: React.CSSProperties = { padding: 18, background: '#fff', borderRadius: 14, border: '1px solid #E2E8F0', color: '#475569' }
-const label: React.CSSProperties = { display: 'block', margin: '14px 0 6px', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: '#334155' }
-const control: React.CSSProperties = { width: '100%', padding: '10px 12px', border: '1px solid #CBD5E1', borderRadius: 8, background: '#fff', color: '#0F172A' }
+const card: React.CSSProperties = { padding: 18, background: 'linear-gradient(180deg,rgba(15,23,42,.92),rgba(7,17,31,.96))', borderRadius: 14, border: '1px solid #1E293B', color: '#CBD5E1' }
+const eyebrow: React.CSSProperties = { color: '#EF4444', letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }
+const pageTitle: React.CSSProperties = { margin: '8px 0 8px', color: '#F8FAFC', fontSize: 38, fontWeight: 500 }
+const pageSubtitle: React.CSSProperties = { margin: 0, color: '#9FC5F8', fontSize: 18, lineHeight: 1.45 }
+const cardTitle: React.CSSProperties = { margin: '6px 0 14px', color: '#F8FAFC', fontSize: 24, fontWeight: 700 }
+const accentTile: React.CSSProperties = { width: 72, height: 72, borderRadius: 18, border: '1px solid rgba(239,68,68,.45)', background: 'linear-gradient(135deg,rgba(239,68,68,.18),rgba(2,8,23,.45))', flex: '0 0 auto' }
+const label: React.CSSProperties = { display: 'block', margin: '14px 0 6px', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: '#94A3B8' }
+const control: React.CSSProperties = { width: '100%', padding: '10px 12px', border: '1px solid #26364D', borderRadius: 8, background: '#08111F', color: '#F8FAFC' }
 const button: React.CSSProperties = { width: '100%', marginTop: 18, padding: '12px 14px', border: 0, borderRadius: 8, background: '#10B981', color: '#052E16', fontWeight: 900, cursor: 'pointer' }
-const secondaryButton: React.CSSProperties = { padding: '10px 12px', border: '1px solid #CBD5E1', borderRadius: 8, background: '#fff', color: '#0F172A', fontWeight: 800, cursor: 'pointer' }
-const metaBox: React.CSSProperties = { marginTop: 14, padding: 12, borderRadius: 10, background: '#F1F5F9', color: '#334155', fontSize: 13 }
+const secondaryButton: React.CSSProperties = { padding: '10px 12px', border: '1px solid #26364D', borderRadius: 8, background: '#08111F', color: '#F8FAFC', fontWeight: 800, cursor: 'pointer' }
+const metaBox: React.CSSProperties = { marginTop: 14, padding: 12, borderRadius: 10, background: '#0E1622', color: '#CBD5E1', fontSize: 13 }
