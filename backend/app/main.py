@@ -9,6 +9,7 @@ from backend.app.core.config import settings
 from backend.app.core.database import engine, Base
 from backend.app.core.seed import seed_db
 from backend.app.api import auth, projects, wells, curves, files, ai_jobs, reports, gpt, petrophysics, seismic, geothermal, production
+from backend.app.services import project_service
 from backend.ccus.router import router as ccus_router
 
 
@@ -69,3 +70,13 @@ app.include_router(ccus_router)
 @app.get("/api/health", tags=["Health"])
 def health_check():
     return {"status": "ok", "version": "2.4.1", "platform": "Drake AI Enterprise"}
+
+
+@app.get("/platform", tags=["Platform"])
+@app.get("/api/platform", tags=["Platform"])
+def platform_entry():
+    return {
+        "title": "Drake AI Enterprise Platform",
+        "current_project": project_service.get_current_project(),
+        "actions": ["Create New Project", "Open Existing Project"],
+    }

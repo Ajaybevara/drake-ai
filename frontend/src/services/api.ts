@@ -240,14 +240,35 @@ export const geothermalApi = {
 }
 
 export const localProjectsApi = {
-  locations: () => api.get('/local-projects/locations'),
-  save: (data: { location_key: string; project: any; file_name?: string }) => api.post('/local-projects/save', data),
-  list: (locationKey: string) => api.get(`/local-projects/list?location_key=${encodeURIComponent(locationKey)}`),
-  open: (path: string) => api.post('/local-projects/open', { path }),
+  platform: () => api.get('/projects/platform'),
+  locations: () => api.get('/projects/locations'),
+  create: (data: any) => api.post('/projects/create', data),
+  current: () => api.get('/projects/current'),
+  list: (locationKey?: string) => api.get('/projects/registry', { params: { location_key: locationKey } }),
+  open: (projectPath: string) => api.post('/projects/open', { project_path: projectPath }),
+  files: (projectId?: string, moduleName?: string) => api.get('/projects/files', { params: { project_id: projectId, module_name: moduleName } }),
+  results: (projectId?: string) => api.get('/projects/results', { params: { project_id: projectId } }),
+  history: (projectId?: string) => api.get('/projects/history', { params: { project_id: projectId } }),
+  uploadFiles: (projectId: string | undefined, files: File[]) => {
+    const fd = new FormData()
+    if (projectId) fd.append('project_id', projectId)
+    files.forEach(file => fd.append('files', file))
+    return api.post('/projects/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+  saveResult: (data: any) => api.post('/projects/save-result', data),
+  saveExport: (data: any) => api.post('/projects/save-export', data),
+  setStoragePath: (data: any) => api.post('/projects/set-storage-path', data),
+  fileDownloadUrl: (fileId: string, projectId?: string) => `${API_URL}/api/projects/files/${fileId}/download${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''}`,
+  save: (data: { location_key: string; project: any; file_name?: string }) => api.post('/projects/save-result', {
+    module_name: 'Platform',
+    prediction_name: data.file_name || 'project_snapshot',
+    extension: 'json',
+    result_payload: data.project,
+  }),
   uploadFile: (file: File) => {
     const fd = new FormData()
-    fd.append('file', file)
-    return api.post('/local-projects/files/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    fd.append('files', file)
+    return api.post('/projects/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
   },
 }
 

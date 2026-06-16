@@ -1,110 +1,158 @@
 import type React from 'react'
-import { Activity, Database, FolderOpen, Gauge, Layers, RadioTower, Save } from 'lucide-react'
-import toast from 'react-hot-toast'
+import { useEffect, useMemo, useRef } from 'react'
+import { Database, Download, FolderOpen, History, Upload } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
+import { localProjectsApi } from '../services/api'
 import { useStore } from '../store'
-import { createProjectFile, openProjectFile, saveProjectFile } from '../utils/drakeProjectFile'
+
+const MODULES = [
+  { label: 'Log Visualization', path: '/petrophysics/log-visualization' },
+  { label: 'Missing Log Prediction', path: '/petrophysics/missing-log-prediction' },
+  { label: 'Facies Classification', path: '/petrophysics/ai-facies-classification' },
+  { label: 'Formation Tops', path: '/petrophysics/ai-formation-tops' },
+  { label: 'AI Parameter Prediction', path: '/petrophysics/ai-parameter-prediction' },
+  { label: 'AI Uncertainty', path: '/petrophysics/ai-uncertainty' },
+  { label: 'Seismic', path: '/seismic/frequency-enhancer' },
+  { label: 'Production', path: '/production/intelligence' },
+  { label: 'CCUS', path: '/ccus/ai-preliminary-screening' },
+  { label: 'Geothermal', path: '/geothermal/log-based-screening' },
+]
 
 export default function DashboardPage() {
   const navigate = useNavigate()
-  const {
-    activeLocalProject,
-    activeProjectFileHandle,
-    createLocalProject,
-    setActiveProjectFileHandle,
-    setActiveLocalProjectDocument,
-    markProjectSaved,
-  } = useStore()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const { enterpriseProject, setEnterpriseProject } = useStore()
 
-  const createProject = async () => {
-    const name = window.prompt('Enter project name')
-    if (!name?.trim()) return
-    const project = createLocalProject(name.trim())
+  useEffect(() => {
+    localProjectsApi.current()
+      .then(({ data }) => setEnterpriseProject(data))
+      .catch(() => undefined)
+  }, [setEnterpriseProject])
+
+  const project = enterpriseProject
+  const stats = useMemo(() => ({
+    files: project?.uploaded_files?.length || 0,
+    results: project?.generated_results?.length || 0,
+    exports: project?.exported_files?.length || 0,
+    lastActivity: project?.module_history?.[0]?.timestamp || project?.updated_at,
+  }), [project])
+
+  const uploadFiles = async (files: FileList | null) => {
+    if (!project || !files?.length) return
     try {
-      const result = await createProjectFile(project)
-      setActiveProjectFileHandle(result.handle, result.fileName)
-      markProjectSaved()
-      toast.success(result.usedFallback ? 'Project downloaded as .drake file' : 'Project created on local disk')
+      const { data } = await localProjectsApi.uploadFiles(project.project_id, Array.from(files))
+      setEnterpriseProject(data.project)
+      toast.success(`${data.files.length} file(s) added to project`)
     } catch (error: any) {
-      if (error?.name !== 'AbortError') toast.error(error?.message || 'Project creation failed')
+      toast.error(error?.response?.data?.detail || 'Project upload failed')
+    } finally {
+      if (inputRef.current) inputRef.current.value = ''
     }
   }
 
-  const openProject = async () => {
-    try {
-      const result = await openProjectFile()
-      setActiveLocalProjectDocument(result.project, result.handle, result.fileName)
-      toast.success(`Opened ${result.fileName}`)
-      navigate('/projects')
-    } catch (error: any) {
-      if (error?.name !== 'AbortError') toast.error(error?.message || 'Open project failed')
-    }
-  }
-
-  const saveProject = async () => {
-    if (!activeLocalProject) {
-      toast.error('Create or open a .drake project first')
-      return
-    }
-    try {
-      const result = await saveProjectFile(activeLocalProject, activeProjectFileHandle)
-      setActiveProjectFileHandle(result.handle, result.fileName)
-      markProjectSaved()
-      toast.success(result.usedFallback ? 'Project downloaded as .drake file' : 'Project saved to local disk')
-    } catch (error: any) {
-      if (error?.name !== 'AbortError') toast.error(error?.message || 'Save project failed')
-    }
+  if (!project) {
+    return (
+      <div style={page}>
+        <section style={empty}>
+          <FolderOpen size={34} color="#DA2626" />
+          <h1 style={{ margin: '12px 0 6px' }}>No Active Project</h1>
+          <p style={muted}>Create or open a local project to start shared file management.</p>
+          <button style={primaryButton} onClick={() => navigate('/')}>Open Platform</button>
+        </section>
+      </div>
+    )
   }
 
   return (
     <div style={page}>
       <section style={hero}>
         <div>
-          <div style={eyebrow}>Drake AI Enterprise Platform</div>
-          <h1 style={title}>Oil & Gas AI Workspace UI</h1>
-          <p style={muted}>Project state is held in memory until you explicitly create, open, or save a local .drake project file.</p>
+          <div style={eyebrow}>Project Dashboard</div>
+          <h1 style={title}>{project.project_name}</h1>
+          <p style={muted}>{project.description || 'No description'} - {project.project_type}</p>
+          <p style={pathText}>{project.project_path}</p>
         </div>
-        <div style={actions}>
-          <button style={primaryButton} onClick={createProject}><Save size={16} /> Create New Project</button>
-          <button style={ghostButton} onClick={openProject}><FolderOpen size={16} /> Open Project File (.drake)</button>
-          <button style={alertButton} onClick={saveProject}><Save size={16} /> Save Project to Local Disk</button>
+        <div style={heroActions}>
+          <input ref={inputRef} type="file" multiple style={{ display: 'none' }} onChange={event => uploadFiles(event.target.files)} />
+          <button style={primaryButton} onClick={() => inputRef.current?.click()}><Upload size={16} /> Upload Project Files</button>
+          <button style={ghostButton} onClick={() => navigate('/')}><FolderOpen size={16} /> Switch Project</button>
         </div>
       </section>
-      <div style={grid}>
-        <Stat label="Active Project" value={activeLocalProject ? activeLocalProject.name : 'None'} icon={<FolderOpen size={20} />} />
-        <Stat label="Petrophysics Tools" value="9" icon={<Gauge size={20} />} />
-        <Stat label="Seismic Tools" value="1" icon={<RadioTower size={20} />} />
-        <Stat label="Digitizer Tools" value="2" icon={<Layers size={20} />} />
+
+      <div style={statsGrid}>
+        <Stat label="Uploaded Files" value={String(stats.files)} icon={<Database size={20} />} />
+        <Stat label="Generated Results" value={String(stats.results)} icon={<History size={20} />} />
+        <Stat label="Exports" value={String(stats.exports)} icon={<Download size={20} />} />
+        <Stat label="Last Activity" value={stats.lastActivity ? new Date(stats.lastActivity).toLocaleString() : 'None'} icon={<FolderOpen size={20} />} />
       </div>
+
       <section style={panel}>
-        <h2 style={{ margin: 0, fontSize: 22 }}>Workspace Overview</h2>
-        <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 14 }}>
-          {['Well intelligence', 'Seismic enhancement', 'Production optimization', 'CCUS screening', 'OCR and SLM/GPT'].map(item => (
-            <div key={item} style={miniCard}><Database size={17} color="#DA2626" /><span>{item}</span></div>
-          ))}
+        <div style={sectionHead}>
+          <div>
+            <div style={eyebrow}>Open Module</div>
+            <h2 style={panelTitle}>Run Existing Workflows</h2>
+          </div>
+        </div>
+        <div style={moduleGrid}>
+          {MODULES.map(module => <button key={module.path} style={moduleButton} onClick={() => navigate(module.path)}>{module.label}</button>)}
         </div>
       </section>
+
+      <div style={twoCol}>
+        <Browser title="Uploaded File List" rows={project.uploaded_files || []} columns={['file_name', 'file_type', 'bucket', 'uploaded_at']} />
+        <Browser title="Result List" rows={project.generated_results || []} columns={['file_name', 'module_name', 'created_at']} />
+      </div>
+      <div style={twoCol}>
+        <Browser title="Export List" rows={project.exported_files || []} columns={['file_name', 'module_name', 'export_type', 'created_at']} />
+        <Browser title="Project History" rows={project.module_history || []} columns={['timestamp', 'module_name', 'action', 'status']} />
+      </div>
     </div>
   )
 }
 
 function Stat({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
-  return <div style={stat}><div style={{ color: '#DA2626' }}>{icon}</div><div><div style={statLabel}>{label}</div><div style={statValue}>{value}</div></div></div>
+  return <div style={stat}><div style={{ color: '#10B981' }}>{icon}</div><div><div style={statLabel}>{label}</div><div style={statValue}>{value}</div></div></div>
+}
+
+function Browser({ title, rows, columns }: { title: string; rows: any[]; columns: string[] }) {
+  return (
+    <section style={panel}>
+      <h2 style={panelTitle}>{title}</h2>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={table}>
+          <thead><tr>{columns.map(col => <th key={col} style={th}>{col.replace(/_/g, ' ').toUpperCase()}</th>)}</tr></thead>
+          <tbody>
+            {rows.slice(0, 12).map((row, index) => <tr key={row.file_id || row.result_id || row.export_id || row.id || index}>{columns.map(col => <td key={col} style={td}>{String(row[col] ?? '-')}</td>)}</tr>)}
+            {!rows.length ? <tr><td style={td} colSpan={columns.length}>No records yet</td></tr> : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
 }
 
 const page: React.CSSProperties = { padding: 28, minHeight: '100%', overflow: 'auto', background: 'linear-gradient(135deg,#050B14,#07111F 52%,#0B1628)', color: '#F8FAFC' }
-const hero: React.CSSProperties = { padding: 26, borderRadius: 18, border: '1px solid #1E293B', background: 'linear-gradient(135deg,rgba(15,23,42,.92),rgba(7,17,31,.82))', boxShadow: '0 24px 70px rgba(0,0,0,.28)', display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'center', flexWrap: 'wrap' }
+const hero: React.CSSProperties = { padding: 24, borderRadius: 18, border: '1px solid #1E293B', background: 'linear-gradient(135deg,rgba(15,23,42,.94),rgba(7,17,31,.86))', display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'center', flexWrap: 'wrap' }
 const eyebrow: React.CSSProperties = { color: '#DA2626', letterSpacing: 4, textTransform: 'uppercase', fontSize: 12, fontWeight: 900 }
-const title: React.CSSProperties = { margin: '8px 0', fontSize: 36, lineHeight: 1.08 }
-const muted: React.CSSProperties = { margin: 0, color: '#94A3B8', lineHeight: 1.6 }
-const actions: React.CSSProperties = { display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }
-const buttonBase: React.CSSProperties = { borderRadius: 12, padding: '12px 15px', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 900, cursor: 'pointer' }
-const primaryButton: React.CSSProperties = { ...buttonBase, border: '1px solid #DA2626', background: 'linear-gradient(135deg,#EF4444,#DA2626)', color: '#FFFFFF' }
+const title: React.CSSProperties = { margin: '8px 0', fontSize: 34, lineHeight: 1.1 }
+const muted: React.CSSProperties = { margin: 0, color: '#94A3B8', lineHeight: 1.55 }
+const pathText: React.CSSProperties = { margin: '10px 0 0', color: '#60A5FA', fontSize: 12, wordBreak: 'break-all' }
+const heroActions: React.CSSProperties = { display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }
+const buttonBase: React.CSSProperties = { borderRadius: 10, padding: '12px 15px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontWeight: 900, cursor: 'pointer' }
+const primaryButton: React.CSSProperties = { ...buttonBase, border: '1px solid #10B981', background: '#10B981', color: '#00150E' }
 const ghostButton: React.CSSProperties = { ...buttonBase, border: '1px solid #26364F', background: '#08111F', color: '#E2E8F0' }
-const alertButton: React.CSSProperties = { ...buttonBase, border: '1px solid #F59E0B', background: 'rgba(245,158,11,.16)', color: '#FCD34D' }
-const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 16, marginTop: 18 }
-const stat: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 14, padding: 18, borderRadius: 16, border: '1px solid #1E293B', background: 'rgba(15,23,42,.84)' }
+const statsGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 14, marginTop: 18 }
+const stat: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 14, padding: 18, borderRadius: 14, border: '1px solid #1E293B', background: 'rgba(15,23,42,.84)' }
 const statLabel: React.CSSProperties = { color: '#94A3B8', fontSize: 12, fontWeight: 900, textTransform: 'uppercase', letterSpacing: 1.2 }
-const statValue: React.CSSProperties = { color: '#F8FAFC', fontSize: 24, fontWeight: 900, marginTop: 4, wordBreak: 'break-word' }
-const panel: React.CSSProperties = { marginTop: 22, padding: 20, borderRadius: 18, border: '1px solid #1E293B', background: 'rgba(15,23,42,.82)' }
-const miniCard: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, padding: 14, borderRadius: 12, border: '1px solid #26364F', background: '#08111F', color: '#E2E8F0', fontWeight: 800 }
+const statValue: React.CSSProperties = { color: '#F8FAFC', fontSize: 20, fontWeight: 900, marginTop: 4, wordBreak: 'break-word' }
+const panel: React.CSSProperties = { marginTop: 18, padding: 18, borderRadius: 16, border: '1px solid #1E293B', background: 'rgba(15,23,42,.82)' }
+const sectionHead: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }
+const panelTitle: React.CSSProperties = { margin: '6px 0 14px', fontSize: 22 }
+const moduleGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 10 }
+const moduleButton: React.CSSProperties = { borderRadius: 10, border: '1px solid #26364F', background: '#08111F', color: '#F8FAFC', padding: 13, cursor: 'pointer', fontWeight: 900, textAlign: 'left' }
+const twoCol: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(360px,1fr))', gap: 16 }
+const table: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: 12 }
+const th: React.CSSProperties = { textAlign: 'left', color: '#93C5FD', padding: '10px 8px', borderBottom: '1px solid #24324A', whiteSpace: 'nowrap' }
+const td: React.CSSProperties = { color: '#E2E8F0', padding: '10px 8px', borderBottom: '1px solid #1E293B', whiteSpace: 'nowrap' }
+const empty: React.CSSProperties = { minHeight: 360, display: 'grid', placeItems: 'center', alignContent: 'center', textAlign: 'center', gap: 8 }

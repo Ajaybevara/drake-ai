@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
-import { geothermalApi } from '../services/api'
+import { geothermalApi, localProjectsApi } from '../services/api'
 import { useStore } from '../store'
+import ProjectFileSelector from '../components/project/ProjectFileSelector'
 
 const TRACK_GROUPS: Record<string, string[]> = {
   logs: ['gr_api', 'res_ohmm', 'rhob_gcc', 'nphi_frac', 'dt_usft'],
@@ -32,8 +33,38 @@ function download(url: string) {
   window.open(url, '_blank', 'noopener,noreferrer')
 }
 
+async function uploadGeothermalFileToProject(file: File, setEnterpriseProject: (project: any) => void) {
+  try {
+    const project = localStorage.getItem('drake_enterprise_project')
+    if (!project) return
+    const activeProject = JSON.parse(project)
+    const { data } = await localProjectsApi.uploadFiles(activeProject.project_id, [file])
+    setEnterpriseProject(data.project)
+  } catch {
+    // Geothermal analysis should continue even if the project copy cannot be saved.
+  }
+}
+
+async function saveGeothermalResult(resultPayload: any, predictionName: string) {
+  try {
+    const project = localStorage.getItem('drake_enterprise_project')
+    if (!project || !resultPayload) return
+    const activeProject = JSON.parse(project)
+    const { data } = await localProjectsApi.saveResult({
+      project_id: activeProject.project_id,
+      module_name: 'Geothermal',
+      prediction_name: predictionName,
+      extension: 'json',
+      result_payload: resultPayload,
+    })
+    useStore.getState().setEnterpriseProject(data.project)
+  } catch {
+    // Result snapshot failure should not block the module workflow.
+  }
+}
+
 export default function GeothermalPage() {
-  const { theme } = useStore()
+  const { theme, setEnterpriseProject } = useStore()
   const isLight = theme === 'light'
   const [busy, setBusy] = useState(false)
   const [sessionId, setSessionId] = useState(() => geothermalState.sessionId)
@@ -60,6 +91,7 @@ export default function GeothermalPage() {
       const { data } = await promise
       setSessionId(data.session_id)
       setResult(data.result)
+      await saveGeothermalResult(data.result, message.replace(/\s+/g, '_').toLowerCase())
       toast.success(message)
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Geothermal analysis failed')
@@ -68,8 +100,9 @@ export default function GeothermalPage() {
     }
   }
 
-  function upload(file?: File) {
+  async function upload(file?: File) {
     if (!file) return
+    await uploadGeothermalFileToProject(file, setEnterpriseProject)
     receive(geothermalApi.uploadLas(file), 'Geothermal LAS analysis complete')
   }
 
@@ -86,8 +119,8 @@ export default function GeothermalPage() {
           <h1 style={{ margin: '8px 0', fontSize: 32 }}>Geothermal Log-Based Screening</h1>
           <p style={{ margin: 0, color: palette.muted, maxWidth: 820 }}>LAS-based geothermal gradient, hot zone detection, reservoir quality, heat-flow mapping, play ranking, and curve audit.</p>
         </div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          <button onClick={() => receive(geothermalApi.loadSample(), 'Geothermal sample loaded')} disabled={busy} style={secondaryButton(isLight)}>Load Sample</button>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'flex-end' }}>
+          <ProjectFileSelector moduleName="Geothermal" allowedExtensions={['las', 'csv', 'xlsx']} onSelectFile={file => upload(file)} compact />
           <label style={primaryButton('#10B981')}>
             {busy ? 'Running...' : 'Upload LAS'}
             <input type="file" accept=".las" hidden onChange={event => upload(event.target.files?.[0])} />
@@ -224,7 +257,7 @@ function field(isLight: boolean): React.CSSProperties {
 }
 
 function primaryButton(color: string): React.CSSProperties {
-  return { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 42, borderRadius: 9, border: 'none', background: color, color: '#052E16', padding: '0 16px', fontWeight: 900, cursor: 'pointer' }
+  return { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 56, borderRadius: 10, border: 'none', background: color, color: '#052E16', padding: '0 22px', fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 15 }
 }
 
 function secondaryButton(isLight: boolean): React.CSSProperties {

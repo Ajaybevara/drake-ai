@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
-import { petrophysicsApi } from '../services/api'
+import { localProjectsApi, petrophysicsApi } from '../services/api'
+import { useStore } from '../store'
+import ProjectFileSelector from '../components/project/ProjectFileSelector'
 
 const PETRO_SESSION_KEY = 'drake_active_petro_las_session'
 
@@ -72,6 +74,36 @@ function readPetroSession() {
   }
 }
 
+async function uploadFileToActiveProject(file: File) {
+  try {
+    const project = localStorage.getItem('drake_enterprise_project')
+    if (!project) return
+    const activeProject = JSON.parse(project)
+    const { data } = await localProjectsApi.uploadFiles(activeProject.project_id, [file])
+    useStore.getState().setEnterpriseProject(data.project)
+  } catch {
+    // Formation tops should continue even if the project copy cannot be saved.
+  }
+}
+
+async function saveProjectResultCopy(predictionName: string, resultPayload: any) {
+  try {
+    const project = localStorage.getItem('drake_enterprise_project')
+    if (!project) return
+    const activeProject = JSON.parse(project)
+    const { data } = await localProjectsApi.saveResult({
+      project_id: activeProject.project_id,
+      module_name: 'Formation Tops',
+      prediction_name: predictionName,
+      extension: 'json',
+      result_payload: resultPayload,
+    })
+    useStore.getState().setEnterpriseProject(data.project)
+  } catch {
+    // Result snapshot failure should not block the module workflow.
+  }
+}
+
 function parseManualTops(text: string) {
   return text.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => {
     const parts = line.replace('|', ',').split(',').map(part => part.trim())
@@ -103,6 +135,7 @@ export default function FormationTopsPage() {
     setBusy(true)
     setResult(null)
     try {
+      await uploadFileToActiveProject(file)
       const { data } = await petrophysicsApi.uploadToolboxLog(file)
       setMeta(data)
       setDepthCol(data.depth_guess)
@@ -137,6 +170,7 @@ export default function FormationTopsPage() {
     if (!file) return
     setBusy(true)
     try {
+      await uploadFileToActiveProject(file)
       const { data } = await petrophysicsApi.uploadToolboxTops(file)
       setTopsMeta(data)
       setTopsDepthCol(data.numeric_columns?.[0] || data.columns?.[0] || '')
@@ -167,6 +201,7 @@ export default function FormationTopsPage() {
         manual_tops: parseManualTops(manualTopsText),
       })
       setResult(data)
+      await saveProjectResultCopy('formation_tops_detection', data)
       toast.success('Formation tops detected')
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Formation tops detection failed')
@@ -192,8 +227,8 @@ export default function FormationTopsPage() {
           <h1 style={pageTitle}>Formation Tops Detection</h1>
           <p style={pageSubtitle}>Detect formation boundaries from uploaded or active LAS curves with supervised, unsupervised, and manual-top support.</p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <button onClick={loadActiveLas} disabled={busy} style={secondaryButton}>Load LAS</button>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <ProjectFileSelector moduleName="Formation Tops" allowedExtensions={['las', 'csv', 'xlsx']} onSelectFile={file => uploadLog(file)} compact />
           <button onClick={browseLas} disabled={busy} style={greenButton}>Upload LAS</button>
         </div>
       </section>
@@ -201,7 +236,7 @@ export default function FormationTopsPage() {
         <section style={card}>
           <div style={eyebrow}>Input Controls</div>
           <h2 style={cardTitle}>Formation Setup</h2>
-          {!meta && <div style={emptyHint}>Use the Upload LAS or Load LAS button above to start formation tops detection.</div>}
+          {!meta && <div style={emptyHint}>Select a project file or upload LAS above to start formation tops detection.</div>}
 
           {meta && (
             <>
@@ -327,6 +362,6 @@ const label: React.CSSProperties = { display: 'block', margin: '14px 0 6px', fon
 const control: React.CSSProperties = { width: '100%', padding: '10px 12px', border: '1px solid #26364D', borderRadius: 8, background: '#08111F', color: '#F8FAFC' }
 const button: React.CSSProperties = { width: '100%', marginTop: 18, padding: '12px 14px', border: 0, borderRadius: 8, background: '#10B981', color: '#052E16', fontWeight: 900, cursor: 'pointer' }
 const secondaryButton: React.CSSProperties = { padding: '10px 12px', border: '1px solid #26364D', borderRadius: 8, background: '#08111F', color: '#F8FAFC', fontWeight: 800, cursor: 'pointer' }
-const greenButton: React.CSSProperties = { padding: '12px 20px', border: 0, borderRadius: 10, background: '#10B981', color: '#06111F', fontWeight: 900, cursor: 'pointer' }
+const greenButton: React.CSSProperties = { height: 56, padding: '0 22px', border: 0, borderRadius: 10, background: '#10B981', color: '#06111F', fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 15 }
 const metaBox: React.CSSProperties = { marginTop: 14, padding: 12, borderRadius: 10, background: '#0E1622', color: '#CBD5E1', fontSize: 13 }
 const emptyHint: React.CSSProperties = { marginTop: 14, padding: 14, borderRadius: 12, border: '1px dashed #26364D', background: '#08111F', color: '#94A3B8', lineHeight: 1.5 }
