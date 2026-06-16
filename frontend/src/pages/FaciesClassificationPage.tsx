@@ -137,6 +137,13 @@ export default function FaciesClassificationPage() {
   }
 
   const numeric = (meta?.numeric_columns || []).filter((c: string) => c !== depthCol)
+  const browseLas = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.las,.csv,.xlsx,.sgy,.segy'
+    input.onchange = event => upload((event.target as HTMLInputElement).files?.[0])
+    input.click()
+  }
 
   return (
     <div style={{ padding: 24, minHeight: '100%', overflow: 'auto', background: '#07111F' }}>
@@ -146,17 +153,16 @@ export default function FaciesClassificationPage() {
           <h1 style={pageTitle}>AI-Powered Facies Classification</h1>
           <p style={pageSubtitle}>Cluster or classify facies from the active LAS session using selected petrophysical curves.</p>
         </div>
-        <div style={accentTile} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <button onClick={loadActiveLas} disabled={busy} style={secondaryButton}>Load LAS</button>
+          <button onClick={browseLas} disabled={busy} style={greenButton}>Upload LAS</button>
+        </div>
       </section>
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 18, alignItems: 'start' }}>
         <section style={card}>
           <div style={eyebrow}>Input Controls</div>
           <h2 style={cardTitle}>Well Log Setup</h2>
-          <label style={label}>Well-log file</label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: 10, alignItems: 'center' }}>
-            <input type="file" accept=".las,.csv,.xlsx,.sgy,.segy" onChange={e => upload(e.target.files?.[0])} />
-            <button onClick={loadActiveLas} disabled={busy} style={secondaryButton}>Load LAS</button>
-          </div>
+          {!meta && <div style={emptyHint}>Use the Upload LAS or Load LAS button above to start facies classification.</div>}
 
           {meta && (
             <>
@@ -247,7 +253,9 @@ const cardTitle: React.CSSProperties = { margin: '6px 0 14px', color: '#F8FAFC',
 const accentTile: React.CSSProperties = { width: 72, height: 72, borderRadius: 18, border: '1px solid rgba(239,68,68,.45)', background: 'linear-gradient(135deg,rgba(239,68,68,.18),rgba(2,8,23,.45))', flex: '0 0 auto' }
 const label: React.CSSProperties = { display: 'block', margin: '14px 0 6px', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: '#94A3B8' }
 const control: React.CSSProperties = { width: '100%', padding: '10px 12px', border: '1px solid #26364D', borderRadius: 8, background: '#08111F', color: '#F8FAFC' }
-const button: React.CSSProperties = { width: '100%', marginTop: 18, padding: '12px 14px', border: 0, borderRadius: 8, background: '#F59E0B', color: '#111827', fontWeight: 900, cursor: 'pointer' }
+const button: React.CSSProperties = { width: '100%', marginTop: 18, padding: '12px 14px', border: 0, borderRadius: 8, background: '#10B981', color: '#052E16', fontWeight: 900, cursor: 'pointer' }
 const secondaryButton: React.CSSProperties = { padding: '10px 12px', border: '1px solid #26364D', borderRadius: 8, background: '#08111F', color: '#F8FAFC', fontWeight: 800, cursor: 'pointer' }
+const greenButton: React.CSSProperties = { padding: '12px 20px', border: 0, borderRadius: 10, background: '#10B981', color: '#06111F', fontWeight: 900, cursor: 'pointer' }
 const metaBox: React.CSSProperties = { marginTop: 14, padding: 12, borderRadius: 10, background: '#0E1622', color: '#CBD5E1', fontSize: 13 }
+const emptyHint: React.CSSProperties = { marginTop: 14, padding: 14, borderRadius: 12, border: '1px dashed #26364D', background: '#08111F', color: '#94A3B8', lineHeight: 1.5 }
 const pre: React.CSSProperties = { maxHeight: 220, overflow: 'auto', padding: 12, borderRadius: 10, background: '#0F172A', color: '#E2E8F0', fontSize: 12 }

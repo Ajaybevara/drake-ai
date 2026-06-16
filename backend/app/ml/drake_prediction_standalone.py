@@ -227,6 +227,17 @@ def synthetic_ml_training_data(n=1800):
 _MODEL_CACHE = {}
 
 
+def model_display_name(model_name):
+    value = str(model_name or "random_forest").lower()
+    if value in ("gradient_boosting", "gb", "gbr"):
+        return "Gradient Boosting AI"
+    if value in ("decision_tree", "tree", "trees"):
+        return "Decision Tree AI"
+    if value in ("xgboost", "xgb"):
+        return "XGBoost AI"
+    return "Random Forest AI"
+
+
 def fit_synthetic_ml_predict(X_in, target_name, model_name="random_forest"):
     train_X, targets = synthetic_ml_training_data()
     y = targets[target_name]
@@ -242,30 +253,30 @@ def fit_synthetic_ml_predict(X_in, target_name, model_name="random_forest"):
     if model_info is None:
         if model_name in ("xgboost", "xgb") and XGBRegressor is not None:
             models = []
-            for i in range(10):
+            for i in range(4):
                 idx = rng.choice(len(train_X), size=len(train_X), replace=True)
-                model = XGBRegressor(n_estimators=90, max_depth=3, learning_rate=0.06, subsample=0.86, colsample_bytree=0.86, objective="reg:squarederror", random_state=700 + i, n_jobs=1, verbosity=0)
+                model = XGBRegressor(n_estimators=45, max_depth=3, learning_rate=0.08, subsample=0.86, colsample_bytree=0.86, objective="reg:squarederror", random_state=700 + i, n_jobs=1, verbosity=0)
                 model.fit(train_X[features].iloc[idx], y[idx])
                 models.append(model)
             model_info = ("ensemble", models)
         elif model_name in ("gradient_boosting", "gb", "gbr") and GradientBoostingRegressor is not None:
             models = []
-            for i in range(10):
+            for i in range(4):
                 idx = rng.choice(len(train_X), size=len(train_X), replace=True)
-                model = GradientBoostingRegressor(n_estimators=120, learning_rate=0.05, max_depth=3, random_state=800 + i)
+                model = GradientBoostingRegressor(n_estimators=60, learning_rate=0.08, max_depth=3, random_state=800 + i)
                 model.fit(train_X[features].iloc[idx], y[idx])
                 models.append(model)
             model_info = ("ensemble", models)
         elif model_name in ("decision_tree", "tree", "trees") and DecisionTreeRegressor is not None:
             models = []
-            for i in range(40):
+            for i in range(12):
                 idx = rng.choice(len(train_X), size=len(train_X), replace=True)
                 model = DecisionTreeRegressor(max_depth=7, min_samples_leaf=5, random_state=900 + i)
                 model.fit(train_X[features].iloc[idx], y[idx])
                 models.append(model)
             model_info = ("ensemble", models)
         elif RandomForestRegressor is not None:
-            model = RandomForestRegressor(n_estimators=90, min_samples_leaf=4, random_state=91, n_jobs=-1)
+            model = RandomForestRegressor(n_estimators=45, min_samples_leaf=4, random_state=91, n_jobs=-1)
             model.fit(train_X[features], y)
             model_info = ("forest", model)
         else:
@@ -290,31 +301,130 @@ def compute_prediction_sections(item, config=None):
     if df.empty:
         return {"success": False, "message": "No log data available."}
 
-    vsh_emp = predict_vsh_ai(df)
-    gr_curve = str(config.get("gr_curve") or "").upper()
-    if gr_curve and gr_curve in df.columns:
-        gr = clean_numeric_series(df, gr_curve)
-        gr_min = safe_float(config.get("gr_min"))
-        gr_max = safe_float(config.get("gr_max"))
-        if gr_min is not None and gr_max is not None and gr_max != gr_min:
-            vsh_emp = ((gr - gr_min) / (gr_max - gr_min)).clip(0.0, 1.0).where(gr.notna(), other=np.nan)
-    phit_emp = predict_porosity_ai(df)
+    columns = list(df.columns)
+    gr_curve = str(config.get("gr_curve") or config.get("gr_log") or "").upper()
+    gr_col = gr_curve if gr_curve in df.columns else find_log_name(columns, ["GRD", "GR", "GRS", "GRR", "CGR", "SGR", "HSGR", "GRC", "GAMMA", "GAMMARAY"])
+    gr = clean_numeric_series(df, gr_col)
+    gr_min = safe_float(config.get("gr_min"))
+    gr_max = safe_float(config.get("gr_max"))
+    valid_gr = gr.dropna()
+    if gr_min is None and not valid_gr.empty:
+        gr_min = float(valid_gr.quantile(0.05))
+    if gr_max is None and not valid_gr.empty:
+        gr_max = float(valid_gr.quantile(0.95))
+    denom = (gr_max - gr_min) if gr_min is not None and gr_max is not None and gr_max != gr_min else np.nan
+    igr = ((gr - gr_min) / denom).replace([np.inf, -np.inf], np.nan).clip(0.0, 1.0).where(gr.notna(), other=np.nan)
+    vsh_method = str(config.get("vsh_method") or config.get("method") or "linear").lower().replace(" ", "_")
+    if "larionov" in vsh_method and "tertiary" in vsh_method:
+        vsh_emp = (0.083 * ((2.0 ** (3.7 * igr)) - 1.0)).clip(0.0, 1.0)
+        vsh_label = "Larionov Tertiary"
+    elif "larionov" in vsh_method:
+        vsh_emp = (0.33 * ((2.0 ** (2.0 * igr)) - 1.0)).clip(0.0, 1.0)
+        vsh_label = "Larionov Older Rocks"
+    elif "clavier" in vsh_method:
+        vsh_emp = (1.7 - np.sqrt(np.maximum(0.0, 3.38 - ((igr + 0.7) ** 2)))).clip(0.0, 1.0)
+        vsh_label = "Clavier"
+    elif "steiber" in vsh_method:
+        vsh_emp = (igr / (3.0 - 2.0 * igr)).replace([np.inf, -np.inf], np.nan).clip(0.0, 1.0)
+        vsh_label = "Steiber"
+    else:
+        vsh_emp = igr.copy()
+        vsh_label = "Linear"
+    por_method = str(config.get("porosity_method") or "density").lower()
+    por_curve = str(config.get("porosity_curve") or "").upper()
+    rhob_col = por_curve if por_curve in df.columns and por_method == "density" else find_log_name(columns, ["RHOB", "RHOZ", "DEN", "ZDEN"])
+    nphi_col = por_curve if por_curve in df.columns and por_method == "neutron" else find_log_name(columns, ["NPHI", "NPHIS", "NPHISS", "NPL", "TNPH"])
+    dt_col = por_curve if por_curve in df.columns and por_method == "sonic" else find_log_name(columns, ["DT", "DTP", "AC", "SONIC", "DTCO"])
+    rhoma = safe_float(config.get("rhoma")) or 2.65
+    rhof = safe_float(config.get("rhof")) or 1.0
+    dtma = safe_float(config.get("dtma")) or 55.5
+    dtfl = safe_float(config.get("dtfl")) or 189.0
+    phid = pd.Series([np.nan] * len(df), index=df.index, dtype="float64")
+    phin = pd.Series([np.nan] * len(df), index=df.index, dtype="float64")
+    phis = pd.Series([np.nan] * len(df), index=df.index, dtype="float64")
+    if rhob_col:
+        rhob = clean_numeric_series(df, rhob_col).where(lambda s: (s >= 1.0) & (s <= 3.5))
+        phid = ((rhoma - rhob) / ((rhoma - rhof) if rhoma != rhof else np.nan)).clip(0.0, 1.0).where(rhob.notna(), other=np.nan)
+    if nphi_col:
+        phin = clean_numeric_series(df, nphi_col)
+        if str(config.get("nphi_unit") or "fraction").lower() == "percent" or (phin.dropna().shape[0] and phin.dropna().median() > 1.0):
+            phin = phin / 100.0
+        phin = phin.where((phin >= -0.15) & (phin <= 1.0)).clip(0.0, 1.0)
+    if dt_col:
+        dt = clean_numeric_series(df, dt_col)
+        phis = ((dt - dtma) / ((dtfl - dtma) if dtfl != dtma else np.nan)).clip(0.0, 1.0).where(dt.notna(), other=np.nan)
+    if por_method == "neutron":
+        phit_emp = phin
+    elif por_method == "sonic":
+        phit_emp = phis
+    elif por_method == "density_neutron":
+        phit_emp = pd.Series(np.nan, index=df.index, dtype="float64")
+        both = phid.notna() & phin.notna()
+        phit_emp[both] = np.sqrt((phid[both].values ** 2 + phin[both].values ** 2) / 2.0)
+        phit_emp[phid.notna() & phin.isna()] = phid[phid.notna() & phin.isna()]
+        phit_emp[phid.isna() & phin.notna()] = phin[phid.isna() & phin.notna()]
+    else:
+        phit_emp = phid
+    if phit_emp.notna().sum() == 0:
+        phit_emp = predict_porosity_ai(df)
     phie_emp = (phit_emp * (1.0 - vsh_emp.fillna(0.0))).where(phit_emp.notna(), other=np.nan).clip(0.0, 1.0)
-    sw_emp = predict_saturation_ai(df, phie_emp)
-    X = raw_ml_feature_frame(df, {"VSH": vsh_emp})
-    vsh_ml = fit_synthetic_ml_predict(X, "VSH", config.get("ai_model", "random_forest"))
-    X_phi = X.copy()
-    X_phi["VSH"] = vsh_ml["P50"]
-    phi_ml = fit_synthetic_ml_predict(X_phi, "PHIT", config.get("ai_model", "random_forest"))
-    X_sw = X_phi.copy()
-    X_sw["PHIT_ML"] = phi_ml["P50"]
-    sw_ml = fit_synthetic_ml_predict(X_sw, "SW", config.get("ai_model", "random_forest"))
-    X_perm = X_sw.copy()
-    X_perm["SW_ML"] = sw_ml["P50"]
-    perm_ml = fit_synthetic_ml_predict(X_perm, "PERM", config.get("ai_model", "random_forest"))
+    rt_col = str(config.get("saturation_curve") or "").upper()
+    rt_col = rt_col if rt_col in df.columns else find_log_name(columns, ["RT", "RESD", "ILD", "LLD", "AT90", "HDRS", "RDEP"])
+    rt_series = clean_numeric_series(df, rt_col).where(lambda s: s > 0)
+    rw = safe_float(config.get("rw")) or 0.1
+    rsh = safe_float(config.get("rsh")) or 2.0
+    archie_a = safe_float(config.get("archie_a")) or 1.0
+    archie_m = safe_float(config.get("archie_m")) or 2.0
+    archie_n = safe_float(config.get("archie_n")) or 2.0
+    phie_safe = phie_emp.where(phie_emp > 0)
+    sw_archie = (((archie_a * rw) / ((phie_safe ** archie_m) * rt_series)) ** (1.0 / archie_n)).replace([np.inf, -np.inf], np.nan).clip(0.0, 1.0).where(rt_series.notna() & phie_emp.notna(), other=np.nan)
+    indonesia_shale = (vsh_emp.clip(0.0, 1.0) ** (1.0 - (vsh_emp.clip(0.0, 1.0) / 2.0))) / np.sqrt(max(rsh, 1e-9))
+    indonesia_phi = np.sqrt((phie_safe ** archie_m) / max(archie_a * rw, 1e-9))
+    indonesia_term = ((1.0 / np.sqrt(rt_series)) - indonesia_shale) / indonesia_phi.replace(0, np.nan)
+    sw_indonesia = (indonesia_term.clip(lower=0.0) ** (2.0 / archie_n)).replace([np.inf, -np.inf], np.nan).clip(0.0, 1.0).where(rt_series.notna() & phie_emp.notna(), other=np.nan)
+    sat_method = str(config.get("saturation_method") or "archie").lower().replace(" ", "_")
+    if "indonesia" in sat_method:
+        sw_emp = sw_indonesia.where(sw_indonesia.notna(), sw_archie)
+        sat_label = "Indonesia"
+    elif "auto" in sat_method:
+        shaly = vsh_emp.fillna(0.0) >= 0.35
+        sw_emp = sw_archie.copy()
+        sw_emp[shaly] = sw_indonesia[shaly].where(sw_indonesia[shaly].notna(), sw_archie[shaly])
+        sat_label = "Auto (Archie/Indonesia)"
+    else:
+        sw_emp = sw_archie
+        sat_label = "Archie"
+    if sw_emp.notna().sum() == 0:
+        sw_emp = predict_saturation_ai(df, phie_emp)
 
-    vsh = vsh_emp.where(vsh_emp.notna(), vsh_ml["P50"]).clip(0.0, 1.0)
-    phit = phi_ml["P50"].where(phi_ml["P50"].notna(), phit_emp).clip(0.0, 1.0)
+    ai_model = str(config.get("ai_model") or "empirical").lower()
+    use_ai = ai_model not in ("", "empirical", "no_ai", "none", "no ai")
+    if use_ai:
+        X = raw_ml_feature_frame(df, {"VSH": vsh_emp})
+        vsh_ml = fit_synthetic_ml_predict(X, "VSH", ai_model)
+        X_phi = X.copy()
+        X_phi["VSH"] = vsh_ml["P50"]
+        phi_ml = fit_synthetic_ml_predict(X_phi, "PHIT", ai_model)
+        X_sw = X_phi.copy()
+        X_sw["PHIT_ML"] = phi_ml["P50"]
+        sw_ml = fit_synthetic_ml_predict(X_sw, "SW", ai_model)
+        X_perm = X_sw.copy()
+        X_perm["SW_ML"] = sw_ml["P50"]
+        perm_ml = fit_synthetic_ml_predict(X_perm, "PERM", ai_model)
+    else:
+        nan = pd.Series([np.nan] * len(df), index=df.index, dtype="float64")
+        vsh_ml = pd.DataFrame({"P10": nan, "P50": vsh_emp, "P90": nan}, index=df.index)
+        phi_ml = pd.DataFrame({"P10": nan, "P50": phit_emp, "P90": nan}, index=df.index)
+        sw_ml = pd.DataFrame({"P10": nan, "P50": sw_emp, "P90": nan}, index=df.index)
+        timur_coeff = safe_float(config.get("timur_coeff")) or 8581.0
+        perm_phi_exp = safe_float(config.get("perm_phi_exp")) or 4.4
+        perm_swir = safe_float(config.get("perm_swir")) or 0.20
+        perm_swir_exp = safe_float(config.get("perm_swir_exp")) or 2.0
+        perm_emp = (timur_coeff * (phie_emp.clip(lower=0.0) ** perm_phi_exp) / (max(perm_swir, 1e-6) ** perm_swir_exp)).replace([np.inf, -np.inf], np.nan).clip(lower=0.0)
+        perm_ml = pd.DataFrame({"P10": nan, "P50": np.log10(perm_emp.where(perm_emp > 0)), "P90": nan}, index=df.index)
+
+    vsh = vsh_ml["P50"].where(use_ai & vsh_ml["P50"].notna(), vsh_emp).clip(0.0, 1.0)
+    phit = phi_ml["P50"].where(use_ai & phi_ml["P50"].notna(), phit_emp).clip(0.0, 1.0)
     phie = (phit * (1.0 - vsh.fillna(0.0))).where(phit.notna(), other=np.nan).clip(0.0, 1.0)
     sw = sw_ml["P50"].where(sw_ml["P50"].notna(), sw_emp).clip(0.0, 1.0)
     perm = np.power(10.0, perm_ml["P50"]).clip(0.001, 10000.0)
@@ -329,6 +439,8 @@ def compute_prediction_sections(item, config=None):
             continue
         records.append({
             "DEPTH": depth,
+            "GR": safe_float(round(float(gr.iloc[i]), 4)) if pd.notna(gr.iloc[i]) else None,
+            "IGR": safe_float(round(float(igr.iloc[i]), 5)) if pd.notna(igr.iloc[i]) else None,
             "VSH": safe_float(round(float(vsh.iloc[i]), 5)) if pd.notna(vsh.iloc[i]) else None,
             "PHIT": safe_float(round(float(phit.iloc[i]), 5)) if pd.notna(phit.iloc[i]) else None,
             "PHIE": safe_float(round(float(phie.iloc[i]), 5)) if pd.notna(phie.iloc[i]) else None,
@@ -339,6 +451,8 @@ def compute_prediction_sections(item, config=None):
             "SW_P10": safe_float(round(float(sw_ml["P10"].iloc[i]), 5)) if pd.notna(sw_ml["P10"].iloc[i]) else None,
             "SW_P50": safe_float(round(float(sw_ml["P50"].iloc[i]), 5)) if pd.notna(sw_ml["P50"].iloc[i]) else None,
             "SW_P90": safe_float(round(float(sw_ml["P90"].iloc[i]), 5)) if pd.notna(sw_ml["P90"].iloc[i]) else None,
+            "RT": safe_float(round(float(rt_series.iloc[i]), 4)) if pd.notna(rt_series.iloc[i]) else None,
+            "PERM": safe_float(round(float(perm.iloc[i]), 4)) if pd.notna(perm.iloc[i]) else None,
             "PERMEABILITY_MD": safe_float(round(float(perm.iloc[i]), 4)) if pd.notna(perm.iloc[i]) else None,
             "PERM_P10": safe_float(round(float(np.power(10.0, perm_ml["P10"].iloc[i])), 4)) if pd.notna(perm_ml["P10"].iloc[i]) else None,
             "PERM_P50": safe_float(round(float(np.power(10.0, perm_ml["P50"].iloc[i])), 4)) if pd.notna(perm_ml["P50"].iloc[i]) else None,
@@ -346,7 +460,9 @@ def compute_prediction_sections(item, config=None):
             "LITHOLOGY": str(lith.iloc[i]),
             "CONFIDENCE": safe_float(round(float(confidence.iloc[i]), 2)) if pd.notna(confidence.iloc[i]) else None,
             "RELIABILITY": safe_float(round(float(reliability.iloc[i]), 2)) if pd.notna(reliability.iloc[i]) else None,
-            "MODEL": "AI Random Forest",
+            "MODEL": model_display_name(ai_model) if use_ai else "Empirical",
+            "SATURATION_METHOD": sat_label,
+            "PERM_METHOD": "Timur",
         })
 
     def avg(key):
@@ -354,10 +470,11 @@ def compute_prediction_sections(item, config=None):
         return round(float(np.mean(values)), 4) if values else 0.0
 
     bundle = {
-        "porosity": [{"DEPTH": r["DEPTH"], "PHIT": r["PHIT"], "PHIE": r["PHIE"], "P10": r["PHI_P10"], "P50": r["PHI_P50"], "P90": r["PHI_P90"], "CONFIDENCE": r["CONFIDENCE"], "MODEL": r["MODEL"]} for r in records],
-        "saturation": [{"DEPTH": r["DEPTH"], "SW": r["SW"], "P10": r["SW_P10"], "P50": r["SW_P50"], "P90": r["SW_P90"], "RELIABILITY": r["RELIABILITY"], "MODEL": r["MODEL"]} for r in records],
-        "permeability": [{"DEPTH": r["DEPTH"], "PERMEABILITY_MD": r["PERMEABILITY_MD"], "P10": r["PERM_P10"], "P50": r["PERM_P50"], "P90": r["PERM_P90"], "MODEL": r["MODEL"]} for r in records],
-        "lithology": [{"DEPTH": r["DEPTH"], "LITHOLOGY": r["LITHOLOGY"], "VSH": r["VSH"], "CONFIDENCE": r["CONFIDENCE"]} for r in records],
+        "vsh": [{"DEPTH": r["DEPTH"], "GR": r["GR"], "IGR": r["IGR"], "VSH": r["VSH"], "VSH_P10": None, "VSH_P50": r["VSH"], "VSH_P90": None} for r in records],
+        "porosity": [{"DEPTH": r["DEPTH"], "PHIT": r["PHIT"], "PHIE": r["PHIE"], "PHIT_P10": r["PHI_P10"], "PHIT_P50": r["PHI_P50"], "PHIT_P90": r["PHI_P90"]} for r in records],
+        "saturation": [{"DEPTH": r["DEPTH"], "RT": r["RT"], "SW": r["SW"], "SW_P10": r["SW_P10"], "SW_P50": r["SW_P50"], "SW_P90": r["SW_P90"], "SATURATION_METHOD": r["SATURATION_METHOD"]} for r in records],
+        "permeability": [{"DEPTH": r["DEPTH"], "PHIT": r["PHIT"], "PHIE": r["PHIE"], "SW": r["SW"], "PERM": r["PERM"], "PERM_METHOD": r["PERM_METHOD"]} for r in records],
+        "lithology": [{"DEPTH": r["DEPTH"], "VSH": r["VSH"], "RHOB": None, "LITHOLOGY": r["LITHOLOGY"]} for r in records],
         "preview": records,
     }
     return to_builtin({
@@ -365,6 +482,18 @@ def compute_prediction_sections(item, config=None):
         "records": records[:5],
         "all_records": records,
         "bundle": bundle,
+        "vsh_table": bundle["vsh"],
+        "porosity_table": bundle["porosity"],
+        "saturation_table": bundle["saturation"],
+        "permeability_table": bundle["permeability"],
+        "lithology_table": bundle["lithology"],
+        "exports": bundle,
+        "active_formulas": {
+            "vsh": vsh_label if not use_ai else model_display_name(ai_model),
+            "porosity": model_display_name(ai_model) if use_ai else "Density Porosity",
+            "saturation": f"{model_display_name(ai_model)} + {sat_label}" if use_ai else sat_label,
+            "permeability": model_display_name(ai_model) if use_ai else "Timur",
+        },
         "summary_cards": {
             "avg_phi_p50": avg("PHIE"),
             "avg_sw_p50": avg("SW"),
