@@ -7,7 +7,10 @@ export default defineConfig({
     port: 3000,
     allowedHosts: 'all',
     proxy: {
-      '/api': { target: 'http://backend:8000', changeOrigin: true },
+      '/api': {
+        target: 'http://backend:8000',
+        changeOrigin: true,
+      },
     },
   },
 })
