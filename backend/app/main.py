@@ -5,11 +5,11 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import os
 
-from backend.app.core.config import settings
-from backend.app.core.database import engine, Base
-from backend.app.core.seed import seed_db
-from backend.app.api import auth, projects, wells, curves, files, ai_jobs, reports, gpt, petrophysics, seismic, geothermal, production
-from backend.ccus.router import router as ccus_router
+from app.core.config import settings
+from app.core.database import engine, Base
+from app.core.seed import seed_db
+from app.api import auth, projects, wells, curves, files, ai_jobs, reports, gpt, petrophysics, seismic, geothermal, production
+from ccus.router import router as ccus_router
 
 
 

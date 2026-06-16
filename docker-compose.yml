@@ -87,7 +87,7 @@ services:
       dockerfile: Dockerfile
     container_name: drakeai_frontend
     environment:
-      VITE_API_URL: http://localhost:8000
+      VITE_API_URL: https://dbacb5q6wmjho.cloudfront.net
     ports:
       - "3000:3000"
     depends_on:
