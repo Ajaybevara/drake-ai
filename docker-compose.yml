@@ -101,3 +101,16 @@ volumes:
   redis_data:
   minio_data:
   upload_data:
+  nginx:
+    image: nginx:alpine
+    container_name: drakeai_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - frontend
+      - backend
+    restart: always
+    networks:
+      - default
