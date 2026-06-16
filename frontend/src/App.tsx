@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import LoginPage from './pages/LoginPage'
 import MainLayout from './components/layout/MainLayout'
 import DashboardPage from './pages/DashboardPage'
+import PlatformLandingPage from './pages/PlatformLandingPage'
 import ProjectsPage from './pages/ProjectsPage'
 import DataManagementPage from './pages/DataManagementPage'
 import ReportsPage from './pages/ReportsPage'
@@ -33,7 +34,7 @@ const router = createBrowserRouter([
       </PrivateRoute>
     ),
     children: [
-      { index: true, element: <DashboardPage /> },
+      { index: true, element: <PlatformLandingPage /> },
       { path: 'dashboard', element: <DashboardPage /> },
       { path: 'projects', element: <ProjectsPage /> },
       { path: 'data-management', element: <DataManagementPage /> },

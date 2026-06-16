@@ -14,7 +14,7 @@ const NAV_ITEMS = [
 ]
 
 export default function TopBar() {
-  const { user, logout, theme, toggleTheme, activeLocalProject, activeProjectFileHandle, setActiveProjectFileHandle, markProjectSaved, projectDirty } = useStore()
+  const { user, logout, theme, toggleTheme, activeLocalProject, activeProjectFileHandle, setActiveProjectFileHandle, markProjectSaved, projectDirty, enterpriseProject } = useStore()
   const [profileOpen, setProfileOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -30,9 +30,14 @@ export default function TopBar() {
   }
 
   const handleSaveProject = async () => {
+    if (enterpriseProject) {
+      toast.success('Project state is saved automatically in project.json')
+      navigate('/dashboard')
+      return
+    }
     if (!activeLocalProject) {
-      toast.error('Create or open a .drake project first')
-      navigate('/projects')
+      toast.error('Create or open a project first')
+      navigate('/')
       return
     }
     try {
@@ -57,6 +62,16 @@ export default function TopBar() {
     toast.success(`Searching for "${query}"`)
   }
 
+  const toggleSearch = () => {
+    if (searchOpen) {
+      setSearchOpen(false)
+      setSearchTerm('')
+      return
+    }
+    setSearchOpen(true)
+    setTimeout(() => searchRef.current?.focus(), 0)
+  }
+
   useEffect(() => {
     const onClick = (event: MouseEvent) => {
       if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
@@ -78,7 +93,7 @@ export default function TopBar() {
   }
 
   return (
-    <div style={{ height: 42, background: isLight ? '#FFFFFF' : '#0B111A', borderBottom: `1px solid ${isLight ? '#CBD5E1' : '#1F2A3A'}`, display: 'flex', alignItems: 'center', padding: '0 10px', gap: 0, flexShrink: 0, zIndex: 100, overflow: 'hidden', boxShadow: isLight ? '0 1px 0 rgba(15,23,42,.06)' : '0 1px 0 rgba(255,255,255,.03)' }}>
+    <div style={{ height: 42, background: isLight ? '#FFFFFF' : '#0B111A', borderBottom: `1px solid ${isLight ? '#CBD5E1' : '#1F2A3A'}`, display: 'flex', alignItems: 'center', padding: '0 10px', gap: 0, flexShrink: 0, zIndex: 100, overflow: 'visible', boxShadow: isLight ? '0 1px 0 rgba(15,23,42,.06)' : '0 1px 0 rgba(255,255,255,.03)' }}>
       <nav style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 6px', flex: '1 1 auto', minWidth: 0, overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'none' }}>
         {NAV_ITEMS.map(item => {
           const active = isActive(item)
@@ -108,6 +123,12 @@ export default function TopBar() {
       </nav>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 8, flexShrink: 0 }}>
+        {enterpriseProject && (
+          <button onClick={() => navigate('/dashboard')} title={enterpriseProject.project_path} style={{ height: 30, maxWidth: 210, borderRadius: 6, background: isLight ? '#ECFDF5' : 'rgba(16,185,129,.12)', border: '1px solid rgba(16,185,129,.45)', color: isLight ? '#047857' : '#A7F3D0', padding: '0 10px', cursor: 'pointer', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <i className="fas fa-folder-open" style={{ fontSize: 12, marginRight: 7 }}></i>
+            {enterpriseProject.project_name}
+          </button>
+        )}
         <button onClick={handleSaveProject} title="Save Project to Local Disk" style={{ height: 30, borderRadius: 6, background: projectDirty ? 'linear-gradient(135deg,#EF4444,#DA2626)' : isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${projectDirty ? '#EF4444' : isLight ? '#CBD5E1' : '#223047'}`, color: projectDirty ? '#FFFFFF' : isLight ? '#0F172A' : '#F8FAFC', display: 'flex', alignItems: 'center', gap: 7, padding: '0 12px', cursor: 'pointer', fontWeight: 800, whiteSpace: 'nowrap' }}>
           <i className="fas fa-save" style={{ fontSize: 12 }}></i>
           Save Project
@@ -126,8 +147,8 @@ export default function TopBar() {
               style={{ width: 180, height: 30, borderRadius: 6, border: `1px solid ${isLight ? '#CBD5E1' : '#223047'}`, background: isLight ? '#F8FAFC' : '#070B12', color: isLight ? '#0F172A' : '#F8FAFC', outline: 'none', padding: '0 10px', fontSize: 13 }}
             />
           )}
-          <button onClick={searchOpen ? submitSearch : () => { setSearchOpen(true); setTimeout(() => searchRef.current?.focus(), 0) }} title="Search wells and projects" style={{ width: 30, height: 30, borderRadius: 6, background: isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${isLight ? '#CBD5E1' : '#223047'}`, color: isLight ? '#0F172A' : '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-            <i className="fas fa-search" style={{ fontSize: 12 }}></i>
+          <button onClick={toggleSearch} title={searchOpen ? 'Close search' : 'Search wells and projects'} style={{ width: 30, height: 30, borderRadius: 6, background: isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${isLight ? '#CBD5E1' : '#223047'}`, color: isLight ? '#0F172A' : '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <i className={`fas ${searchOpen ? 'fa-xmark' : 'fa-search'}`} style={{ fontSize: 12 }}></i>
           </button>
         </div>
         <button onClick={toggleTheme} title="Toggle theme" style={{ width: 30, height: 30, borderRadius: 6, background: isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${isLight ? '#CBD5E1' : '#223047'}`, color: isLight ? '#0F172A' : '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
@@ -137,17 +158,24 @@ export default function TopBar() {
           <i className="fas fa-question-circle" style={{ color: isLight ? '#334155' : '#94A3B8', fontSize: 12 }}></i>
         </button>
         <div ref={profileRef} style={{ position: 'relative' }}>
-          <div onClick={() => setProfileOpen((current) => !current)} title="Profile" style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'transparent', border: '1px solid transparent', borderRadius: 7, padding: '4px 10px', cursor: 'pointer' }}>
+          <button type="button" onClick={() => setProfileOpen((current) => !current)} title="Profile menu" style={{ display: 'flex', alignItems: 'center', gap: 7, background: profileOpen ? (isLight ? '#F1F5F9' : '#0E1622') : 'transparent', border: `1px solid ${profileOpen ? (isLight ? '#CBD5E1' : '#223047') : 'transparent'}`, borderRadius: 7, padding: '4px 10px', cursor: 'pointer' }}>
             <div style={{ width: 34, height: 34, background: 'linear-gradient(135deg,#FF4B4B,#DA2626)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff' }}>{user?.avatar_initials || 'U'}</div>
             <div>
               <div style={{ fontSize: 12, color: isLight ? '#0F172A' : '#E2E8F0', fontWeight: 700, lineHeight: 1.2 }}>{user?.full_name}</div>
               <div style={{ fontSize: 10, color: '#64748B' }}>Drake AI Admin</div>
             </div>
             <i className="fas fa-chevron-down" style={{ color: '#64748B', fontSize: 11 }}></i>
-          </div>
+          </button>
           {profileOpen && (
-            <div style={{ position: 'absolute', top: 44, right: 0, minWidth: 150, borderRadius: 10, background: isLight ? '#FFFFFF' : '#0B111A', border: `1px solid ${isLight ? '#E2E8F0' : '#223047'}`, boxShadow: '0 10px 30px rgba(0,0,0,.25)', zIndex: 200, overflow: 'hidden' }}>
-              <button onClick={handleLogout} style={{ width: '100%', padding: '10px 14px', textAlign: 'left', background: 'transparent', border: 'none', color: isLight ? '#0F172A' : '#E2E8F0', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Log out</button>
+            <div style={{ position: 'absolute', top: 46, right: 0, minWidth: 220, borderRadius: 10, background: isLight ? '#FFFFFF' : '#0B111A', border: `1px solid ${isLight ? '#E2E8F0' : '#223047'}`, boxShadow: '0 18px 48px rgba(0,0,0,.32)', zIndex: 10000, overflow: 'hidden' }}>
+              <div style={{ padding: '12px 14px', borderBottom: `1px solid ${isLight ? '#E2E8F0' : '#1E293B'}` }}>
+                <div style={{ color: isLight ? '#0F172A' : '#F8FAFC', fontSize: 13, fontWeight: 900 }}>{user?.full_name || 'User'}</div>
+                <div style={{ color: '#64748B', fontSize: 11, marginTop: 3 }}>{user?.email || 'Signed in'}</div>
+              </div>
+              <button type="button" onClick={handleLogout} style={{ width: '100%', height: 44, padding: '0 14px', textAlign: 'left', background: 'transparent', border: 'none', color: isLight ? '#B91C1C' : '#FCA5A5', cursor: 'pointer', fontSize: 13, fontWeight: 900, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <i className="fas fa-right-from-bracket" style={{ width: 16, textAlign: 'center' }}></i>
+                Logout
+              </button>
             </div>
           )}
         </div>

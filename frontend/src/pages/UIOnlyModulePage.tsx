@@ -2,7 +2,8 @@ import { useStore } from '../store'
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
-import { ccusApi, petrophysicsApi, productionApi, seismicApi } from '../services/api'
+import { ccusApi, localProjectsApi, petrophysicsApi, productionApi, seismicApi } from '../services/api'
+import ProjectFileSelector from '../components/project/ProjectFileSelector'
 
 interface Props {
   title: string
@@ -188,6 +189,7 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
   const upload = async (file: File) => {
     setBusy(true)
     try {
+      await uploadFileToActiveProject(file)
       const response = await petrophysicsApi.uploadPetroLas(file)
       hydrate({ ...response.data, is_demo: false })
       toast.success(`LAS "${file.name}" loaded across Petrophysics`)
@@ -208,7 +210,9 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
         depth_min: emptyToNull(depthRange.min),
         depth_max: emptyToNull(depthRange.max),
       })
-      setResult({ ...response.data, figure: styleLogViewerFigure(response.data.figure), selected_curves: activeCurves })
+      const nextResult = { ...response.data, figure: styleLogViewerFigure(response.data.figure), selected_curves: activeCurves }
+      setResult(nextResult)
+      await saveProjectResultCopy('Log Visualization', `${session?.well_name || 'well'}_log_visualization`, nextResult)
       toast.success('AI visualization rendered')
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'Visualization failed')
@@ -360,6 +364,7 @@ function LogVisualizationCrossplotTab({ session, accent, isLight }: { session: a
       const data = response.data
       data.figure = applyCrossplotFigureStyle(data.figure, config, isLight, accent)
       setPlotData(data)
+      await saveProjectResultCopy('Log Visualization', `log_visualization_crossplot_${data.x_curve || 'x'}_${data.y_curve || 'y'}`, data)
       transientModuleState.logVisualizationCrossplot = { sourceSessionId: session.session_id, bridge: { ...activeBridge, source_session_id: session.session_id }, config, plotData: data }
       if (!silent) toast.success(`Crossplot generated from ${session.file_name}`)
     } catch (error: any) {
@@ -468,6 +473,7 @@ function LogVisualizationHistogramTab({ session, accent, isLight }: { session: a
         show_percentiles: settings.showPercentiles,
       })
       setResult(response.data)
+      await saveProjectResultCopy('Log Visualization', `log_visualization_histogram_${settings.selectedCurve || 'curve'}`, response.data)
       transientModuleState.logVisualizationHistogram = { sourceSessionId: session.session_id, metadata: { ...activeMetadata, source_session_id: session.session_id }, settings, result: response.data }
       toast.success(`Histogram generated from ${session.file_name}`)
     } catch (error: any) {
@@ -682,20 +688,7 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
     if (!hasUserSession) return toast.error('Upload a real LAS file in Log Visualization first')
     setBusy(true)
     try {
-      const response = await petrophysicsApi.analyzeMissingLog(session.session_id)
-      const data = response.data
-      setAnalysis(data)
-      const preferredTargets = ['RHOB', 'NPHI', 'DT', 'GR', 'ILD', 'LL8', 'SP', 'CALI']
-      const defaultTarget = preferredTargets.find(target => (data.target_columns || []).includes(target)) || (data.target_columns || [])[0] || (data.feature_columns || [])[0] || ''
-      const preferredFeatures = ['SP', 'ILD', 'LL8', 'CALI', 'GR', 'NPHI', 'DT', 'RHOB', 'DRHO']
-      const defaultFeatures = preferredFeatures.filter(feature => feature !== defaultTarget && (data.feature_columns || []).includes(feature))
-      setConfig((prev: any) => ({
-        ...prev,
-        target: prev.target || defaultTarget,
-        depthMin: prev.depthMin || String(Math.round(Number(data.summary?.depth_min ?? session.depth_min))),
-        depthMax: prev.depthMax || String(Math.round(Number(data.summary?.depth_max ?? session.depth_max))),
-        features: prev.features?.length ? prev.features : (defaultFeatures.length ? defaultFeatures : (data.feature_columns || []).filter((curve: string) => curve !== defaultTarget).slice(0, 7)),
-      }))
+      await analyzeMissingLogSession(session, setAnalysis, setConfig)
       toast.success('LAS gap analysis complete')
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'Missing log analysis failed')
@@ -711,18 +704,25 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
 
   const run = async () => {
     if (!hasUserSession) return toast.error('Upload a real LAS file in Log Visualization first')
-    if (!config.target) return toast.error('Select a target curve')
     setBusy(true)
     try {
+      const currentAnalysis = analysis || await analyzeMissingLogSession(session, setAnalysis, setConfig)
+      const preferredTargets = ['RHOB', 'NPHI', 'DT', 'GR', 'ILD', 'LL8', 'SP', 'CALI']
+      const defaultTarget = preferredTargets.find(target => (currentAnalysis.target_columns || []).includes(target)) || (currentAnalysis.target_columns || [])[0] || (currentAnalysis.feature_columns || [])[0] || ''
+      const targetColumn = config.target || defaultTarget
+      const defaultFeatures = ['SP', 'ILD', 'LL8', 'CALI', 'GR', 'NPHI', 'DT', 'RHOB', 'DRHO'].filter(feature => feature !== targetColumn && (currentAnalysis.feature_columns || []).includes(feature))
+      const selectedFeatures = config.features?.length ? config.features : (defaultFeatures.length ? defaultFeatures : (currentAnalysis.feature_columns || []).filter((curve: string) => curve !== targetColumn).slice(0, 7))
+      if (!targetColumn) return toast.error('Select a target curve')
       const response = await petrophysicsApi.predictMissingLog({
         session_id: session.session_id,
-        target_column: config.target,
-        selected_features: config.features,
-        depth_min: emptyToNull(config.depthMin),
-        depth_max: emptyToNull(config.depthMax),
+        target_column: targetColumn,
+        selected_features: selectedFeatures,
+        depth_min: emptyToNull(config.depthMin || String(Math.round(Number(currentAnalysis.summary?.depth_min ?? session.depth_min)))),
+        depth_max: emptyToNull(config.depthMax || String(Math.round(Number(currentAnalysis.summary?.depth_max ?? session.depth_max)))),
         model_name: config.model,
       })
       setResult(response.data)
+      await saveProjectResultCopy('Missing Log Prediction', `${response.data?.target_column || 'missing_log'}_prediction`, response.data)
       toast.success(`Predicted ${response.data.predicted_count?.toLocaleString?.()} samples`)
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'Missing log prediction failed')
@@ -753,7 +753,7 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
 
   return (
     <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
-      <ActionHeader accent={accent} isLight={isLight} label="Missing Log Prediction" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? `${session.file_name} - analyze gaps, select a target log, and run prediction.` : 'This module uses the LAS uploaded in Log Visualization. Demo sessions are not used for missing-log prediction.'} actions={<><SharedLasActions isLight={isLight} busy={busy} setBusy={setBusy} onSession={replaceSession} /><button onClick={analyze} disabled={busy || !hasUserSession} style={smallButton(isLight)}>{busy ? 'Analyzing...' : 'Analyze LAS'}</button><button onClick={run} disabled={busy || !hasUserSession || !analysis} style={{ ...primaryButton(accent), width: 210 }}>{busy ? 'Running...' : 'Run Prediction'}</button></>} />
+      <ActionHeader accent={accent} isLight={isLight} label="Missing Log Prediction" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? `${session.file_name} - select a target log and run prediction.` : 'Select a project LAS file or upload a LAS file, then run prediction.'} actions={<><SharedLasActions isLight={isLight} busy={busy} setBusy={setBusy} onSession={replaceSession} /><button onClick={run} disabled={busy || !hasUserSession} style={{ ...primaryButton(accent), width: 210 }}>{busy ? 'Running...' : 'Run Prediction'}</button></>} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px,430px) minmax(0,1fr)', gap: 18 }}>
         <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
@@ -786,7 +786,7 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
             const valid = Math.max((analysis.row_count || 0) - missing, 0)
             const availability = analysis.row_count ? ((valid / analysis.row_count) * 100).toFixed(1) : '0.0'
             return { log: curve, valid_samples: valid.toLocaleString(), missing_samples: missing.toLocaleString(), availability_pct: availability, gap_ranges: (analysis.gap_ranges?.[curve] || []).slice(0, 2).map((r: any) => `${r.start}-${r.end}`).join(', ') || 'No gaps detected' }
-          })} columns={['log', 'valid_samples', 'missing_samples', 'availability_pct', 'gap_ranges']} isLight={isLight} /> : <div style={{ color: muted }}>Analyze the uploaded LAS to find missing curves and depth gaps.</div>}
+          })} columns={['log', 'valid_samples', 'missing_samples', 'availability_pct', 'gap_ranges']} isLight={isLight} /> : <div style={{ color: muted }}>Run prediction to analyze gaps and generate results from the selected LAS.</div>}
         </div>
       </div>
 
@@ -874,6 +874,7 @@ function SharedLasActions({
     if (!file) return
     setBusy(true)
     try {
+      await uploadFileToActiveProject(file)
       const response = await petrophysicsApi.uploadPetroLas(file)
       savePetroSession({ ...response.data, is_demo: false })
       onSession({ ...response.data, is_demo: false })
@@ -888,14 +889,8 @@ function SharedLasActions({
     }
   }
 
-  const loadLas = () => {
-    const active = readPetroSession()
-    if (!active?.session_id) return toast.error('Upload LAS in Log Visualization first')
-    onSession(active)
-    toast.success(`Loaded active LAS: ${active.file_name || active.well_name}`)
-  }
-
   return <>
+    <ProjectFileSelector moduleName="Petrophysics" allowedExtensions={['las', 'csv', 'xlsx']} onSelectFile={file => uploadLas(file)} compact />
     <button
       onClick={() => {
         const input = document.createElement('input')
@@ -909,8 +904,55 @@ function SharedLasActions({
     >
       Upload LAS
     </button>
-    <button onClick={loadLas} disabled={busy} style={smallButton(isLight)}>Load LAS</button>
   </>
+}
+
+async function analyzeMissingLogSession(session: any, setAnalysis: (value: any) => void, setConfig: (value: any) => void) {
+  const response = await petrophysicsApi.analyzeMissingLog(session.session_id)
+  const data = response.data
+  setAnalysis(data)
+  const preferredTargets = ['RHOB', 'NPHI', 'DT', 'GR', 'ILD', 'LL8', 'SP', 'CALI']
+  const defaultTarget = preferredTargets.find(target => (data.target_columns || []).includes(target)) || (data.target_columns || [])[0] || (data.feature_columns || [])[0] || ''
+  const preferredFeatures = ['SP', 'ILD', 'LL8', 'CALI', 'GR', 'NPHI', 'DT', 'RHOB', 'DRHO']
+  const defaultFeatures = preferredFeatures.filter(feature => feature !== defaultTarget && (data.feature_columns || []).includes(feature))
+  setConfig((prev: any) => ({
+    ...prev,
+    target: prev.target || defaultTarget,
+    depthMin: prev.depthMin || String(Math.round(Number(data.summary?.depth_min ?? session.depth_min))),
+    depthMax: prev.depthMax || String(Math.round(Number(data.summary?.depth_max ?? session.depth_max))),
+    features: prev.features?.length ? prev.features : (defaultFeatures.length ? defaultFeatures : (data.feature_columns || []).filter((curve: string) => curve !== defaultTarget).slice(0, 7)),
+  }))
+  return data
+}
+
+async function uploadPredictionLas(file: File, onSession: (session: any) => void, setBusy: (value: any) => void) {
+  setBusy('upload')
+  try {
+    await uploadFileToActiveProject(file)
+    const response = await petrophysicsApi.uploadPetroLas(file)
+    const nextSession = { ...response.data, is_demo: false }
+    savePetroSession(nextSession)
+    onSession(nextSession)
+    transientModuleState.prediction = {}
+    transientModuleState.uncertainty = {}
+    transientModuleState.missingLog = {}
+    toast.success(`LAS "${file.name}" uploaded and active`)
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || 'LAS upload failed')
+  } finally {
+    setBusy(null)
+  }
+}
+
+function browsePredictionLas(onSession: (session: any) => void, setBusy: (value: any) => void) {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.las'
+  input.onchange = event => {
+    const file = (event.target as HTMLInputElement).files?.[0]
+    if (file) uploadPredictionLas(file, onSession, setBusy)
+  }
+  input.click()
 }
 
 function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
@@ -990,6 +1032,7 @@ function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLi
     try {
       const response = await petrophysicsApi.generatePetroPrediction({ session_id: session.session_id, ...config, ai_model: predictionModelForTab(targetTab, config) })
       setResult(response.data)
+      await saveProjectResultCopy('AI Parameter Prediction', `${targetTab}_prediction`, response.data)
       transientModuleState.prediction = { session, result: response.data, activeTab, config, draftDepth, appliedDepth }
       toast.success(`${targetTab} calculation complete`)
     } catch (error: any) {
@@ -1141,6 +1184,7 @@ function PetrophysicsUncertaintyPanel({ accent, isLight }: { accent: string; isL
       }
       const response = await petrophysicsApi.generatePetroUncertainty({ session_id: session.session_id, ...params })
       setResult(response.data)
+      await saveProjectResultCopy('AI Uncertainty', `${target}_uncertainty`, response.data)
       transientModuleState.uncertainty = { session, result: response.data, params }
       toast.success(`${target === 'porosity' ? 'Porosity' : 'Saturation'} uncertainty calculated`)
     } catch (error: any) {
@@ -1158,7 +1202,7 @@ function PetrophysicsUncertaintyPanel({ accent, isLight }: { accent: string; isL
   const depthMax = result?.all_records?.[result?.all_records?.length - 1]?.DEPTH ?? session?.depth_max
   return (
     <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
-      <ActionHeader accent={accent} isLight={isLight} label="AI Uncertainty" title={hasUserSession ? session?.well_name : 'Load Prediction LAS First'} subtitle={hasUserSession ? 'Use separate porosity and saturation calculators with LAS-aware log selections.' : 'Uncertainty loads the LAS used by AI Parameter Prediction, or the active LAS from Log Visualization.'} actions={<button onClick={loadPredictionLas} disabled={!!busy} style={smallButton(isLight)}>Load LAS</button>} />
+      <ActionHeader accent={accent} isLight={isLight} label="AI Uncertainty" title={hasUserSession ? session?.well_name : 'Select Prediction LAS'} subtitle={hasUserSession ? 'Use separate porosity and saturation calculators with LAS-aware log selections.' : 'Select a project LAS file or upload a LAS file, then calculate uncertainty.'} actions={<><ProjectFileSelector moduleName="Petrophysics" allowedExtensions={['las', 'csv', 'xlsx']} onSelectFile={file => uploadPredictionLas(file, nextSession => { setSession(nextSession); setResult(null) }, setBusy)} compact /><button onClick={() => browsePredictionLas(nextSession => { setSession(nextSession); setResult(null) }, setBusy)} disabled={!!busy} style={greenActionButton()}>Upload LAS</button></>} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(360px,1fr))', gap: 18 }}>
         <UncertaintyConfigCard title="Porosity Uncertainty" tone="#2563EB" isLight={isLight}>
           <Control label="AI Model"><select style={field(isLight)} value={params.aiModel} onChange={e => setParams((prev: any) => ({ ...prev, aiModel: e.target.value }))}><option>Random Forest AI</option><option>Gradient Boosting AI</option><option>Decision Tree AI</option></select></Control>
@@ -1540,8 +1584,10 @@ function AutoSplicerPanel({ accent, isLight }: { accent: string; isLight: boolea
     if (files.length < 2) return toast.error('Select at least two LAS files')
     setBusy(true)
     try {
+      await Promise.all(files.map(file => uploadFileToActiveProject(file)))
       const response = await petrophysicsApi.runAutoSplice(files)
       setResult(response.data)
+      await saveProjectResultCopy('Auto Splicer', 'auto_splice_result', response.data)
       toast.success('AutoSplice completed')
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'AutoSplice failed')
@@ -1570,6 +1616,7 @@ function AutoSplicerPanel({ accent, isLight }: { accent: string; isLight: boolea
           <div style={{ display: 'grid', gap: 8, marginTop: 14 }}>
             {files.map(file => <div key={`${file.name}-${file.size}`} style={{ padding: 10, borderRadius: 10, border: `1px solid ${border}`, color: text, display: 'flex', justifyContent: 'space-between' }}><span>{file.name}</span><span style={{ color: muted }}>{(file.size / 1024 / 1024).toFixed(2)} MB</span></div>)}
           </div>
+          <ProjectFileSelector moduleName="Petrophysics" allowedExtensions={['las']} onSelectFile={file => setFiles(prev => [...prev, file])} />
           <button onClick={run} disabled={busy || files.length < 2} style={{ ...primaryButton(accent), marginTop: 16, width: '100%' }}>{busy ? 'Splicing...' : 'Run AutoSplice'}</button>
         </div>
         <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
@@ -1592,7 +1639,7 @@ function AutoSplicerPanel({ accent, isLight }: { accent: string; isLight: boolea
               {result?.download_url ? 'Merged LAS is ready. Download the final AutoSpliced output file.' : 'Run AutoSplice to generate the downloadable merged LAS file.'}
             </p>
           </div>
-          {result?.download_url ? <a href={petrophysicsApi.autospliceDownloadUrl(result.download_url)} style={{ ...primaryButton(accent), textDecoration: 'none', width: 180, textAlign: 'center' }}>Download LAS</a> : null}
+          {result?.download_url ? <a href={petrophysicsApi.autospliceDownloadUrl(result.download_url)} onClick={() => saveDownloadedExportFromUrl(petrophysicsApi.autospliceDownloadUrl(result.download_url), 'AutoSpliced_Output.las', 'las', 'Petrophysics')} download style={{ ...primaryButton(accent), textDecoration: 'none', width: 180, textAlign: 'center' }}>Download LAS</a> : null}
         </div>
       </div>
     </section>
@@ -1607,7 +1654,6 @@ function LasUploadCard({ accent, isLight, busy, session, onDemo, onUpload, title
     <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 14 }}>
         <div><div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Petrophysics Input</div><h2 style={{ margin: '6px 0 0', color: text, fontSize: 24 }}>{title}</h2></div>
-        <button onClick={onDemo} disabled={busy} style={smallButton(isLight)}>{busy ? 'Loading...' : 'Load Demo'}</button>
       </div>
       <div onDrop={event => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file) onUpload(file) }} onDragOver={event => event.preventDefault()} style={{ border: `2px dashed ${isLight ? '#CBD5E1' : '#334155'}`, borderRadius: 14, padding: 22, background: isLight ? '#F1F5F9' : '#08111F' }}>
         <div style={{ color: text, fontWeight: 900 }}>Drop LAS here or browse</div>
@@ -1624,12 +1670,13 @@ function LasUploadCard({ accent, isLight, busy, session, onDemo, onUpload, title
         }}>Browse LAS</button>
         <div style={{ color: session ? '#10B981' : muted, marginTop: 14, fontSize: 13 }}>{session ? `Active: ${session.file_name}` : 'No active LAS yet'}</div>
       </div>
+      <ProjectFileSelector moduleName="Petrophysics" allowedExtensions={['las', 'csv', 'xlsx']} onSelectFile={file => onUpload(file)} />
     </div>
   )
 }
 
 function ActionHeader({ accent, isLight, label, title, subtitle, actions }: { accent: string; isLight: boolean; label: string; title: string; subtitle: string; actions: React.ReactNode }) {
-  return <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${isLight ? '#E2E8F0' : '#1E293B'}`, background: isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))', display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}><div><div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>{label}</div><h2 style={{ margin: '6px 0', color: isLight ? '#0F172A' : '#F8FAFC', fontSize: 26 }}>{title}</h2><p style={{ margin: 0, color: isLight ? '#64748B' : '#94A3B8' }}>{subtitle}</p></div><div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>{actions}</div></div>
+  return <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${isLight ? '#E2E8F0' : '#1E293B'}`, background: isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))', display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}><div><div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>{label}</div><h2 style={{ margin: '6px 0', color: isLight ? '#0F172A' : '#F8FAFC', fontSize: 26 }}>{title}</h2><p style={{ margin: 0, color: isLight ? '#64748B' : '#94A3B8' }}>{subtitle}</p></div><div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'flex-end' }}>{actions}</div></div>
 }
 
 function InfoCard({ accent, isLight, label, title, items }: { accent: string; isLight: boolean; label: string; title: string; items: any[] }) {
@@ -1655,7 +1702,7 @@ function ResultTable({ title, rows, isLight, accent, downloadName }: { title: st
   </div>
 }
 
-function downloadRowsAsCsv(rows: any[], filename: string) {
+async function downloadRowsAsCsv(rows: any[], filename: string) {
   if (!rows.length) return
   const columns = Object.keys(rows[0])
   const escapeCell = (value: any) => {
@@ -1670,6 +1717,96 @@ function downloadRowsAsCsv(rows: any[], filename: string) {
   link.download = filename
   link.click()
   URL.revokeObjectURL(url)
+  await saveProjectExportCopy(filename, csv, 'csv')
+}
+
+async function uploadFileToActiveProject(file: File) {
+  try {
+    const project = localStorage.getItem('drake_enterprise_project')
+    if (!project) return
+    const activeProject = JSON.parse(project)
+    const { data } = await localProjectsApi.uploadFiles(activeProject.project_id, [file])
+    localStorage.setItem('drake_enterprise_project', JSON.stringify(data.project))
+    useStore.getState().setEnterpriseProject(data.project)
+  } catch {
+    // Module processing should continue even if the project copy cannot be saved.
+  }
+}
+
+async function saveProjectResultCopy(moduleName: string, predictionName: string, resultPayload: any) {
+  try {
+    const project = localStorage.getItem('drake_enterprise_project')
+    if (!project) return
+    const activeProject = JSON.parse(project)
+    const { data } = await localProjectsApi.saveResult({
+      project_id: activeProject.project_id,
+      module_name: moduleName,
+      prediction_name: predictionName,
+      extension: 'json',
+      result_payload: resultPayload,
+    })
+    localStorage.setItem('drake_enterprise_project', JSON.stringify(data.project))
+    useStore.getState().setEnterpriseProject(data.project)
+  } catch {
+    // Result snapshot failure should not block the module workflow.
+  }
+}
+
+async function saveProjectExportCopy(filename: string, content: string, exportType: string, moduleName = 'Petrophysics') {
+  try {
+    const project = localStorage.getItem('drake_enterprise_project')
+    if (!project) return
+    const activeProject = JSON.parse(project)
+    const { data } = await localProjectsApi.saveExport({
+      project_id: activeProject.project_id,
+      module_name: moduleName,
+      export_type: exportType,
+      prediction_name: filename.replace(/\.[^.]+$/, ''),
+      extension: exportType,
+      content,
+    })
+    localStorage.setItem('drake_enterprise_project', JSON.stringify(data.project))
+    useStore.getState().setEnterpriseProject(data.project)
+  } catch {
+    // Export copy failure must not block the existing browser download.
+  }
+}
+
+async function saveProjectBinaryExportCopy(filename: string, contentBase64: string, exportType: string, moduleName = 'Petrophysics') {
+  try {
+    const project = localStorage.getItem('drake_enterprise_project')
+    if (!project) return
+    const activeProject = JSON.parse(project)
+    const { data } = await localProjectsApi.saveExport({
+      project_id: activeProject.project_id,
+      module_name: moduleName,
+      export_type: exportType,
+      prediction_name: filename.replace(/\.[^.]+$/, ''),
+      extension: exportType,
+      content_base64: contentBase64,
+    })
+    localStorage.setItem('drake_enterprise_project', JSON.stringify(data.project))
+    useStore.getState().setEnterpriseProject(data.project)
+  } catch {
+    // Export copy failure must not block the existing browser download.
+  }
+}
+
+async function saveDownloadedExportFromUrl(url: string, filename: string, exportType: string, moduleName = 'Petrophysics') {
+  try {
+    const response = await fetch(url)
+    if (!response.ok) return
+    const blob = await response.blob()
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const dataUrl = String(reader.result || '')
+      const base64 = dataUrl.split(',')[1]
+      if (base64) saveProjectBinaryExportCopy(filename, base64, exportType, moduleName)
+    }
+    reader.readAsDataURL(blob)
+  } catch {
+    // Browser download still proceeds.
+  }
 }
 
 function ProductionIntelligencePanel({ accent, isLight }: { accent: string; isLight: boolean }) {
@@ -1689,6 +1826,7 @@ function ProductionIntelligencePanel({ accent, isLight }: { accent: string; isLi
     try {
       const response = await productionApi.sample()
       setResult(response.data)
+      await saveProjectResultCopy('Production', 'production_sample_analysis', response.data)
       toast.success('Production sample analyzed')
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'Production analysis failed')
@@ -1700,8 +1838,10 @@ function ProductionIntelligencePanel({ accent, isLight }: { accent: string; isLi
     if (!file) return
     setBusy(true)
     try {
+      await uploadFileToActiveProject(file)
       const response = await productionApi.analyze(file)
       setResult(response.data)
+      await saveProjectResultCopy('Production', `production_${file.name.replace(/\.[^.]+$/, '')}`, response.data)
       toast.success(`Production file analyzed: ${file.name}`)
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'Production file analysis failed')
@@ -1739,7 +1879,7 @@ function ProductionIntelligencePanel({ accent, isLight }: { accent: string; isLi
         title="Integrated Production Module"
         subtitle="Runs artificial lift failure, optimizer, decline, performance, downtime, and workover ranking in one section."
         actions={<>
-          <button onClick={runSample} disabled={busy} style={smallButton(isLight)}>{busy ? 'Loading...' : 'Load Sample'}</button>
+          <ProjectFileSelector moduleName="Production" allowedExtensions={['csv', 'xlsx', 'xls']} onSelectFile={file => uploadAndAnalyze(file)} compact />
           <button
             disabled={busy}
             style={primaryButton(accent)}
@@ -1828,7 +1968,7 @@ function primaryButton(_accent: string): React.CSSProperties {
 }
 
 function greenActionButton(): React.CSSProperties {
-  return { padding: '13px 16px', borderRadius: 12, border: 'none', background: '#10B981', color: '#052E16', fontWeight: 900, cursor: 'pointer', boxShadow: '0 12px 34px rgba(16,185,129,.22)' }
+  return { height: 56, padding: '0 22px', borderRadius: 12, border: 'none', background: '#10B981', color: '#052E16', fontWeight: 900, cursor: 'pointer', boxShadow: '0 12px 34px rgba(16,185,129,.22)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap', fontSize: 15 }
 }
 
 function tableHead(isLight: boolean): React.CSSProperties {
@@ -1897,6 +2037,7 @@ function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLig
   const uploadLas = async (file: File) => {
     setUploading(true)
     try {
+      await uploadFileToActiveProject(file)
       const response = await petrophysicsApi.uploadCrossplotLas(file)
       hydrateSession(response.data)
       toast.success(`LAS "${file.name}" loaded`)
@@ -1939,6 +2080,7 @@ function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLig
       const data = response.data
       data.figure = applyCrossplotFigureStyle(data.figure, config, isLight, accent)
       setPlotData(data)
+      await saveProjectResultCopy('Crossplot', `crossplot_${data.x_curve || 'x'}_${data.y_curve || 'y'}`, data)
       if (!silent) toast.success(`Crossplot generated: ${data.point_count?.toLocaleString()} points`)
     } catch (error: any) {
       if (!silent) toast.error(error?.response?.data?.detail || 'Crossplot generation failed')
@@ -1965,7 +2107,6 @@ function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLig
               <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 01</div>
               <h2 style={{ margin: '6px 0 0', color: text, fontSize: 24 }}>Upload LAS File</h2>
             </div>
-            <button onClick={loadDemo} disabled={uploading} style={smallButton(isLight)}>{uploading ? 'Loading...' : 'Load Demo LAS'}</button>
           </div>
           <div
             onDrop={event => {
@@ -1997,6 +2138,7 @@ function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLig
               {session ? `Loaded: ${session.file_name || 'LAS file'}` : 'No LAS loaded yet'}
             </div>
           </div>
+          <ProjectFileSelector moduleName="Petrophysics" allowedExtensions={['las', 'csv', 'xlsx']} onSelectFile={file => uploadLas(file)} />
         </div>
 
         <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
@@ -2162,6 +2304,7 @@ function PetrophysicsHistogramPanel({ accent, isLight }: { accent: string; isLig
   const uploadLas = async (file: File) => {
     setUploading(true)
     try {
+      await uploadFileToActiveProject(file)
       const response = await petrophysicsApi.uploadHistogramLas(file)
       hydrateMetadata(response.data)
       toast.success(`LAS "${file.name}" loaded`)
@@ -2195,6 +2338,7 @@ function PetrophysicsHistogramPanel({ accent, isLight }: { accent: string; isLig
         show_percentiles: settings.showPercentiles,
       })
       setResult(response.data)
+      await saveProjectResultCopy('Histogram', `${settings.selectedCurve || 'curve'}_histogram`, response.data)
       toast.success('Histogram generated')
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'Histogram generation failed')
@@ -2215,7 +2359,6 @@ function PetrophysicsHistogramPanel({ accent, isLight }: { accent: string; isLig
               <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 01</div>
               <h2 style={{ margin: '6px 0 0', color: text, fontSize: 24 }}>Upload LAS File</h2>
             </div>
-            <button onClick={loadDemo} disabled={uploading} style={smallButton(isLight)}>{uploading ? 'Loading...' : 'Load Demo LAS'}</button>
           </div>
           <div
             onDrop={event => {
@@ -2247,6 +2390,7 @@ function PetrophysicsHistogramPanel({ accent, isLight }: { accent: string; isLig
               {metadata ? `Loaded: ${metadata.file_name || 'LAS file'}` : 'No LAS loaded yet'}
             </div>
           </div>
+          <ProjectFileSelector moduleName="Petrophysics" allowedExtensions={['las', 'csv', 'xlsx']} onSelectFile={file => uploadLas(file)} />
         </div>
 
         <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
@@ -2418,6 +2562,7 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
   const uploadLas = async (file: File) => {
     setUploading(true)
     try {
+      await uploadFileToActiveProject(file)
       const response = await ccusApi.uploadLas(file)
       hydrateSession(response.data)
       toast.success(`LAS "${file.name}" loaded`)
@@ -2464,6 +2609,7 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
       }
       const response = await ccusApi.calculate(payload)
       setResult(response.data)
+      await saveProjectResultCopy('CCUS', 'ccus_screening', response.data)
       toast.success('CCUS screening completed')
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'CCUS screening failed')
@@ -2495,7 +2641,6 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
               <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 01</div>
               <h2 style={{ margin: '6px 0 0', color: text, fontSize: 24 }}>Upload LAS File</h2>
             </div>
-            <button onClick={loadSample} disabled={uploading} style={smallButton(isLight)}>{uploading ? 'Loading...' : 'Load Demo LAS'}</button>
           </div>
           <div
             onDrop={event => {
@@ -2527,6 +2672,7 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
               {session ? `Loaded: ${meta.FILE_NAME || 'LAS file'}` : 'No LAS loaded yet'}
             </div>
           </div>
+          <ProjectFileSelector moduleName="CCUS" allowedExtensions={['las', 'csv', 'xlsx']} onSelectFile={file => uploadLas(file)} />
         </div>
 
         <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
@@ -2692,7 +2838,7 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
             <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Step 08</div>
             <h2 style={{ margin: '6px 0 0', color: text, fontSize: 22 }}>{ccusModeLabel(result?.summary?.visualization_mode)} Results</h2>
           </div>
-          {session?.session_id && result?.export_url && <a href={ccusApi.exportUrl(session.session_id)} download style={{ ...smallButton(isLight), textDecoration: 'none', color: text }}>Export Excel</a>}
+          {session?.session_id && result?.export_url && <a href={ccusApi.exportUrl(session.session_id)} onClick={() => saveDownloadedExportFromUrl(ccusApi.exportUrl(session.session_id), 'ccus_screening_export.xlsx', 'xlsx', 'CCUS')} download style={{ ...smallButton(isLight), textDecoration: 'none', color: text }}>Export Excel</a>}
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', color: text, fontSize: 13 }}>
@@ -2740,6 +2886,7 @@ function SeismicEnhancerPanel({ accent, isLight }: { accent: string; isLight: bo
 
   const handleFileUpload = async (file: File) => {
     try {
+      await uploadFileToActiveProject(file)
       const resp = await seismicApi.uploadFile(file);
       setUploadedFileInfo({
         fileName: resp.data.file_name,
@@ -2773,6 +2920,7 @@ function SeismicEnhancerPanel({ accent, isLight }: { accent: string; isLight: bo
         color_scale: colorScale,
       })
       setResult(response.data)
+      await saveProjectResultCopy('Seismic', 'seismic_frequency_enhancement', response.data)
       toast.success('Seismic enhancement results fetched from backend')
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'Failed to fetch seismic enhancement results')
@@ -2842,6 +2990,7 @@ function SeismicEnhancerPanel({ accent, isLight }: { accent: string; isLight: bo
             </button>
           </div>
         )}
+        <ProjectFileSelector moduleName="Seismic" allowedExtensions={['sgy', 'segy', 'npy']} onSelectFile={file => handleFileUpload(file)} />
 
         <Control label="Data Dimension"><select style={field(isLight)} value={dimension} onChange={e => setDimension(e.target.value)}><option>3D</option><option>2D</option></select></Control>
         <Control label="Low Frequency (Hz)"><input style={field(isLight)} type="number" value={freqLow} onChange={e => setFreqLow(Number(e.target.value))} /></Control>
@@ -3305,13 +3454,24 @@ function PlotlyFigure({ figure, isLight, exportName = 'drake_ai_plot', showExpor
   const exportImage = async () => {
     if (!plotRef.current) return
     const { default: Plotly } = await import('plotly.js-dist-min')
-    Plotly.downloadImage(plotRef.current, {
+    const filename = `${exportName}.${format}`
+    const dataUrl = await Plotly.toImage(plotRef.current, {
       format,
-      filename: exportName,
       width: 1400,
       height: 850,
       scale: 2,
     })
+    const link = document.createElement('a')
+    link.href = dataUrl
+    link.download = filename
+    link.click()
+    if (format === 'svg') {
+      const svg = decodeURIComponent(dataUrl.split(',')[1] || '')
+      await saveProjectExportCopy(filename, svg, 'svg')
+    } else {
+      const base64 = dataUrl.split(',')[1]
+      if (base64) await saveProjectBinaryExportCopy(filename, base64, format)
+    }
   }
 
   return (

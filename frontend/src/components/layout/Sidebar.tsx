@@ -12,8 +12,6 @@ const STATUS_COLORS: Record<string, string> = {
 const NAV_ITEMS = [
   { label: 'Dashboard', path: '/dashboard', icon: 'fas fa-gauge-high' },
   { label: 'Projects', path: '/projects', icon: 'fas fa-folder' },
-  { label: 'Project Data Repository', path: '/data-management', icon: 'fas fa-database' },
-  { label: 'Reports / Exports', path: '/analytics/reports', icon: 'fas fa-file-export' },
 ]
 
 const PETROPHYSICS_ITEMS = [

@@ -67,6 +67,35 @@ export interface LocalProject {
   activity: Array<{ id: string; text: string; createdAt: string }>
 }
 
+export interface EnterpriseProjectFile {
+  file_id: string
+  file_name: string
+  file_type: string
+  size_bytes: number
+  uploaded_at: string
+  source_path?: string
+  project_path: string
+  relative_path: string
+  bucket: string
+  compatibility: string[]
+}
+
+export interface EnterpriseProject {
+  project_id: string
+  project_name: string
+  description: string
+  project_type: string
+  storage_location: string
+  created_at: string
+  updated_at: string
+  project_path: string
+  uploaded_files: EnterpriseProjectFile[]
+  generated_results: any[]
+  exported_files: any[]
+  module_history: any[]
+  dashboard_state: Record<string, any>
+}
+
 export interface DrakeProjectDocument {
   schemaVersion: 1
   app: 'Drake AI Enterprise Platform'
@@ -144,6 +173,10 @@ interface AppState {
   importLocalProject: (project: LocalProject) => LocalProject
   updateProjectModuleState: (projectId: string, moduleKey: string, patch: Record<string, any>) => void
   addProjectOutput: (projectId: string, output: { module: string; name: string; type: string }) => void
+
+  // Enterprise local-folder project layer
+  enterpriseProject: EnterpriseProject | null
+  setEnterpriseProject: (project: EnterpriseProject | null) => void
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -354,4 +387,16 @@ export const useStore = create<AppState>((set) => ({
     const activeLocalProject = localProjects.find(project => project.id === projectId) || state.activeLocalProject
     return { localProjects, activeLocalProject, projectDirty: true }
   }),
+
+  enterpriseProject: localStorage.getItem('drake_enterprise_project')
+    ? JSON.parse(localStorage.getItem('drake_enterprise_project')!)
+    : null,
+  setEnterpriseProject: (enterpriseProject) => {
+    if (enterpriseProject) {
+      localStorage.setItem('drake_enterprise_project', JSON.stringify(enterpriseProject))
+    } else {
+      localStorage.removeItem('drake_enterprise_project')
+    }
+    set({ enterpriseProject })
+  },
 }))

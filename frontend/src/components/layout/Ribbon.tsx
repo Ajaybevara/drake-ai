@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useStore } from '../../store'
+import { localProjectsApi } from '../../services/api'
 
 export default function Ribbon() {
-  const { setActiveTab, theme } = useStore()
+  const { setActiveTab, theme, enterpriseProject, setEnterpriseProject } = useStore()
   const navigate = useNavigate()
   const isLight = theme === 'light'
   const [showWellInfo, setShowWellInfo] = useState(false)
@@ -95,8 +96,23 @@ export default function Ribbon() {
           </div>
         )}
       </div>
-      <input type="file" id="global-file-upload" style={{ display: 'none' }} multiple onChange={(event) => {
-        if (event.target.files?.length) toast.success(`Selected ${event.target.files.length} UI file(s)`)
+      <input type="file" id="global-file-upload" style={{ display: 'none' }} multiple onChange={async (event) => {
+        const files = Array.from(event.target.files || [])
+        if (!files.length) return
+        if (!enterpriseProject) {
+          toast.error('Create or open a project before uploading files')
+          event.target.value = ''
+          return
+        }
+        try {
+          const { data } = await localProjectsApi.uploadFiles(enterpriseProject.project_id, files)
+          setEnterpriseProject(data.project)
+          toast.success(`${files.length} file(s) saved in ${data.project.project_name}`)
+        } catch (error: any) {
+          toast.error(error?.response?.data?.detail || 'Project upload failed')
+        } finally {
+          event.target.value = ''
+        }
       }} />
     </div>
   )
