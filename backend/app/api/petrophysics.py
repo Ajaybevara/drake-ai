@@ -951,6 +951,13 @@ def generate_petro_prediction(request: dict):
     return {
         "summary": session["summary"],
         "bundle": prediction.get("bundle", {}),
+        "vsh_table": prediction.get("vsh_table", []),
+        "porosity_table": prediction.get("porosity_table", []),
+        "saturation_table": prediction.get("saturation_table", []),
+        "permeability_table": prediction.get("permeability_table", []),
+        "lithology_table": prediction.get("lithology_table", []),
+        "exports": prediction.get("exports", {}),
+        "active_formulas": prediction.get("active_formulas", {}),
         "records": prediction.get("records", []),
         "all_records": records,
         "summary_cards": prediction.get("summary_cards", {}),

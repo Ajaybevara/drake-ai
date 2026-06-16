@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { geothermalApi } from '../services/api'
 import { useStore } from '../store'
@@ -13,6 +13,16 @@ const TRACK_GROUPS: Record<string, string[]> = {
 
 const COLORS = ['#EF4444', '#F59E0B', '#16A34A', '#0284C7', '#7C3AED', '#0F766E', '#EA580C', '#C026D3', '#475569']
 
+const geothermalState: {
+  sessionId: string
+  result: any
+  trackMode: string
+} = {
+  sessionId: '',
+  result: null,
+  trackMode: 'logs',
+}
+
 function fmt(value: any, digits = 1) {
   const number = Number(value)
   return Number.isFinite(number) ? number.toFixed(digits) : '-'
@@ -26,9 +36,15 @@ export default function GeothermalPage() {
   const { theme } = useStore()
   const isLight = theme === 'light'
   const [busy, setBusy] = useState(false)
-  const [sessionId, setSessionId] = useState('')
-  const [result, setResult] = useState<any>(null)
-  const [trackMode, setTrackMode] = useState('logs')
+  const [sessionId, setSessionId] = useState(() => geothermalState.sessionId)
+  const [result, setResult] = useState<any>(() => geothermalState.result)
+  const [trackMode, setTrackMode] = useState(() => geothermalState.trackMode)
+
+  useEffect(() => {
+    geothermalState.sessionId = sessionId
+    geothermalState.result = result
+    geothermalState.trackMode = trackMode
+  }, [sessionId, result, trackMode])
 
   const palette = {
     page: isLight ? 'radial-gradient(circle at top right,#10B98114,transparent 30%),#F8FAFC' : 'radial-gradient(circle at top right,#10B98116,transparent 30%),linear-gradient(135deg,#050B14,#07111F 52%,#0B1628)',
