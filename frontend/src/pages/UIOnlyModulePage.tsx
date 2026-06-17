@@ -2,8 +2,9 @@ import { useStore } from '../store'
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
-import { ccusApi, localProjectsApi, petrophysicsApi, productionApi, seismicApi } from '../services/api'
+import { ccusApi, petrophysicsApi, productionApi, seismicApi } from '../services/api'
 import ProjectFileSelector from '../components/project/ProjectFileSelector'
+import { saveExportToLocalProject, saveResultToLocalProject, uploadFilesToLocalProject } from '../utils/localProjectStorage'
 
 interface Props {
   title: string
@@ -1725,7 +1726,7 @@ async function uploadFileToActiveProject(file: File) {
     const project = localStorage.getItem('drake_enterprise_project')
     if (!project) return
     const activeProject = JSON.parse(project)
-    const { data } = await localProjectsApi.uploadFiles(activeProject.project_id, [file])
+    const { data } = await uploadFilesToLocalProject(activeProject, [file])
     localStorage.setItem('drake_enterprise_project', JSON.stringify(data.project))
     useStore.getState().setEnterpriseProject(data.project)
   } catch {
@@ -1738,8 +1739,7 @@ async function saveProjectResultCopy(moduleName: string, predictionName: string,
     const project = localStorage.getItem('drake_enterprise_project')
     if (!project) return
     const activeProject = JSON.parse(project)
-    const { data } = await localProjectsApi.saveResult({
-      project_id: activeProject.project_id,
+    const { data } = await saveResultToLocalProject(activeProject, {
       module_name: moduleName,
       prediction_name: predictionName,
       extension: 'json',
@@ -1757,8 +1757,7 @@ async function saveProjectExportCopy(filename: string, content: string, exportTy
     const project = localStorage.getItem('drake_enterprise_project')
     if (!project) return
     const activeProject = JSON.parse(project)
-    const { data } = await localProjectsApi.saveExport({
-      project_id: activeProject.project_id,
+    const { data } = await saveExportToLocalProject(activeProject, {
       module_name: moduleName,
       export_type: exportType,
       prediction_name: filename.replace(/\.[^.]+$/, ''),
@@ -1777,8 +1776,7 @@ async function saveProjectBinaryExportCopy(filename: string, contentBase64: stri
     const project = localStorage.getItem('drake_enterprise_project')
     if (!project) return
     const activeProject = JSON.parse(project)
-    const { data } = await localProjectsApi.saveExport({
-      project_id: activeProject.project_id,
+    const { data } = await saveExportToLocalProject(activeProject, {
       module_name: moduleName,
       export_type: exportType,
       prediction_name: filename.replace(/\.[^.]+$/, ''),

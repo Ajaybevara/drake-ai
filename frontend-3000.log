@@ -1,42 +1,9 @@
 
 > drake-ai-frontend@2.4.1 dev
-> vite --port 3000 --host 127.0.0.1
+> vite --port 3000
 
 
-  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m1233[22m[2m[0m ms[22m
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m2321[22m[2m[0m ms[22m
 
-  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m3000[22m/[39m
-[2m10:49:22 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/FaciesClassificationPage.tsx, /src/index.css[22m
-[2m10:50:32 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/FormationTopsPage.tsx, /src/index.css[22m
-[2m10:51:12 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m10:51:37 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m11:08:25 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/FaciesClassificationPage.tsx, /src/index.css[22m
-[2m11:08:25 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/FaciesClassificationPage.tsx, /src/index.css[22m
-[2m11:08:51 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/FormationTopsPage.tsx, /src/index.css[22m
-[2m11:10:17 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m11:10:51 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m11:35:19 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m11:36:14 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m11:36:38 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/GeothermalPage.tsx, /src/index.css[22m
-[2m11:37:23 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m11:37:43 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m11:38:46 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m12:04:27 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m12:04:28 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m12:05:02 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m12:05:27 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m12:05:47 pm[22m [36m[1m[vite][22m[39m [32m.env changed, restarting server...[39m
-[2m12:05:47 pm[22m [36m[1m[vite][22m[39m server restarted.
-[2m12:33:55 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m12:33:55 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m3:04:52 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css, /src/App.tsx, /src/pages/DashboardPage.tsx, /src/pages/LoginPage.tsx, /src/pages/ProjectsPage.tsx, /src/pages/GeothermalPage.tsx, /src/components/layout/MainLayout.tsx, /src/components/layout/TopBar.tsx, /src/pages/UIOnlyModulePage.tsx, /src/components/layout/FloatingChatbot.tsx, /src/components/layout/Ribbon.tsx, /src/components/layout/Workspace.tsx, /src/components/layout/Sidebar.tsx[22m
-[2m3:05:52 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/FaciesClassificationPage.tsx, /src/pages/GeothermalPage.tsx, /src/pages/FormationTopsPage.tsx, /src/pages/UIOnlyModulePage.tsx[22m
-[2m3:07:39 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/FaciesClassificationPage.tsx, /src/pages/GeothermalPage.tsx, /src/pages/FormationTopsPage.tsx, /src/pages/UIOnlyModulePage.tsx[22m
-[2m3:10:47 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/DashboardPage.tsx, /src/index.css[22m
-[2m3:12:03 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m
-[2m3:13:09 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/layout/TopBar.tsx, /src/index.css[22m
-[2m3:16:21 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/FaciesClassificationPage.tsx, /src/index.css[22m
-[2m3:16:56 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/FormationTopsPage.tsx, /src/index.css[22m
-[2m3:18:48 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m3:19:51 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m3:21:52 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m3000[22m/[39m
+[2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m

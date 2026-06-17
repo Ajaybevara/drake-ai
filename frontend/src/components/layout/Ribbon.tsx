@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useStore } from '../../store'
-import { localProjectsApi } from '../../services/api'
+import { uploadFilesToLocalProject } from '../../utils/localProjectStorage'
 
 export default function Ribbon() {
   const { setActiveTab, theme, enterpriseProject, setEnterpriseProject } = useStore()
@@ -105,11 +105,11 @@ export default function Ribbon() {
           return
         }
         try {
-          const { data } = await localProjectsApi.uploadFiles(enterpriseProject.project_id, files)
+          const { data } = await uploadFilesToLocalProject(enterpriseProject, files)
           setEnterpriseProject(data.project)
           toast.success(`${files.length} file(s) saved in ${data.project.project_name}`)
         } catch (error: any) {
-          toast.error(error?.response?.data?.detail || 'Project upload failed')
+          toast.error(error?.message || 'Project upload failed')
         } finally {
           event.target.value = ''
         }

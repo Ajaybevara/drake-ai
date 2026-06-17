@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react'
 import { FolderOpen, Plus, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { localProjectsApi } from '../services/api'
 import { useStore } from '../store'
+import { createLocalFolderProject, getCurrentLocalProject, listLocalProjects, openKnownLocalProject, openLocalFolderProject } from '../utils/localProjectStorage'
 
 const PROJECT_TYPES = ['Petrophysics', 'Seismic', 'Production', 'CCUS', 'Geothermal', 'Digitizer', 'Integrated Study', 'Custom']
 const STORAGE_LOCATIONS = ['Desktop', 'Documents', 'C Drive', 'D Drive', 'Custom Folder']
@@ -23,14 +23,12 @@ export default function PlatformLandingPage() {
   })
 
   useEffect(() => {
-    localProjectsApi.current()
-      .then(({ data }) => setEnterpriseProject(data))
-      .catch(() => undefined)
+    const current = getCurrentLocalProject()
+    if (current) setEnterpriseProject(current)
   }, [setEnterpriseProject])
 
-  const loadRegistry = async () => {
-    const { data } = await localProjectsApi.list(form.storage_location)
-    setProjects(data.projects || [])
+  const loadRegistry = () => {
+    setProjects(listLocalProjects())
   }
 
   const createProject = async () => {
@@ -40,23 +38,37 @@ export default function PlatformLandingPage() {
     }
     try {
       localStorage.setItem('drake_project_storage_location', form.storage_location)
-      const { data } = await localProjectsApi.create(form)
-      setEnterpriseProject(data)
+      const project = await createLocalFolderProject(form)
+      setEnterpriseProject(project)
+      setProjects(listLocalProjects())
       toast.success('Project created')
       navigate('/dashboard')
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Project creation failed')
+      if (error?.name !== 'AbortError') toast.error(error?.message || 'Project creation failed')
     }
   }
 
-  const openProject = async (projectPath: string) => {
+  const openProject = async () => {
     try {
-      const { data } = await localProjectsApi.open(projectPath)
-      setEnterpriseProject(data)
-      toast.success(`Opened ${data.project_name}`)
+      const project = await openLocalFolderProject()
+      setEnterpriseProject(project)
+      setProjects(listLocalProjects())
+      toast.success(`Opened ${project.project_name}`)
       navigate('/dashboard')
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Open project failed')
+      if (error?.name !== 'AbortError') toast.error(error?.message || 'Open project failed')
+    }
+  }
+
+  const openKnownProject = async (projectRecord: any) => {
+    try {
+      const project = await openKnownLocalProject(projectRecord)
+      setEnterpriseProject(project)
+      setProjects(listLocalProjects())
+      toast.success(`Opened ${project.project_name}`)
+      navigate('/dashboard')
+    } catch (error: any) {
+      if (error?.name !== 'AbortError') toast.error(error?.message || 'Open project failed')
     }
   }
 
@@ -77,7 +89,7 @@ export default function PlatformLandingPage() {
           <h2 style={cardTitle}>Create Project</h2>
           <p style={muted}>Create a new study workspace</p>
         </button>
-        <button style={choiceCard} onClick={() => { setMode('open'); loadRegistry().catch(() => toast.error('Could not read project registry')) }}>
+        <button style={choiceCard} onClick={() => { setMode('open'); loadRegistry() }}>
           <FolderOpen size={24} color="#60A5FA" />
           <h2 style={cardTitle}>Open Project</h2>
           <p style={muted}>Continue previous work</p>
@@ -105,9 +117,10 @@ export default function PlatformLandingPage() {
               <>
                 <div style={eyebrow}>Open Project</div>
                 <h2 style={modalTitle}>Existing Projects</h2>
+                <button style={primaryButton} onClick={openProject}>Open Project Folder</button>
                 <div style={list}>
                   {projects.map(project => (
-                    <button key={project.project_id} style={projectRow} onClick={() => openProject(project.project_path)}>
+                    <button key={project.project_id} style={projectRow} onClick={() => openKnownProject(project)}>
                       <b>{project.project_name}</b>
                       <span>{project.project_type} - {project.project_path}</span>
                     </button>

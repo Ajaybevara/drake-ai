@@ -15,6 +15,16 @@ from app.services.export_manager import save_export
 router = APIRouter()
 
 
+def frontend_local_projects_only():
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "Local project folders are frontend-only. Use window.showDirectoryPicker() "
+            "in the browser and send files to the backend only for processing."
+        ),
+    )
+
+
 class ProjectCreate(BaseModel):
     name: str
     description: Optional[str] = None
@@ -81,15 +91,7 @@ class SaveExportRequest(BaseModel):
 
 
 def _active_enterprise_project(project_id: str | None = None) -> dict:
-    current = project_service.get_current_project()
-    if not current:
-        raise HTTPException(status_code=404, detail="No active local Drake AI project. Create or open a project first.")
-    if project_id and current.get("project_id") != project_id:
-        matches = [item for item in project_service.list_projects() if item.get("project_id") == project_id]
-        if not matches:
-            raise HTTPException(status_code=404, detail="Project not found")
-        current = project_service.open_project(matches[0]["project_path"])
-    return current
+    frontend_local_projects_only()
 
 
 @router.get("/platform")
@@ -98,7 +100,8 @@ def platform():
         "title": "Drake AI Enterprise Platform",
         "actions": ["Create New Project", "Open Existing Project"],
         "storage": project_locations(),
-        "current_project": project_service.get_current_project(),
+        "current_project": None,
+        "project_storage_mode": "frontend_file_system_access_api",
     }
 
 
@@ -113,129 +116,62 @@ def project_locations():
 
 @router.get("/registry")
 def enterprise_project_registry(location_key: Optional[str] = None, custom_folder: Optional[str] = None):
-    return {"projects": project_service.list_projects(location_key, custom_folder)}
+    frontend_local_projects_only()
 
 
 @router.post("/create")
 def create_enterprise_project(req: EnterpriseProjectCreate):
-    try:
-        return project_service.create_project(
-            project_name=req.project_name,
-            description=req.description,
-            project_type=req.project_type,
-            storage_location=req.storage_location,
-            custom_folder=req.custom_folder,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    frontend_local_projects_only()
 
 
 @router.post("/open")
 def open_enterprise_project(req: EnterpriseProjectOpen):
-    try:
-        return project_service.open_project(req.project_path)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+    frontend_local_projects_only()
 
 
 @router.get("/current")
 def current_enterprise_project():
-    project = project_service.get_current_project()
-    if not project:
-        raise HTTPException(status_code=404, detail="No active local Drake AI project.")
-    return project
+    frontend_local_projects_only()
 
 
 @router.post("/upload")
 async def upload_project_files(project_id: Optional[str] = Form(None), files: list[UploadFile] = File(...)):
-    project = _active_enterprise_project(project_id)
-    records = []
-    for upload in files:
-        records.append(await copy_upload(project["project_path"], upload))
-    return {"project": project_service.open_project(project["project_path"]), "files": records}
+    frontend_local_projects_only()
 
 
 @router.get("/files")
 def list_project_files(project_id: Optional[str] = None, module_name: Optional[str] = None):
-    project = _active_enterprise_project(project_id)
-    files = project.get("uploaded_files", [])
-    if module_name:
-        lower = module_name.lower()
-        files = [item for item in files if any(lower in str(tag).lower() for tag in item.get("compatibility", []))]
-    return {"project_id": project["project_id"], "files": files}
+    frontend_local_projects_only()
 
 
 @router.get("/files/{file_id}/download")
 def download_project_file(file_id: str, project_id: Optional[str] = None):
-    project = _active_enterprise_project(project_id)
-    try:
-        record = find_file(project, file_id)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Project file not found")
-    path = Path(record["project_path"])
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="Project file missing on disk")
-    return FileResponse(path, filename=record.get("file_name") or path.name)
+    frontend_local_projects_only()
 
 
 @router.get("/results")
 def list_project_results(project_id: Optional[str] = None):
-    project = _active_enterprise_project(project_id)
-    return {"project_id": project["project_id"], "results": project.get("generated_results", [])}
+    frontend_local_projects_only()
 
 
 @router.get("/history")
 def list_project_history(project_id: Optional[str] = None):
-    project = _active_enterprise_project(project_id)
-    return {"project_id": project["project_id"], "history": project.get("module_history", [])}
+    frontend_local_projects_only()
 
 
 @router.post("/save-result")
 def save_project_result(req: SaveResultRequest):
-    project = _active_enterprise_project(req.project_id)
-    record = save_result(
-        project["project_path"],
-        module_name=req.module_name,
-        well_name=req.well_name,
-        prediction_name=req.prediction_name,
-        extension=req.extension,
-        content=req.content,
-        content_base64=req.content_base64,
-        result_payload=req.result_payload,
-        parameters=req.parameters,
-    )
-    return {"project": project_service.open_project(project["project_path"]), "result": record}
+    frontend_local_projects_only()
 
 
 @router.post("/save-export")
 def save_project_export(req: SaveExportRequest):
-    project = _active_enterprise_project(req.project_id)
-    try:
-        record = save_export(
-            project["project_path"],
-            module_name=req.module_name,
-            source_file=req.source_file,
-            export_type=req.export_type,
-            well_name=req.well_name,
-            prediction_name=req.prediction_name,
-            content=req.content,
-            content_base64=req.content_base64,
-            extension=req.extension,
-            parameters=req.parameters,
-        )
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    return {"project": project_service.open_project(project["project_path"]), "export": record}
+    frontend_local_projects_only()
 
 
 @router.post("/set-storage-path")
 def set_storage_path(req: StoragePathRequest):
-    try:
-        root = project_service.location_root(req.storage_location, req.custom_folder)
-        root.mkdir(parents=True, exist_ok=True)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    return {"storage_location": req.storage_location, "root": str(root)}
+    frontend_local_projects_only()
 
 
 @router.get("/", response_model=List[ProjectOut])
