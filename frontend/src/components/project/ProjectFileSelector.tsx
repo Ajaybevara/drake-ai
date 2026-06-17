@@ -1,8 +1,8 @@
 import type React from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
-import { localProjectsApi } from '../../services/api'
 import { useStore, type EnterpriseProjectFile } from '../../store'
+import { readLocalProjectFile } from '../../utils/localProjectStorage'
 
 type Props = {
   moduleName: string
@@ -21,22 +21,17 @@ export default function ProjectFileSelector({ moduleName, allowedExtensions = []
       setFiles([])
       return
     }
-    localProjectsApi.files(enterpriseProject.project_id)
-      .then(({ data }) => setFiles(data.files || []))
-      .catch(() => setFiles(enterpriseProject.uploaded_files || []))
+    setFiles(enterpriseProject.uploaded_files || [])
   }, [enterpriseProject, moduleName])
 
-  const filtered = useMemo(() => files, [files])
+  const filtered = useMemo(() => files, [allowedExtensions, files])
 
   const loadFile = async () => {
     if (!enterpriseProject || !fileId) return
     const record = filtered.find(item => item.file_id === fileId)
     if (!record) return
     try {
-      const response = await fetch(localProjectsApi.fileDownloadUrl(record.file_id, enterpriseProject.project_id))
-      if (!response.ok) throw new Error('Could not load project file')
-      const blob = await response.blob()
-      const file = new File([blob], record.file_name, { type: blob.type || 'application/octet-stream' })
+      const file = await readLocalProjectFile(enterpriseProject, record)
       await onSelectFile(file, record)
       toast.success(`Loaded ${record.file_name}`)
     } catch (error: any) {

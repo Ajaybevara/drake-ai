@@ -1,10 +1,10 @@
 import type React from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { FolderOpen, Plus, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { localProjectsApi } from '../services/api'
 import { useStore } from '../store'
+import { createLocalFolderProject, getCurrentLocalProject, listLocalProjects, openKnownLocalProject, openLocalFolderProject } from '../utils/localProjectStorage'
 
 const PROJECT_TYPES = ['Petrophysics', 'Seismic', 'Production', 'CCUS', 'Geothermal', 'Digitizer', 'Integrated Study', 'Custom']
 const STORAGE_LOCATIONS = ['Desktop', 'Documents', 'C Drive', 'D Drive', 'Custom Folder']
@@ -12,7 +12,6 @@ const STORAGE_LOCATIONS = ['Desktop', 'Documents', 'C Drive', 'D Drive', 'Custom
 export default function ProjectsPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const directoryInputRef = useRef<HTMLInputElement>(null)
   const { enterpriseProject, setEnterpriseProject } = useStore()
   const [projects, setProjects] = useState<any[]>([])
   const [busy, setBusy] = useState(false)
@@ -25,11 +24,10 @@ export default function ProjectsPage() {
   })
 
   useEffect(() => {
-    refreshProjects().catch(() => undefined)
-    localProjectsApi.current()
-      .then(({ data }) => setEnterpriseProject(data))
-      .catch(() => undefined)
-  }, [])
+    refreshProjects()
+    const current = getCurrentLocalProject()
+    if (current) setEnterpriseProject(current)
+  }, [setEnterpriseProject])
 
   useEffect(() => {
     const query = (searchParams.get('search') || '').toLowerCase().trim()
@@ -39,9 +37,8 @@ export default function ProjectsPage() {
     ))
   }, [searchParams])
 
-  const refreshProjects = async () => {
-    const { data } = await localProjectsApi.list(form.storage_location)
-    setProjects(data.projects || [])
+  const refreshProjects = () => {
+    setProjects(listLocalProjects())
   }
 
   const createProject = async () => {
@@ -52,66 +49,45 @@ export default function ProjectsPage() {
     setBusy(true)
     try {
       localStorage.setItem('drake_project_storage_location', form.storage_location)
-      const { data } = await localProjectsApi.create(form)
-      setEnterpriseProject(data)
-      await refreshProjects()
-      toast.success(`Project created at ${data.project_path}`)
+      const project = await createLocalFolderProject(form)
+      setEnterpriseProject(project)
+      refreshProjects()
+      toast.success(`Project created in ${project.project_path}`)
       navigate('/dashboard')
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Project creation failed')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const openProjectPath = async (projectPath: string) => {
-    setBusy(true)
-    try {
-      const { data } = await localProjectsApi.open(projectPath)
-      setEnterpriseProject(data)
-      toast.success(`Opened ${data.project_name}`)
-      navigate('/dashboard')
-    } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Open project failed')
+      if (error?.name !== 'AbortError') toast.error(error?.message || 'Project creation failed')
     } finally {
       setBusy(false)
     }
   }
 
   const openProjectFolder = async () => {
-    const picker = (window as any).showDirectoryPicker
-    if (picker) {
-      try {
-        const directoryHandle = await picker({ mode: 'read' })
-        const projectFile = await directoryHandle.getFileHandle('project.json')
-        const file = await projectFile.getFile()
-        const project = JSON.parse(await file.text())
-        if (!project.project_path) throw new Error('project.json does not contain project_path')
-        await openProjectPath(project.project_path)
-        return
-      } catch (error: any) {
-        if (error?.name !== 'AbortError') toast.error(error?.message || 'Selected folder is not a Drake AI project')
-        return
-      }
+    setBusy(true)
+    try {
+      const project = await openLocalFolderProject()
+      setEnterpriseProject(project)
+      refreshProjects()
+      toast.success(`Opened ${project.project_name}`)
+      navigate('/dashboard')
+    } catch (error: any) {
+      if (error?.name !== 'AbortError') toast.error(error?.message || 'Open project failed')
+    } finally {
+      setBusy(false)
     }
-    directoryInputRef.current?.click()
   }
 
-  const openPickedDirectory = async (files: FileList | null) => {
-    const allFiles = Array.from(files || [])
-    const projectJson = allFiles.find(file => file.name === 'project.json')
-    if (!projectJson) {
-      toast.error('Select a Drake AI project folder that contains project.json')
-      return
-    }
+  const reopenKnownProject = async (projectRecord: any) => {
+    setBusy(true)
     try {
-      const project = JSON.parse(await projectJson.text())
-      if (!project.project_path) throw new Error('project.json does not contain project_path')
-      await openProjectPath(project.project_path)
+      const project = await openKnownLocalProject(projectRecord)
+      setEnterpriseProject(project)
+      refreshProjects()
+      toast.success(`Opened ${project.project_name}`)
+      navigate('/dashboard')
     } catch (error: any) {
-      toast.error(error?.message || 'Could not open selected project folder')
+      if (error?.name !== 'AbortError') toast.error(error?.message || 'Open project failed')
     } finally {
-      if (directoryInputRef.current) directoryInputRef.current.value = ''
+      setBusy(false)
     }
   }
 
@@ -124,17 +100,8 @@ export default function ProjectsPage() {
       <div style={actions}>
         <button style={primaryButton} onClick={createProject} disabled={busy}><Plus size={16} /> Create New Project</button>
         <button style={ghostButton} onClick={openProjectFolder} disabled={busy}><FolderOpen size={16} /> Open Project Folder</button>
-        <button style={alertButton} onClick={() => refreshProjects().catch(() => toast.error('Could not refresh projects'))} disabled={busy}><RefreshCw size={16} /> Refresh Projects</button>
+        <button style={alertButton} onClick={refreshProjects} disabled={busy}><RefreshCw size={16} /> Refresh Projects</button>
       </div>
-
-      <input
-        ref={directoryInputRef}
-        type="file"
-        style={{ display: 'none' }}
-        // @ts-expect-error Chromium folder picker attribute.
-        webkitdirectory=""
-        onChange={event => openPickedDirectory(event.target.files)}
-      />
 
       <div style={formPanel}>
         <Field label="Project Name" value={form.project_name} onChange={value => setForm({ ...form, project_name: value })} />
@@ -153,7 +120,7 @@ export default function ProjectsPage() {
 
       <div style={grid}>
         {projects.map(project => (
-          <button key={project.project_id} style={{ ...card, borderColor: enterpriseProject?.project_id === project.project_id ? '#DA2626' : '#1E293B' }} onClick={() => openProjectPath(project.project_path)}>
+          <button key={project.project_id} style={{ ...card, borderColor: enterpriseProject?.project_id === project.project_id ? '#DA2626' : '#1E293B' }} onClick={() => reopenKnownProject(project)}>
             <div style={icon}><FolderOpen size={22} /></div>
             <h3 style={{ margin: '16px 0 8px', fontSize: 20 }}>{project.project_name}</h3>
             <p style={muted}>{project.project_type} - {(project.uploaded_files || []).length} uploaded files - {(project.exported_files || []).length} exports</p>

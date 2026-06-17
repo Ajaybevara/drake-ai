@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
-import { geothermalApi, localProjectsApi } from '../services/api'
+import { geothermalApi } from '../services/api'
 import { useStore } from '../store'
 import ProjectFileSelector from '../components/project/ProjectFileSelector'
+import { saveExportToLocalProject, saveResultToLocalProject, uploadFilesToLocalProject } from '../utils/localProjectStorage'
 
 const TRACK_GROUPS: Record<string, string[]> = {
   logs: ['gr_api', 'res_ohmm', 'rhob_gcc', 'nphi_frac', 'dt_usft'],
@@ -29,8 +30,38 @@ function fmt(value: any, digits = 1) {
   return Number.isFinite(number) ? number.toFixed(digits) : '-'
 }
 
-function download(url: string) {
+function extensionFromUrl(url: string) {
+  return url.split('?')[0].split('.').pop()?.toLowerCase() || 'file'
+}
+
+async function saveDownloadCopy(url: string, filename: string) {
+  try {
+    const project = localStorage.getItem('drake_enterprise_project')
+    if (!project) return
+    const response = await fetch(url)
+    if (!response.ok) return
+    const blob = await response.blob()
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const base64 = String(reader.result || '').split(',')[1]
+      if (!base64) return
+      saveExportToLocalProject(JSON.parse(project), {
+        module_name: 'Geothermal',
+        export_type: extensionFromUrl(filename),
+        prediction_name: filename.replace(/\.[^.]+$/, ''),
+        extension: extensionFromUrl(filename),
+        content_base64: base64,
+      }).then(({ data }) => useStore.getState().setEnterpriseProject(data.project)).catch(() => undefined)
+    }
+    reader.readAsDataURL(blob)
+  } catch {
+    // Browser download still proceeds.
+  }
+}
+
+function download(url: string, filename = 'geothermal_export.csv') {
   window.open(url, '_blank', 'noopener,noreferrer')
+  saveDownloadCopy(url, filename)
 }
 
 async function uploadGeothermalFileToProject(file: File, setEnterpriseProject: (project: any) => void) {
@@ -38,7 +69,7 @@ async function uploadGeothermalFileToProject(file: File, setEnterpriseProject: (
     const project = localStorage.getItem('drake_enterprise_project')
     if (!project) return
     const activeProject = JSON.parse(project)
-    const { data } = await localProjectsApi.uploadFiles(activeProject.project_id, [file])
+    const { data } = await uploadFilesToLocalProject(activeProject, [file])
     setEnterpriseProject(data.project)
   } catch {
     // Geothermal analysis should continue even if the project copy cannot be saved.
@@ -50,8 +81,7 @@ async function saveGeothermalResult(resultPayload: any, predictionName: string) 
     const project = localStorage.getItem('drake_enterprise_project')
     if (!project || !resultPayload) return
     const activeProject = JSON.parse(project)
-    const { data } = await localProjectsApi.saveResult({
-      project_id: activeProject.project_id,
+    const { data } = await saveResultToLocalProject(activeProject, {
       module_name: 'Geothermal',
       prediction_name: predictionName,
       extension: 'json',
@@ -158,10 +188,10 @@ export default function GeothermalPage() {
             <h2 style={{ margin: 0, fontSize: 20 }}>Export</h2>
             <p style={{ color: palette.muted, fontSize: 13 }}>Download full results or individual sections.</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-              <button disabled={!sessionId} onClick={() => download(geothermalApi.exportCsvUrl(sessionId))} style={secondaryButton(isLight)}>Results CSV</button>
-              <button disabled={!sessionId} onClick={() => download(geothermalApi.exportJsonUrl(sessionId))} style={secondaryButton(isLight)}>JSON</button>
-              <button disabled={!sessionId} onClick={() => download(geothermalApi.exportSectionUrl(sessionId, 'hot_zones', 'csv'))} style={secondaryButton(isLight)}>Hot Zones CSV</button>
-              <button disabled={!sessionId} onClick={() => download(geothermalApi.exportSectionUrl(sessionId, 'play_ranking', 'csv'))} style={secondaryButton(isLight)}>Ranking CSV</button>
+              <button disabled={!sessionId} onClick={() => download(geothermalApi.exportCsvUrl(sessionId), 'geothermal_results.csv')} style={secondaryButton(isLight)}>Results CSV</button>
+              <button disabled={!sessionId} onClick={() => download(geothermalApi.exportJsonUrl(sessionId), 'geothermal_results.json')} style={secondaryButton(isLight)}>JSON</button>
+              <button disabled={!sessionId} onClick={() => download(geothermalApi.exportSectionUrl(sessionId, 'hot_zones', 'csv'), 'geothermal_hot_zones.csv')} style={secondaryButton(isLight)}>Hot Zones CSV</button>
+              <button disabled={!sessionId} onClick={() => download(geothermalApi.exportSectionUrl(sessionId, 'play_ranking', 'csv'), 'geothermal_play_ranking.csv')} style={secondaryButton(isLight)}>Ranking CSV</button>
             </div>
           </div>
           <InfoPanel title="Calculated Reservoir Parameters" rows={(result?.curve_display || []).filter((item: any) => ['vsh_frac', 'porosity_frac', 'perm_md', 'rq_score'].includes(item.key))} palette={palette} />

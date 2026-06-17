@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
-import { localProjectsApi, petrophysicsApi } from '../services/api'
+import { petrophysicsApi } from '../services/api'
 import { useStore } from '../store'
 import ProjectFileSelector from '../components/project/ProjectFileSelector'
+import { saveExportToLocalProject, saveResultToLocalProject, uploadFilesToLocalProject } from '../utils/localProjectStorage'
 
 const PETRO_SESSION_KEY = 'drake_active_petro_las_session'
 
@@ -63,6 +64,16 @@ function downloadCsv(csv: string, name: string) {
   link.download = name
   link.click()
   URL.revokeObjectURL(url)
+  const project = localStorage.getItem('drake_enterprise_project')
+  if (project) {
+    saveExportToLocalProject(JSON.parse(project), {
+      module_name: 'Formation Tops',
+      export_type: 'csv',
+      prediction_name: name.replace(/\.[^.]+$/, ''),
+      extension: 'csv',
+      content: csv,
+    }).then(({ data }) => useStore.getState().setEnterpriseProject(data.project)).catch(() => undefined)
+  }
 }
 
 function readPetroSession() {
@@ -79,7 +90,7 @@ async function uploadFileToActiveProject(file: File) {
     const project = localStorage.getItem('drake_enterprise_project')
     if (!project) return
     const activeProject = JSON.parse(project)
-    const { data } = await localProjectsApi.uploadFiles(activeProject.project_id, [file])
+    const { data } = await uploadFilesToLocalProject(activeProject, [file])
     useStore.getState().setEnterpriseProject(data.project)
   } catch {
     // Formation tops should continue even if the project copy cannot be saved.
@@ -91,8 +102,7 @@ async function saveProjectResultCopy(predictionName: string, resultPayload: any)
     const project = localStorage.getItem('drake_enterprise_project')
     if (!project) return
     const activeProject = JSON.parse(project)
-    const { data } = await localProjectsApi.saveResult({
-      project_id: activeProject.project_id,
+    const { data } = await saveResultToLocalProject(activeProject, {
       module_name: 'Formation Tops',
       prediction_name: predictionName,
       extension: 'json',

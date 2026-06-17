@@ -3,8 +3,8 @@ import { useEffect, useMemo, useRef } from 'react'
 import { Database, Download, FolderOpen, History, Upload } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { localProjectsApi } from '../services/api'
 import { useStore } from '../store'
+import { getCurrentLocalProject, uploadFilesToLocalProject } from '../utils/localProjectStorage'
 
 const MODULES = [
   { label: 'Log Visualization', path: '/petrophysics/log-visualization' },
@@ -25,9 +25,8 @@ export default function DashboardPage() {
   const { enterpriseProject, setEnterpriseProject } = useStore()
 
   useEffect(() => {
-    localProjectsApi.current()
-      .then(({ data }) => setEnterpriseProject(data))
-      .catch(() => undefined)
+    const current = getCurrentLocalProject()
+    if (current) setEnterpriseProject(current)
   }, [setEnterpriseProject])
 
   const project = enterpriseProject
@@ -41,11 +40,11 @@ export default function DashboardPage() {
   const uploadFiles = async (files: FileList | null) => {
     if (!project || !files?.length) return
     try {
-      const { data } = await localProjectsApi.uploadFiles(project.project_id, Array.from(files))
+      const { data } = await uploadFilesToLocalProject(project, Array.from(files))
       setEnterpriseProject(data.project)
       toast.success(`${data.files.length} file(s) added to project`)
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Project upload failed')
+      toast.error(error?.message || 'Project upload failed')
     } finally {
       if (inputRef.current) inputRef.current.value = ''
     }
