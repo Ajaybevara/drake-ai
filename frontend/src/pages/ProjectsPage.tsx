@@ -4,7 +4,7 @@ import { FolderOpen, Plus, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '../store'
-import { createLocalFolderProject, getCurrentLocalProject, listLocalProjects, openKnownLocalProject, openLocalFolderProject } from '../utils/localProjectStorage'
+import { createLocalFolderProject, getCurrentLocalProject, listLocalProjects, openKnownLocalProject, openLocalFolderProject, deleteLocalProject } from '../utils/localProjectStorage'
 
 const PROJECT_TYPES = ['Petrophysics', 'Seismic', 'Production', 'CCUS', 'Geothermal', 'Digitizer', 'Integrated Study', 'Custom']
 const STORAGE_LOCATIONS = ['Desktop', 'Documents', 'C Drive', 'D Drive', 'Custom Folder']
@@ -39,6 +39,17 @@ export default function ProjectsPage() {
 
   const refreshProjects = () => {
     setProjects(listLocalProjects())
+  }
+
+  const deleteProject = (projectId: string) => {
+    if (window.confirm('Are you sure you want to remove this project from the local registry?')) {
+      deleteLocalProject(projectId)
+      if (enterpriseProject?.project_id === projectId) {
+        setEnterpriseProject(null)
+      }
+      refreshProjects()
+      toast.success('Project removed')
+    }
   }
 
   const createProject = async () => {
@@ -120,12 +131,15 @@ export default function ProjectsPage() {
 
       <div style={grid}>
         {projects.map(project => (
-          <button key={project.project_id} style={{ ...card, borderColor: enterpriseProject?.project_id === project.project_id ? '#DA2626' : '#1E293B' }} onClick={() => reopenKnownProject(project)}>
-            <div style={icon}><FolderOpen size={22} /></div>
-            <h3 style={{ margin: '16px 0 8px', fontSize: 20 }}>{project.project_name}</h3>
-            <p style={muted}>{project.project_type} - {(project.uploaded_files || []).length} uploaded files - {(project.exported_files || []).length} exports</p>
-            <p style={{ ...muted, marginTop: 8 }}>{project.project_path}</p>
-          </button>
+          <div key={project.project_id} style={{ position: 'relative' }}>
+            <button style={{ ...card, borderColor: enterpriseProject?.project_id === project.project_id ? '#DA2626' : '#1E293B', width: '100%' }} onClick={() => reopenKnownProject(project)}>
+              <div style={icon}><FolderOpen size={22} /></div>
+              <h3 style={{ margin: '16px 0 8px', fontSize: 20 }}>{project.project_name}</h3>
+              <p style={muted}>{project.project_type} - {(project.uploaded_files || []).length} uploaded files - {(project.exported_files || []).length} exports</p>
+              <p style={{ ...muted, marginTop: 8 }}>{project.project_path}</p>
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); deleteProject(project.project_id) }} style={{ position: 'absolute', top: 18, right: 18, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#EF4444', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', zIndex: 10 }}>Delete</button>
+          </div>
         ))}
         {!projects.length && (
           <div style={card}>

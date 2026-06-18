@@ -161,7 +161,7 @@ export default function TopBar() {
           <button type="button" onClick={() => setProfileOpen((current) => !current)} title="Profile menu" style={{ display: 'flex', alignItems: 'center', gap: 7, background: profileOpen ? (isLight ? '#F1F5F9' : '#0E1622') : 'transparent', border: `1px solid ${profileOpen ? (isLight ? '#CBD5E1' : '#223047') : 'transparent'}`, borderRadius: 7, padding: '4px 10px', cursor: 'pointer' }}>
             <div style={{ width: 34, height: 34, background: 'linear-gradient(135deg,#FF4B4B,#DA2626)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff' }}>{user?.avatar_initials || 'U'}</div>
             <div>
-              <div style={{ fontSize: 12, color: isLight ? '#0F172A' : '#E2E8F0', fontWeight: 700, lineHeight: 1.2 }}>{user?.full_name}</div>
+              <div style={{ fontSize: 12, color: isLight ? '#0F172A' : '#E2E8F0', fontWeight: 700, lineHeight: 1.2 }}>User</div>
               <div style={{ fontSize: 10, color: '#64748B' }}>Drake AI Admin</div>
             </div>
             <i className="fas fa-chevron-down" style={{ color: '#64748B', fontSize: 11 }}></i>
@@ -169,7 +169,7 @@ export default function TopBar() {
           {profileOpen && (
             <div style={{ position: 'absolute', top: 46, right: 0, minWidth: 220, borderRadius: 10, background: isLight ? '#FFFFFF' : '#0B111A', border: `1px solid ${isLight ? '#E2E8F0' : '#223047'}`, boxShadow: '0 18px 48px rgba(0,0,0,.32)', zIndex: 10000, overflow: 'hidden' }}>
               <div style={{ padding: '12px 14px', borderBottom: `1px solid ${isLight ? '#E2E8F0' : '#1E293B'}` }}>
-                <div style={{ color: isLight ? '#0F172A' : '#F8FAFC', fontSize: 13, fontWeight: 900 }}>{user?.full_name || 'User'}</div>
+                <div style={{ color: isLight ? '#0F172A' : '#F8FAFC', fontSize: 13, fontWeight: 900 }}>User</div>
                 <div style={{ color: '#64748B', fontSize: 11, marginTop: 3 }}>{user?.email || 'Signed in'}</div>
               </div>
               <button type="button" onClick={handleLogout} style={{ width: '100%', height: 44, padding: '0 14px', textAlign: 'left', background: 'transparent', border: 'none', color: isLight ? '#B91C1C' : '#FCA5A5', cursor: 'pointer', fontSize: 13, fontWeight: 900, display: 'flex', alignItems: 'center', gap: 10 }}>

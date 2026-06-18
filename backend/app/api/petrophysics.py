@@ -502,7 +502,13 @@ def _normalise_las_frame(las: lasio.LASFile) -> pd.DataFrame:
         df.rename(columns={depth_col: "DEPTH"}, inplace=True)
     for column in df.columns:
         df[column] = pd.to_numeric(df[column], errors="coerce")
-    df.replace([-999.25, -9999.0, 999.25], np.nan, inplace=True)
+    
+    try:
+        null_val = float(las.well["NULL"].value)
+    except Exception:
+        null_val = -999.25
+
+    df.replace([null_val, -999.25, -9999.0, 999.25, -999.0, -99999.0], np.nan, inplace=True)
     df.dropna(subset=["DEPTH"], inplace=True)
     df.sort_values("DEPTH", inplace=True)
     df.reset_index(drop=True, inplace=True)
@@ -557,8 +563,8 @@ def _create_petro_las_session(content: bytes, file_name: str):
 
 def _get_petro_session(session_id: str) -> dict:
     session = petro_las_store.get(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="LAS session not found. Upload or load a LAS file again.")
+    if session is None:
+        raise HTTPException(status_code=404, detail="SESSION_EXPIRED")
     return session
 
 
