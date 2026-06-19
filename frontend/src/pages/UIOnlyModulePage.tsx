@@ -134,6 +134,11 @@ function savePetroSession(session: any) {
 function handleSessionError(error: any, setSession: any, fallback: string) {
   if (error?.response?.status === 404 && error?.response?.data?.detail === 'SESSION_EXPIRED') {
     localStorage.removeItem(PETRO_SESSION_KEY)
+    transientModuleState.missingLog = {}
+    transientModuleState.prediction = {}
+    transientModuleState.uncertainty = {}
+    transientModuleState.crossplot = {}
+    transientModuleState.histogram = {}
     setSession(null)
     toast.error('Session expired — please re-upload your LAS file')
   } else {
@@ -379,7 +384,7 @@ function LogVisualizationCrossplotTab({ session, accent, isLight }: { session: a
       transientModuleState.logVisualizationCrossplot = { sourceSessionId: session.session_id, bridge: { ...activeBridge, source_session_id: session.session_id }, config, plotData: data }
       if (!silent) toast.success(`Crossplot generated from ${session.file_name}`)
     } catch (error: any) {
-      if (!silent) handleSessionError(error, setSession, 'Crossplot generation failed')
+      if (!silent) handleSessionError(error, () => undefined, 'Crossplot generation failed')
     } finally {
       setLoading(false)
     }
@@ -488,7 +493,7 @@ function LogVisualizationHistogramTab({ session, accent, isLight }: { session: a
       transientModuleState.logVisualizationHistogram = { sourceSessionId: session.session_id, metadata: { ...activeMetadata, source_session_id: session.session_id }, settings, result: response.data }
       toast.success(`Histogram generated from ${session.file_name}`)
     } catch (error: any) {
-      handleSessionError(error, setSession, 'Histogram generation failed')
+      handleSessionError(error, () => undefined, 'Histogram generation failed')
     } finally {
       setLoading(false)
     }
@@ -653,6 +658,43 @@ function styleLogViewerFigure(figure: any) {
   return styled
 }
 
+function styleMissingLogPreviewFigure(figure: any, isLight: boolean) {
+  if (!figure?.layout) return figure
+  const styled = JSON.parse(JSON.stringify(figure))
+  const paper = isLight ? '#FFFFFF' : '#08111F'
+  const grid = isLight ? '#E5EAF1' : '#1E293B'
+  const text = isLight ? '#0F172A' : '#CBD5E1'
+  styled.layout.paper_bgcolor = paper
+  styled.layout.plot_bgcolor = paper
+  styled.layout.height = 520
+  styled.layout.margin = { l: 68, r: 28, t: 44, b: 70 }
+  styled.layout.font = { color: text, family: 'Inter, system-ui, sans-serif' }
+  styled.layout.legend = { orientation: 'h', x: 0, y: -0.13, bgcolor: isLight ? 'rgba(255,255,255,.9)' : 'rgba(8,17,31,.88)', bordercolor: grid, borderwidth: 1 }
+  styled.data = (styled.data || []).map((trace: any) => {
+    const name = String(trace.name || '')
+    return {
+      ...trace,
+      line: { ...(trace.line || {}), color: curveColor(name), width: 2 },
+      hoverlabel: { bgcolor: isLight ? '#F8FAFC' : '#0F172A', font: { color: text, size: 13 } },
+    }
+  })
+  Object.keys(styled.layout).forEach(key => {
+    if (key.startsWith('xaxis') || key === 'yaxis') {
+      styled.layout[key] = {
+        ...styled.layout[key],
+        gridcolor: grid,
+        zerolinecolor: grid,
+        linecolor: grid,
+        tickfont: { color: text, size: 11 },
+        titlefont: { color: text, size: 12 },
+        color: text,
+      }
+    }
+  })
+  styled.layout.yaxis = { ...styled.layout.yaxis, title: 'Depth (ft)', autorange: 'reversed' }
+  return styled
+}
+
 function LogInterpretation({ curves, selected, muted, text }: { curves: string[]; selected: string[]; muted: string; text: string }) {
   const has = (pattern: RegExp) => curves.some(curve => pattern.test(curve))
   const notes = [
@@ -672,6 +714,7 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
   const [session, setSession] = useState<any>(() => saved.session || readPetroSession())
   const [analysis, setAnalysis] = useState<any>(() => saved.analysis || null)
   const [result, setResult] = useState<any>(() => saved.result || null)
+  const [previewFigure, setPreviewFigure] = useState<any>(() => saved.previewFigure || null)
   const [busy, setBusy] = useState(false)
   const [config, setConfig] = useState<any>(() => saved.config || { target: '', model: 'extra_trees', depthMin: '', depthMax: '', features: [] })
   const border = isLight ? '#E2E8F0' : '#1E293B'
@@ -685,21 +728,44 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
   const selectedModel = modelCandidates.find(model => model.key === config.model) || modelCandidates[0]
 
   useEffect(() => {
-    transientModuleState.missingLog = { session, analysis, result, config }
-  }, [session, analysis, result, config])
+    transientModuleState.missingLog = { session, analysis, result, config, previewFigure }
+  }, [session, analysis, result, config, previewFigure])
 
   const replaceSession = (nextSession: any) => {
     setSession(nextSession)
     setAnalysis(null)
     setResult(null)
+    setPreviewFigure(null)
     setConfig({ target: '', model: 'extra_trees', depthMin: '', depthMax: '', features: [] })
+  }
+
+  const loadCurvePreview = async (currentSession = session, currentAnalysis = analysis) => {
+    if (!isUserUploadedPetroSession(currentSession)) return
+    try {
+      const available = currentAnalysis?.feature_columns || currentSession?.curve_names || []
+      const preferred = ['SP', 'ILD', 'LL8', 'ILM', 'RHOB', 'DRHO', 'CALI', 'GR', 'NPHI', 'DT']
+      const selectedCurves = preferred.filter(curve => available.includes(curve)).slice(0, 10)
+      const fallbackCurves = available.filter((curve: string) => curve !== 'DEPTH').slice(0, 10)
+      const curves = selectedCurves.length ? selectedCurves : fallbackCurves
+      if (!curves.length) return
+      const response = await petrophysicsApi.generatePetroLogViewer({
+        session_id: currentSession.session_id,
+        curves,
+        depth_min: emptyToNull(config.depthMin),
+        depth_max: emptyToNull(config.depthMax),
+      })
+      setPreviewFigure(styleMissingLogPreviewFigure(response.data.figure, isLight))
+    } catch (error: any) {
+      handleSessionError(error, setSession, 'Well log preview failed')
+    }
   }
 
   const analyze = async () => {
     if (!hasUserSession) return toast.error('Upload a real LAS file in Log Visualization first')
     setBusy(true)
     try {
-      await analyzeMissingLogSession(session, setAnalysis, setConfig)
+      const nextAnalysis = await analyzeMissingLogSession(session, setAnalysis, setConfig)
+      await loadCurvePreview(session, nextAnalysis)
       toast.success('LAS gap analysis complete')
     } catch (error: any) {
       handleSessionError(error, setSession, 'Missing log analysis failed')
@@ -718,6 +784,7 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
     setBusy(true)
     try {
       const currentAnalysis = analysis || await analyzeMissingLogSession(session, setAnalysis, setConfig)
+      if (!previewFigure) await loadCurvePreview(session, currentAnalysis)
       const preferredTargets = ['RHOB', 'NPHI', 'DT', 'GR', 'ILD', 'LL8', 'SP', 'CALI']
       const defaultTarget = preferredTargets.find(target => (currentAnalysis.target_columns || []).includes(target)) || (currentAnalysis.target_columns || [])[0] || (currentAnalysis.feature_columns || [])[0] || ''
       const targetColumn = config.target || defaultTarget
@@ -815,6 +882,15 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
             </select>
           </Control>
         </div>
+      </div>
+
+      <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+        <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Uploaded LAS Curve Preview</div>
+        <h2 style={{ margin: '6px 0 8px', color: text, fontSize: 22 }}>Missing Log Data Context</h2>
+        <p style={{ margin: '0 0 14px', color: muted, lineHeight: 1.55, fontSize: 13 }}>
+          Review the uploaded LAS curves before prediction. Gaps and curve behavior are shown from the active project file.
+        </p>
+        {previewFigure ? <PlotlyFigure figure={styleMissingLogPreviewFigure(previewFigure, isLight)} isLight={isLight} exportName="missing_log_curve_preview" /> : <EmptyPlot border={border} muted={muted} text={hasUserSession ? 'Analyzing uploaded LAS to prepare curve preview.' : 'Upload or select a LAS file to view curve tracks.'} />}
       </div>
 
       <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
@@ -3782,7 +3858,14 @@ function SpectrumChart({ data, isLight }: { data: any[]; isLight: boolean }) {
 }
 
 function Metric({ label, value }: { label: string; value: any }) {
-  return <div style={{ padding: 12, borderRadius: 12, border: '1px solid #1E293B', background: 'rgba(15,23,42,.6)' }}><div style={{ color: '#94A3B8', fontSize: 12 }}>{label}</div><strong>{String(value)}</strong></div>
+  const theme = useStore(state => state.theme)
+  const isLight = theme === 'light'
+  return (
+    <div style={{ padding: 12, borderRadius: 12, border: `1px solid ${isLight ? '#E2E8F0' : '#1E293B'}`, background: isLight ? '#FFFFFF' : 'rgba(15,23,42,.6)', color: isLight ? '#0F172A' : '#F8FAFC' }}>
+      <div style={{ color: isLight ? '#64748B' : '#94A3B8', fontSize: 12 }}>{label}</div>
+      <strong>{String(value)}</strong>
+    </div>
+  )
 }
 
 function field(isLight: boolean): React.CSSProperties {

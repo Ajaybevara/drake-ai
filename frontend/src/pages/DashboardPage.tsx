@@ -22,7 +22,9 @@ const MODULES = [
 export default function DashboardPage() {
   const navigate = useNavigate()
   const inputRef = useRef<HTMLInputElement>(null)
-  const { enterpriseProject, setEnterpriseProject } = useStore()
+  const { enterpriseProject, setEnterpriseProject, theme } = useStore()
+  const isLight = theme === 'light'
+  const palette = dashboardPalette(isLight)
 
   useEffect(() => {
     const current = getCurrentLocalProject()
@@ -52,11 +54,11 @@ export default function DashboardPage() {
 
   if (!project) {
     return (
-      <div style={page}>
+      <div style={palette.page}>
         <section style={empty}>
           <FolderOpen size={34} color="#DA2626" />
-          <h1 style={{ margin: '12px 0 6px' }}>No Active Project</h1>
-          <p style={muted}>Create or open a local project to start shared file management.</p>
+          <h1 style={{ margin: '12px 0 6px', color: palette.text }}>No Active Project</h1>
+          <p style={palette.muted}>Create or open a local project to start shared file management.</p>
           <button style={primaryButton} onClick={() => navigate('/')}>Open Platform</button>
         </section>
       </div>
@@ -64,66 +66,66 @@ export default function DashboardPage() {
   }
 
   return (
-    <div style={page}>
-      <section style={hero}>
+    <div style={palette.page}>
+      <section style={palette.hero}>
         <div>
           <div style={eyebrow}>Project Dashboard</div>
-          <h1 style={title}>{project.project_name}</h1>
-          <p style={muted}>{project.description || 'No description'} - {project.project_type}</p>
+          <h1 style={{ ...title, color: palette.text }}>{project.project_name}</h1>
+          <p style={palette.muted}>{project.description || 'No description'} - {project.project_type}</p>
           <p style={pathText}>{project.project_path}</p>
         </div>
         <div style={heroActions}>
           <input ref={inputRef} type="file" multiple style={{ display: 'none' }} onChange={event => uploadFiles(event.target.files)} />
           <button style={primaryButton} onClick={() => inputRef.current?.click()}><Upload size={16} /> Upload Project Files</button>
-          <button style={ghostButton} onClick={() => navigate('/')}><FolderOpen size={16} /> Switch Project</button>
+          <button style={palette.ghostButton} onClick={() => navigate('/')}><FolderOpen size={16} /> Switch Project</button>
         </div>
       </section>
 
       <div style={statsGrid}>
-        <Stat label="Uploaded Files" value={String(stats.files)} icon={<Database size={20} />} />
-        <Stat label="Generated Results" value={String(stats.results)} icon={<History size={20} />} />
-        <Stat label="Exports" value={String(stats.exports)} icon={<Download size={20} />} />
-        <Stat label="Last Activity" value={stats.lastActivity ? new Date(stats.lastActivity).toLocaleString() : 'None'} icon={<FolderOpen size={20} />} />
+        <Stat label="Uploaded Files" value={String(stats.files)} icon={<Database size={20} />} palette={palette} />
+        <Stat label="Generated Results" value={String(stats.results)} icon={<History size={20} />} palette={palette} />
+        <Stat label="Exports" value={String(stats.exports)} icon={<Download size={20} />} palette={palette} />
+        <Stat label="Last Activity" value={stats.lastActivity ? new Date(stats.lastActivity).toLocaleString() : 'None'} icon={<FolderOpen size={20} />} palette={palette} />
       </div>
 
-      <section style={panel}>
+      <section style={palette.panel}>
         <div style={sectionHead}>
           <div>
             <div style={eyebrow}>Open Module</div>
-            <h2 style={panelTitle}>Run Existing Workflows</h2>
+            <h2 style={{ ...panelTitle, color: palette.text }}>Run Existing Workflows</h2>
           </div>
         </div>
         <div style={moduleGrid}>
-          {MODULES.map(module => <button key={module.path} style={moduleButton} onClick={() => navigate(module.path)}>{module.label}</button>)}
+          {MODULES.map(module => <button key={module.path} style={palette.moduleButton} onClick={() => navigate(module.path)}>{module.label}</button>)}
         </div>
       </section>
 
       <div style={twoCol}>
-        <Browser title="Uploaded File List" rows={project.uploaded_files || []} columns={['file_name', 'file_type', 'bucket', 'uploaded_at']} />
-        <Browser title="Result List" rows={project.generated_results || []} columns={['file_name', 'module_name', 'created_at']} />
+        <Browser title="Uploaded File List" rows={project.uploaded_files || []} columns={['file_name', 'file_type', 'bucket', 'uploaded_at']} palette={palette} />
+        <Browser title="Result List" rows={project.generated_results || []} columns={['file_name', 'module_name', 'created_at']} palette={palette} />
       </div>
       <div style={twoCol}>
-        <Browser title="Export List" rows={project.exported_files || []} columns={['file_name', 'module_name', 'export_type', 'created_at']} />
-        <Browser title="Project History" rows={project.module_history || []} columns={['timestamp', 'module_name', 'action', 'status']} />
+        <Browser title="Export List" rows={project.exported_files || []} columns={['file_name', 'module_name', 'export_type', 'created_at']} palette={palette} />
+        <Browser title="Project History" rows={project.module_history || []} columns={['timestamp', 'module_name', 'action', 'status']} palette={palette} />
       </div>
     </div>
   )
 }
 
-function Stat({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
-  return <div style={stat}><div style={{ color: '#10B981' }}>{icon}</div><div><div style={statLabel}>{label}</div><div style={statValue}>{value}</div></div></div>
+function Stat({ label, value, icon, palette }: { label: string; value: string; icon: React.ReactNode; palette: ReturnType<typeof dashboardPalette> }) {
+  return <div style={palette.stat}><div style={{ color: '#10B981' }}>{icon}</div><div><div style={palette.statLabel}>{label}</div><div style={palette.statValue}>{value}</div></div></div>
 }
 
-function Browser({ title, rows, columns }: { title: string; rows: any[]; columns: string[] }) {
+function Browser({ title, rows, columns, palette }: { title: string; rows: any[]; columns: string[]; palette: ReturnType<typeof dashboardPalette> }) {
   return (
-    <section style={panel}>
-      <h2 style={panelTitle}>{title}</h2>
+    <section style={palette.panel}>
+      <h2 style={{ ...panelTitle, color: palette.text }}>{title}</h2>
       <div style={{ overflowX: 'auto' }}>
         <table style={table}>
-          <thead><tr>{columns.map(col => <th key={col} style={th}>{col.replace(/_/g, ' ').toUpperCase()}</th>)}</tr></thead>
+          <thead><tr>{columns.map(col => <th key={col} style={palette.th}>{col.replace(/_/g, ' ').toUpperCase()}</th>)}</tr></thead>
           <tbody>
-            {rows.slice(0, 12).map((row, index) => <tr key={row.file_id || row.result_id || row.export_id || row.id || index}>{columns.map(col => <td key={col} style={td}>{String(row[col] ?? '-')}</td>)}</tr>)}
-            {!rows.length ? <tr><td style={td} colSpan={columns.length}>No records yet</td></tr> : null}
+            {rows.slice(0, 12).map((row, index) => <tr key={row.file_id || row.result_id || row.export_id || row.id || index}>{columns.map(col => <td key={col} style={palette.td}>{String(row[col] ?? '-')}</td>)}</tr>)}
+            {!rows.length ? <tr><td style={palette.td} colSpan={columns.length}>No records yet</td></tr> : null}
           </tbody>
         </table>
       </div>
@@ -155,3 +157,23 @@ const table: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', 
 const th: React.CSSProperties = { textAlign: 'left', color: '#93C5FD', padding: '10px 8px', borderBottom: '1px solid #24324A', whiteSpace: 'nowrap' }
 const td: React.CSSProperties = { color: '#E2E8F0', padding: '10px 8px', borderBottom: '1px solid #1E293B', whiteSpace: 'nowrap' }
 const empty: React.CSSProperties = { minHeight: 360, display: 'grid', placeItems: 'center', alignContent: 'center', textAlign: 'center', gap: 8 }
+
+function dashboardPalette(isLight: boolean) {
+  const border = isLight ? '#D6DEE9' : '#1E293B'
+  const text = isLight ? '#0F172A' : '#F8FAFC'
+  const mutedColor = isLight ? '#64748B' : '#94A3B8'
+  return {
+    text,
+    page: { ...page, background: isLight ? '#F8FAFC' : 'linear-gradient(135deg,#050B14,#07111F 52%,#0B1628)', color: text } as React.CSSProperties,
+    hero: { ...hero, border: `1px solid ${border}`, background: isLight ? '#FFFFFF' : 'linear-gradient(135deg,rgba(15,23,42,.94),rgba(7,17,31,.86))' } as React.CSSProperties,
+    muted: { ...muted, color: mutedColor } as React.CSSProperties,
+    ghostButton: { ...ghostButton, border: `1px solid ${isLight ? '#CBD5E1' : '#26364F'}`, background: isLight ? '#FFFFFF' : '#08111F', color: text } as React.CSSProperties,
+    panel: { ...panel, border: `1px solid ${border}`, background: isLight ? '#FFFFFF' : 'rgba(15,23,42,.82)' } as React.CSSProperties,
+    moduleButton: { ...moduleButton, border: `1px solid ${isLight ? '#CBD5E1' : '#26364F'}`, background: isLight ? '#F8FAFC' : '#08111F', color: text } as React.CSSProperties,
+    stat: { ...stat, border: `1px solid ${border}`, background: isLight ? '#FFFFFF' : 'rgba(15,23,42,.84)' } as React.CSSProperties,
+    statLabel: { ...statLabel, color: mutedColor } as React.CSSProperties,
+    statValue: { ...statValue, color: text } as React.CSSProperties,
+    th: { ...th, color: isLight ? '#475569' : '#93C5FD', borderBottom: `1px solid ${isLight ? '#E2E8F0' : '#24324A'}` } as React.CSSProperties,
+    td: { ...td, color: isLight ? '#0F172A' : '#E2E8F0', borderBottom: `1px solid ${isLight ? '#E2E8F0' : '#1E293B'}` } as React.CSSProperties,
+  }
+}
