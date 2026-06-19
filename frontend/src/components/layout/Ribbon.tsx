@@ -90,7 +90,8 @@ export default function Ribbon() {
         try {
           const { data } = await uploadFilesToLocalProject(enterpriseProject, files)
           setEnterpriseProject(data.project)
-          toast.success(`${files.length} file(s) saved in ${data.project.project_name}`)
+          if (data.files.length) toast.success(`${data.files.length} file(s) saved in ${data.project.project_name}`)
+          if (data.skipped?.length) toast.error(`${data.skipped.length} file(s) already existed in this project`)
         } catch (error: any) {
           toast.error(error?.message || 'Project upload failed')
         } finally {

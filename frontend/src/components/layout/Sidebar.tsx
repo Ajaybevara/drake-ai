@@ -66,7 +66,7 @@ export default function Sidebar() {
     setOpenSections(prev => ({ ...prev, [sec]: !prev[sec] }))
   }
 
-  const [width, setWidth] = useState(224)
+  const [width, setWidth] = useState(236)
   const [isResizing, setIsResizing] = useState(false)
   const [activeListTab, setActiveListTab] = useState<'wells' | 'templates'>('wells')
 
@@ -79,16 +79,16 @@ export default function Sidebar() {
     const active = location.pathname === resolvedPath || location.pathname.startsWith(resolvedPath + '/')
     return (
       <div onClick={() => navigate(resolvedPath)} style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: sub ? '6px 12px 6px 24px' : '8px 12px',
-        cursor: 'pointer', fontSize: 9.8, transition: 'all .12s',
+        display: 'flex', alignItems: 'flex-start', gap: 10,
+        padding: sub ? '7px 12px 7px 26px' : '9px 12px',
+        cursor: 'pointer', fontSize: sub ? 11.2 : 11.6, lineHeight: 1.35, transition: 'all .12s',
         color: active ? '#F8FAFC' : isLight ? '#334155' : '#C3CDDC',
         background: active ? 'linear-gradient(90deg,rgba(218,38,38,.92),rgba(218,38,38,.28))' : 'transparent',
         borderLeft: active ? '2px solid #DA2626' : '2px solid transparent',
-        fontWeight: active ? 500 : 400,
+        fontWeight: active ? 700 : 600,
       }}>
-        <i className={icon} style={{ fontSize: 10.7, width: 15, textAlign: 'center' }}></i>
-        {label}
+        <i className={icon} style={{ fontSize: 12.4, width: 16, textAlign: 'center', lineHeight: 1.35, marginTop: 1 }}></i>
+        <span style={{ minWidth: 0, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{label}</span>
       </div>
     )
   }
@@ -99,8 +99,8 @@ export default function Sidebar() {
 
   const SectionHeader = ({ id, label, rightElement }: any) => (
     <div onClick={() => toggleSection(id)} style={{ padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
-      <div style={{ fontSize: 12, color: isLight ? '#64748B' : '#64748B', letterSpacing: 1.2, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700 }}>
-        <i className={`fas fa-chevron-${openSections[id] ? 'down' : 'right'}`} style={{ fontSize: 10, width: 12 }}></i> {label}
+      <div style={{ fontSize: 13.4, color: isLight ? '#64748B' : '#64748B', letterSpacing: 1.5, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, lineHeight: 1.25 }}>
+        <i className={`fas fa-chevron-${openSections[id] ? 'down' : 'right'}`} style={{ fontSize: 11, width: 13 }}></i> {label}
       </div>
       {rightElement}
     </div>
@@ -129,7 +129,7 @@ export default function Sidebar() {
     const startWidth = width
 
     const onMouseMove = (moveEvent: MouseEvent) => {
-      const newWidth = Math.max(160, Math.min(400, startWidth + moveEvent.clientX - startX))
+      const newWidth = Math.max(190, Math.min(430, startWidth + moveEvent.clientX - startX))
       setWidth(newWidth)
     }
 
