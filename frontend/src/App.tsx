@@ -26,6 +26,7 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 
 const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
+  { path: '/register', element: <LoginPage /> },
   {
     path: '/',
     element: (

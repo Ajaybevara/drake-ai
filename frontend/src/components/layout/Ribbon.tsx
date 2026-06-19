@@ -78,23 +78,6 @@ export default function Ribbon() {
         ]} />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', paddingRight: 12 }}>
-        <RibbonBtn icon="fas fa-info-circle" label="Well Information" onClick={() => setShowWellInfo(!showWellInfo)} />
-
-        {showWellInfo && (
-          <div style={{ position: 'fixed', top: 115, right: 20, zIndex: 9999, background: isLight ? '#FFFFFF' : '#0B111A', borderRadius: 12, border: `1px solid ${isLight ? '#CBD5E1' : '#1F2A3A'}`, width: 350, padding: 20, boxShadow: '0 10px 40px rgba(0,0,0,0.3)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h2 style={{ margin: 0, fontSize: 16, color: isLight ? '#0F172A' : '#F8FAFC' }}>Well Information</h2>
-              <button onClick={() => setShowWellInfo(false)} style={{ background: 'transparent', border: 'none', color: isLight ? '#64748B' : '#94A3B8', cursor: 'pointer', fontSize: 14 }}><i className="fas fa-times"></i></button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, color: isLight ? '#334155' : '#CBD5E1', fontSize: 13 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `1px solid ${isLight ? '#F1F5F9' : '#1E293B'}`, paddingBottom: 6 }}><span>Well Name</span><strong style={{ color: isLight ? '#0F172A' : '#F8FAFC' }}>Volve-15/9-F-1C</strong></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `1px solid ${isLight ? '#F1F5F9' : '#1E293B'}`, paddingBottom: 6 }}><span>Field</span><strong style={{ color: isLight ? '#0F172A' : '#F8FAFC' }}>Volve</strong></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `1px solid ${isLight ? '#F1F5F9' : '#1E293B'}`, paddingBottom: 6 }}><span>Operator</span><strong style={{ color: isLight ? '#0F172A' : '#F8FAFC' }}>Equinor</strong></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `1px solid ${isLight ? '#F1F5F9' : '#1E293B'}`, paddingBottom: 6 }}><span>Status</span><strong style={{ color: isLight ? '#0F172A' : '#F8FAFC' }}>Producing</strong></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `1px solid ${isLight ? '#F1F5F9' : '#1E293B'}`, paddingBottom: 6 }}><span>Total Depth</span><strong style={{ color: isLight ? '#0F172A' : '#F8FAFC' }}>3,540 m</strong></div>
-            </div>
-          </div>
-        )}
       </div>
       <input type="file" id="global-file-upload" style={{ display: 'none' }} multiple onChange={async (event) => {
         const files = Array.from(event.target.files || [])

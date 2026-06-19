@@ -35,7 +35,41 @@ const formationTopsState: {
   result: null,
 }
 
-function PlotlyFigure({ figure }: { figure: any }) {
+function styleToolboxFigure(figure: any, isLight: boolean) {
+  if (!figure?.layout) return figure
+  const styled = JSON.parse(JSON.stringify(figure))
+  const paper = isLight ? '#FFFFFF' : '#06101D'
+  const text = isLight ? '#0F172A' : '#F8FAFC'
+  const muted = isLight ? '#475569' : '#E2E8F0'
+  const grid = isLight ? '#CBD5E1' : 'rgba(226,232,240,.72)'
+  styled.layout.paper_bgcolor = paper
+  styled.layout.plot_bgcolor = paper
+  styled.layout.font = { ...(styled.layout.font || {}), color: text, family: 'Inter, system-ui, sans-serif' }
+  styled.layout.margin = { ...(styled.layout.margin || {}), l: 82, r: 32, t: 64, b: 58 }
+  styled.layout.annotations = (styled.layout.annotations || []).map((item: any) => ({ ...item, font: { ...(item.font || {}), color: text, size: 15 } }))
+  Object.keys(styled.layout).forEach(key => {
+    if (key.startsWith('xaxis') || key.startsWith('yaxis')) {
+      styled.layout[key] = {
+        ...styled.layout[key],
+        gridcolor: grid,
+        zerolinecolor: grid,
+        linecolor: grid,
+        tickfont: { color: muted, size: 13 },
+        titlefont: { color: text, size: 14 },
+        color: text,
+      }
+    }
+  })
+  styled.data = (styled.data || []).map((trace: any) => ({
+    ...trace,
+    line: trace.line ? { ...trace.line, width: Math.max(Number(trace.line.width || 0), 2.4) } : trace.line,
+    textfont: trace.textfont ? { ...trace.textfont, color: isLight ? '#DC2626' : '#FCA5A5', size: 10 } : trace.textfont,
+  }))
+  styled.layout.shapes = (styled.layout.shapes || []).map((shape: any) => ({ ...shape, line: { ...(shape.line || {}), color: isLight ? '#DC2626' : '#FCA5A5', width: 1.2 } }))
+  return styled
+}
+
+function PlotlyFigure({ figure, isLight }: { figure: any; isLight: boolean }) {
   const ref = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -43,7 +77,8 @@ function PlotlyFigure({ figure }: { figure: any }) {
     let active = true
     import('plotly.js-dist-min').then(({ default: Plotly }) => {
       if (!active || !ref.current) return
-      Plotly.react(ref.current, figure.data || [], figure.layout || {}, { responsive: true, displaylogo: false })
+      const styled = styleToolboxFigure(figure, isLight)
+      Plotly.react(ref.current, styled.data || [], styled.layout || {}, { responsive: true, displaylogo: false })
     })
     return () => {
       active = false
@@ -51,7 +86,7 @@ function PlotlyFigure({ figure }: { figure: any }) {
         if (ref.current) Plotly.purge(ref.current)
       })
     }
-  }, [figure])
+  }, [figure, isLight])
 
   return <div ref={ref} style={{ width: '100%', minHeight: 650 }} />
 }
@@ -122,6 +157,8 @@ function parseManualTops(text: string) {
 }
 
 export default function FormationTopsPage() {
+  const theme = useStore(state => state.theme)
+  const isLight = theme === 'light'
   const [busy, setBusy] = useState(false)
   const [meta, setMeta] = useState<any>(() => formationTopsState.meta)
   const [topsMeta, setTopsMeta] = useState<any>(() => formationTopsState.topsMeta)
@@ -221,6 +258,7 @@ export default function FormationTopsPage() {
   }
 
   const numeric = (meta?.numeric_columns || []).filter((c: string) => c !== depthCol)
+  const palette = pagePalette(isLight)
   const browseLas = () => {
     const input = document.createElement('input')
     input.type = 'file'
@@ -230,12 +268,12 @@ export default function FormationTopsPage() {
   }
 
   return (
-    <div style={{ padding: 24, minHeight: '100%', overflow: 'auto', background: '#07111F' }}>
-      <section style={{ ...card, marginBottom: 18, display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
+    <div style={{ padding: 24, minHeight: '100%', overflow: 'auto', background: palette.page }}>
+      <section style={{ ...palette.card, marginBottom: 18, display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
         <div>
           <div style={eyebrow}>AI Formation Tops</div>
-          <h1 style={pageTitle}>Formation Tops Detection</h1>
-          <p style={pageSubtitle}>Detect formation boundaries from uploaded or active LAS curves with supervised, unsupervised, and manual-top support.</p>
+          <h1 style={{ ...pageTitle, color: palette.text }}>Formation Tops Detection</h1>
+          <p style={{ ...pageSubtitle, color: palette.subtitle }}>Detect formation boundaries from uploaded or active LAS curves with supervised, unsupervised, and manual-top support.</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <ProjectFileSelector moduleName="Formation Tops" allowedExtensions={['las', 'csv', 'xlsx']} onSelectFile={file => uploadLog(file)} compact />
@@ -243,54 +281,54 @@ export default function FormationTopsPage() {
         </div>
       </section>
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 18, alignItems: 'start' }}>
-        <section style={card}>
+        <section style={palette.card}>
           <div style={eyebrow}>Input Controls</div>
-          <h2 style={cardTitle}>Formation Setup</h2>
-          {!meta && <div style={emptyHint}>Select a project file or upload LAS above to start formation tops detection.</div>}
+          <h2 style={{ ...cardTitle, color: palette.text }}>Formation Setup</h2>
+          {!meta && <div style={palette.emptyHint}>Select a project file or upload LAS above to start formation tops detection.</div>}
 
           {meta && (
             <>
-              <div style={metaBox}>{meta.well_name} | {meta.rows.toLocaleString()} rows | {meta.columns.length} columns</div>
-              <label style={label}>Depth column</label>
-              <select value={depthCol} onChange={e => setDepthCol(e.target.value)} style={control}>
+              <div style={palette.metaBox}>{meta.well_name} | {meta.rows.toLocaleString()} rows | {meta.columns.length} columns</div>
+              <label style={palette.label}>Depth column</label>
+              <select value={depthCol} onChange={e => setDepthCol(e.target.value)} style={palette.control}>
                 {meta.columns.map((c: string) => <option key={c}>{c}</option>)}
               </select>
 
-              <label style={label}>Detection mode</label>
-              <select value={mode} onChange={e => setMode(e.target.value)} style={control}>
+              <label style={palette.label}>Detection mode</label>
+              <select value={mode} onChange={e => setMode(e.target.value)} style={palette.control}>
                 <option value="unsupervised">Unsupervised</option>
                 <option value="supervised">Supervised</option>
               </select>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
-                  <label style={label}>Sensitivity</label>
-                  <input type="number" min={2} max={50} value={sensitivity} onChange={e => setSensitivity(Number(e.target.value))} style={control} />
+                  <label style={palette.label}>Sensitivity</label>
+                  <input type="number" min={2} max={50} value={sensitivity} onChange={e => setSensitivity(Number(e.target.value))} style={palette.control} />
                 </div>
                 <div>
-                  <label style={label}>Min thickness</label>
-                  <input type="number" min={1} value={minThickness} onChange={e => setMinThickness(Number(e.target.value))} style={control} />
+                  <label style={palette.label}>Min thickness</label>
+                  <input type="number" min={1} value={minThickness} onChange={e => setMinThickness(Number(e.target.value))} style={palette.control} />
                 </div>
               </div>
-              <label style={label}>Smooth window</label>
-              <input type="number" min={5} step={2} value={smoothWindow} onChange={e => setSmoothWindow(Number(e.target.value))} style={control} />
+              <label style={palette.label}>Smooth window</label>
+              <input type="number" min={5} step={2} value={smoothWindow} onChange={e => setSmoothWindow(Number(e.target.value))} style={palette.control} />
 
-              <label style={label}>Manual tops</label>
-              <textarea value={manualTopsText} onChange={e => setManualTopsText(e.target.value)} placeholder="Formation A, 2450&#10;Formation B, 2630" style={{ ...control, minHeight: 74, resize: 'vertical' }} />
+              <label style={palette.label}>Manual tops</label>
+              <textarea value={manualTopsText} onChange={e => setManualTopsText(e.target.value)} placeholder="Formation A, 2450&#10;Formation B, 2630" style={{ ...palette.control, minHeight: 74, resize: 'vertical' }} />
 
               {mode === 'supervised' && (
                 <>
-                  <label style={label}>Tops CSV/XLSX</label>
+                  <label style={palette.label}>Tops CSV/XLSX</label>
                   <input type="file" accept=".csv,.xlsx" onChange={e => uploadTops(e.target.files?.[0])} />
                   {topsMeta && (
                     <>
-                      <div style={metaBox}>{topsMeta.file_name} | {topsMeta.rows.toLocaleString()} rows</div>
-                      <label style={label}>Depth column in tops file</label>
-                      <select value={topsDepthCol} onChange={e => setTopsDepthCol(e.target.value)} style={control}>
+                      <div style={palette.metaBox}>{topsMeta.file_name} | {topsMeta.rows.toLocaleString()} rows</div>
+                      <label style={palette.label}>Depth column in tops file</label>
+                      <select value={topsDepthCol} onChange={e => setTopsDepthCol(e.target.value)} style={palette.control}>
                         {topsMeta.columns.map((c: string) => <option key={c}>{c}</option>)}
                       </select>
-                      <label style={label}>Formation column</label>
-                      <select value={formationCol} onChange={e => setFormationCol(e.target.value)} style={control}>
+                      <label style={palette.label}>Formation column</label>
+                      <select value={formationCol} onChange={e => setFormationCol(e.target.value)} style={palette.control}>
                         {topsMeta.columns.filter((c: string) => c !== topsDepthCol).map((c: string) => <option key={c}>{c}</option>)}
                       </select>
                     </>
@@ -298,10 +336,10 @@ export default function FormationTopsPage() {
                 </>
               )}
 
-              <label style={label}>Curves (2-6)</label>
+              <label style={palette.label}>Curves (2-6)</label>
               <div style={{ display: 'grid', gap: 8, maxHeight: 240, overflow: 'auto' }}>
                 {numeric.map((c: string) => (
-                  <label key={c} style={{ color: '#CBD5E1', fontSize: 13 }}>
+                  <label key={c} style={{ color: palette.text, fontSize: 13 }}>
                     <input
                       type="checkbox"
                       checked={curves.includes(c)}
@@ -319,20 +357,20 @@ export default function FormationTopsPage() {
           )}
         </section>
 
-        <section style={card}>
+        <section style={palette.card}>
           <div style={eyebrow}>Formation Result</div>
-          <h2 style={cardTitle}>{result ? 'Detected Tops' : 'Waiting for Input'}</h2>
+          <h2 style={{ ...cardTitle, color: palette.text }}>{result ? 'Detected Tops' : 'Waiting for Input'}</h2>
           {result ? (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
                 <div>
-                  <h2 style={{ margin: 0, color: '#F8FAFC' }}>{result.mode} Detection</h2>
-                  <p style={{ margin: '6px 0 0', color: '#94A3B8' }}>{result.tops_count.toLocaleString()} tops detected</p>
+                  <h2 style={{ margin: 0, color: palette.text }}>{result.mode} Detection</h2>
+                  <p style={{ margin: '6px 0 0', color: palette.muted }}>{result.tops_count.toLocaleString()} tops detected</p>
                 </div>
                 <button onClick={() => downloadCsv(result.csv, 'formation_tops.csv')} style={secondaryButton}>Download CSV</button>
               </div>
               {result.mapping && (
-                <div style={{ ...metaBox, display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+                <div style={{ ...palette.metaBox, display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
                   {Object.entries(result.mapping).map(([key, value]) => <span key={key}><strong>{key}</strong>: {String(value || 'Missing')}</span>)}
                 </div>
               )}
@@ -342,17 +380,17 @@ export default function FormationTopsPage() {
                     {result.tops.slice(0, 100).map((row: any, index: number) => (
                       <tr key={index}>
                         {Object.values(row).map((value: any, i) => (
-                          <td key={i} style={{ padding: 8, borderBottom: '1px solid #1E293B', color: '#CBD5E1' }}>{String(value ?? '')}</td>
+                          <td key={i} style={{ padding: 8, borderBottom: `1px solid ${palette.border}`, color: palette.text }}>{String(value ?? '')}</td>
                         ))}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <PlotlyFigure figure={result.figure} />
+              <PlotlyFigure figure={result.figure} isLight={isLight} />
             </>
           ) : (
-            <div style={{ minHeight: 520, display: 'grid', placeItems: 'center', color: '#94A3B8' }}>
+            <div style={{ minHeight: 520, display: 'grid', placeItems: 'center', color: palette.muted }}>
               Upload a well log, choose depth and curves, then detect formation tops.
             </div>
           )}
@@ -375,3 +413,25 @@ const secondaryButton: React.CSSProperties = { padding: '10px 12px', border: '1p
 const greenButton: React.CSSProperties = { height: 56, padding: '0 22px', border: 0, borderRadius: 10, background: '#10B981', color: '#06111F', fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 15 }
 const metaBox: React.CSSProperties = { marginTop: 14, padding: 12, borderRadius: 10, background: '#0E1622', color: '#CBD5E1', fontSize: 13 }
 const emptyHint: React.CSSProperties = { marginTop: 14, padding: 14, borderRadius: 12, border: '1px dashed #26364D', background: '#08111F', color: '#94A3B8', lineHeight: 1.5 }
+
+function pagePalette(isLight: boolean) {
+  const border = isLight ? '#D6DEE9' : '#1E293B'
+  return {
+    page: isLight ? '#F8FAFC' : '#07111F',
+    text: isLight ? '#0F172A' : '#F8FAFC',
+    muted: isLight ? '#64748B' : '#94A3B8',
+    subtitle: isLight ? '#475569' : '#9FC5F8',
+    border,
+    card: {
+      padding: 18,
+      background: isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.92),rgba(7,17,31,.96))',
+      borderRadius: 14,
+      border: `1px solid ${border}`,
+      color: isLight ? '#0F172A' : '#CBD5E1',
+    } as React.CSSProperties,
+    label: { ...label, color: isLight ? '#475569' : '#94A3B8' } as React.CSSProperties,
+    control: { ...control, border: `1px solid ${isLight ? '#CBD5E1' : '#26364D'}`, background: isLight ? '#FFFFFF' : '#08111F', color: isLight ? '#0F172A' : '#F8FAFC' } as React.CSSProperties,
+    metaBox: { ...metaBox, background: isLight ? '#F1F5F9' : '#0E1622', color: isLight ? '#0F172A' : '#CBD5E1' } as React.CSSProperties,
+    emptyHint: { ...emptyHint, border: `1px dashed ${isLight ? '#CBD5E1' : '#26364D'}`, background: isLight ? '#F8FAFC' : '#08111F', color: isLight ? '#64748B' : '#94A3B8' } as React.CSSProperties,
+  }
+}

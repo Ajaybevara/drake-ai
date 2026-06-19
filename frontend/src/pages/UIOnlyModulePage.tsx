@@ -41,12 +41,12 @@ export default function UIOnlyModulePage({ title, subtitle = DEFAULT_SUBTITLE, a
             : isMissingLogPrediction
               ? 'Integrated missing-log workflow: analyzes uploaded LAS gaps, trains a regression model, predicts missing intervals, and exports CSV results.'
               : isParameterPrediction
-              ? 'Integrated Drake AI prediction workflow: uses the active LAS session to calculate porosity, saturation, lithology, confidence, and preview rows.'
-              : isUncertainty
-                ? 'Integrated uncertainty workflow: P10 / P50 / P90 porosity and water saturation envelopes from the active uploaded LAS file.'
-                : isAutoSplicer
-                  ? 'Integrated AutoSplice workflow: upload multiple LAS files, validate intervals, splice them, preview merged tracks, and download LAS output.'
-    : subtitle
+                ? 'Integrated Drake AI prediction workflow: uses the active LAS session to calculate porosity, saturation, lithology, confidence, and preview rows.'
+                : isUncertainty
+                  ? 'Integrated uncertainty workflow: P10 / P50 / P90 porosity and water saturation envelopes from the active uploaded LAS file.'
+                  : isAutoSplicer
+                    ? 'Integrated AutoSplice workflow: upload multiple LAS files, validate intervals, splice them, preview merged tracks, and download LAS output.'
+                    : subtitle
 
   const cards = kind === 'seismic'
     ? ['Frequency bands', 'Spectral preview', 'Enhanced seismic panel', 'Export controls']
@@ -128,6 +128,21 @@ function savePetroSession(session: any) {
     localStorage.setItem(PETRO_SESSION_KEY, JSON.stringify(session))
   } catch {
     // Backend holds parsed LAS data; this only remembers the active session id.
+  }
+}
+
+function handleSessionError(error: any, setSession: any, fallback: string) {
+  if (error?.response?.status === 404 && error?.response?.data?.detail === 'SESSION_EXPIRED') {
+    localStorage.removeItem(PETRO_SESSION_KEY)
+    transientModuleState.missingLog = {}
+    transientModuleState.prediction = {}
+    transientModuleState.uncertainty = {}
+    transientModuleState.crossplot = {}
+    transientModuleState.histogram = {}
+    setSession(null)
+    toast.error('Session expired — please re-upload your LAS file')
+  } else {
+    toast.error(error?.response?.data?.detail || fallback)
   }
 }
 
@@ -216,7 +231,7 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
       await saveProjectResultCopy('Log Visualization', `${session?.well_name || 'well'}_log_visualization`, nextResult)
       toast.success('AI visualization rendered')
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Visualization failed')
+      handleSessionError(error, setSession, 'Visualization failed')
     } finally {
       setBusy(false)
     }
@@ -260,30 +275,30 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
           <LogVisualizationCrossplotTab session={session} accent={accent} isLight={isLight} />
         ) : (
           <>
-        <p style={{ color: muted, margin: '0 0 14px' }}>Displaying {activeCurves.length || 0} track(s) - {session?.rows?.toLocaleString?.() || 0} depth points.</p>
-        <div style={{ color: muted, letterSpacing: 1, textTransform: 'uppercase', fontSize: 12, fontWeight: 900, marginBottom: 8 }}>Available Logs</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-          <button onClick={() => setSelected(['GR', 'ILD', 'DRHO', 'DT'].filter(name => curves.includes(name)))} disabled={!curves.length} style={smallChip(isLight, '#38BDF8', false)}>+ Add Standard</button>
-          <button onClick={() => { setSelected([]); setResult(null) }} disabled={!curves.length} style={smallChip(isLight, '#EF4444', false)}>x Clear All</button>
-          {['All', 'GR', 'RES', 'DEN', 'NEU', 'SON', 'CAL', 'SP', 'Other'].map(group => <span key={group} style={smallChip(isLight, groupColor(group), false)}>{group}</span>)}
-        </div>
-        {curves.length ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{curves.map(curve => {
-          const active = selected.includes(curve)
-          const color = curveColor(curve)
-          return <button key={curve} onClick={() => setSelected(prev => active ? prev.filter(item => item !== curve) : [...prev, curve])} style={{ padding: '9px 13px', borderRadius: 999, border: `1px solid ${active ? color : border}`, background: active ? `${color}20` : 'transparent', color: active ? color : muted, fontWeight: 900, cursor: 'pointer' }}><span style={{ color }}>{active ? '✓ ' : '● '}</span>{curve}</button>
-        })}</div> : <div style={{ color: muted }}>Upload LAS to see available logs.</div>}
-        <div style={{ color: muted, letterSpacing: 1, textTransform: 'uppercase', fontSize: 12, fontWeight: 900, margin: '18px 0 8px' }}>Active Tracks <span style={{ color: '#38BDF8' }}>{activeCurves.length}</span></div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, padding: 12, borderRadius: 12, background: isLight ? '#64748B22' : '#64748B55', marginBottom: 16 }}>
-          {activeCurves.length ? activeCurves.map(curve => <span key={curve} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 999, border: `1px solid ${curveColor(curve)}77`, color: curveColor(curve), background: `${curveColor(curve)}18`, fontWeight: 900 }}><span>● {curve}</span><small style={{ color: muted }}>{isResistivityCurve(curve) ? 'LOG' : 'LIN'}</small><button onClick={() => setSelected(prev => prev.filter(item => item !== curve))} style={{ border: 'none', background: 'transparent', color: muted, cursor: 'pointer' }}>×</button></span>) : <span style={{ color: muted }}>No active tracks selected.</span>}
-        </div>
-        <div style={{ color: muted, letterSpacing: 1, textTransform: 'uppercase', fontSize: 12, fontWeight: 900, marginBottom: 8 }}>Depth Range (Y-Axis)</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, alignItems: 'end' }}>
-          <Control label="Unit"><select style={field(isLight)} value={depthRange.unit} onChange={event => setDepthRange((prev: any) => ({ ...prev, unit: event.target.value }))}><option>Feet (ft)</option><option>Meters (m)</option></select></Control>
-          <Control label="Min Depth"><input style={field(isLight)} value={depthRange.min} onChange={event => setDepthRange((prev: any) => ({ ...prev, min: event.target.value }))} /></Control>
-          <Control label="Max Depth"><input style={field(isLight)} value={depthRange.max} onChange={event => setDepthRange((prev: any) => ({ ...prev, max: event.target.value }))} /></Control>
-          <button onClick={() => setDepthRange({ min: session?.depth_min ? String(Math.round(Number(session.depth_min))) : '', max: session?.depth_max ? String(Math.round(Number(session.depth_max))) : '', unit: 'Feet (ft)' })} style={smallButton(isLight)}>Reset</button>
-          <button onClick={visualize} disabled={busy || !session} style={{ ...primaryButton(accent), width: 180 }}>{busy ? 'Rendering...' : 'Plot Tracks'}</button>
-        </div>
+            <p style={{ color: muted, margin: '0 0 14px' }}>Displaying {activeCurves.length || 0} track(s) - {session?.rows?.toLocaleString?.() || 0} depth points.</p>
+            <div style={{ color: muted, letterSpacing: 1, textTransform: 'uppercase', fontSize: 12, fontWeight: 900, marginBottom: 8 }}>Available Logs</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+              <button onClick={() => setSelected(['GR', 'ILD', 'DRHO', 'DT'].filter(name => curves.includes(name)))} disabled={!curves.length} style={smallChip(isLight, '#38BDF8', false)}>+ Add Standard</button>
+              <button onClick={() => { setSelected([]); setResult(null) }} disabled={!curves.length} style={smallChip(isLight, '#EF4444', false)}>x Clear All</button>
+              {['All', 'GR', 'RES', 'DEN', 'NEU', 'SON', 'CAL', 'SP', 'Other'].map(group => <span key={group} style={smallChip(isLight, groupColor(group), false)}>{group}</span>)}
+            </div>
+            {curves.length ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{curves.map(curve => {
+              const active = selected.includes(curve)
+              const color = curveColor(curve)
+              return <button key={curve} onClick={() => setSelected(prev => active ? prev.filter(item => item !== curve) : [...prev, curve])} style={{ padding: '9px 13px', borderRadius: 999, border: `1px solid ${active ? color : border}`, background: active ? `${color}20` : 'transparent', color: active ? color : muted, fontWeight: 900, cursor: 'pointer' }}><span style={{ color }}>{active ? '✓ ' : '● '}</span>{curve}</button>
+            })}</div> : <div style={{ color: muted }}>Upload LAS to see available logs.</div>}
+            <div style={{ color: muted, letterSpacing: 1, textTransform: 'uppercase', fontSize: 12, fontWeight: 900, margin: '18px 0 8px' }}>Active Tracks <span style={{ color: '#38BDF8' }}>{activeCurves.length}</span></div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, padding: 12, borderRadius: 12, background: isLight ? '#64748B22' : '#64748B55', marginBottom: 16 }}>
+              {activeCurves.length ? activeCurves.map(curve => <span key={curve} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 999, border: `1px solid ${curveColor(curve)}77`, color: curveColor(curve), background: `${curveColor(curve)}18`, fontWeight: 900 }}><span>● {curve}</span><small style={{ color: muted }}>{isResistivityCurve(curve) ? 'LOG' : 'LIN'}</small><button onClick={() => setSelected(prev => prev.filter(item => item !== curve))} style={{ border: 'none', background: 'transparent', color: muted, cursor: 'pointer' }}>×</button></span>) : <span style={{ color: muted }}>No active tracks selected.</span>}
+            </div>
+            <div style={{ color: muted, letterSpacing: 1, textTransform: 'uppercase', fontSize: 12, fontWeight: 900, marginBottom: 8 }}>Depth Range (Y-Axis)</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, alignItems: 'end' }}>
+              <Control label="Unit"><select style={field(isLight)} value={depthRange.unit} onChange={event => setDepthRange((prev: any) => ({ ...prev, unit: event.target.value }))}><option>Feet (ft)</option><option>Meters (m)</option></select></Control>
+              <Control label="Min Depth"><input style={field(isLight)} value={depthRange.min} onChange={event => setDepthRange((prev: any) => ({ ...prev, min: event.target.value }))} /></Control>
+              <Control label="Max Depth"><input style={field(isLight)} value={depthRange.max} onChange={event => setDepthRange((prev: any) => ({ ...prev, max: event.target.value }))} /></Control>
+              <button onClick={() => setDepthRange({ min: session?.depth_min ? String(Math.round(Number(session.depth_min))) : '', max: session?.depth_max ? String(Math.round(Number(session.depth_max))) : '', unit: 'Feet (ft)' })} style={smallButton(isLight)}>Reset</button>
+              <button onClick={visualize} disabled={busy || !session} style={{ ...primaryButton(accent), width: 180 }}>{busy ? 'Rendering...' : 'Plot Tracks'}</button>
+            </div>
           </>
         )}
       </div>
@@ -369,7 +384,7 @@ function LogVisualizationCrossplotTab({ session, accent, isLight }: { session: a
       transientModuleState.logVisualizationCrossplot = { sourceSessionId: session.session_id, bridge: { ...activeBridge, source_session_id: session.session_id }, config, plotData: data }
       if (!silent) toast.success(`Crossplot generated from ${session.file_name}`)
     } catch (error: any) {
-      if (!silent) toast.error(error?.response?.data?.detail || 'Crossplot generation failed')
+      if (!silent) handleSessionError(error, () => undefined, 'Crossplot generation failed')
     } finally {
       setLoading(false)
     }
@@ -478,7 +493,7 @@ function LogVisualizationHistogramTab({ session, accent, isLight }: { session: a
       transientModuleState.logVisualizationHistogram = { sourceSessionId: session.session_id, metadata: { ...activeMetadata, source_session_id: session.session_id }, settings, result: response.data }
       toast.success(`Histogram generated from ${session.file_name}`)
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Histogram generation failed')
+      handleSessionError(error, () => undefined, 'Histogram generation failed')
     } finally {
       setLoading(false)
     }
@@ -643,6 +658,43 @@ function styleLogViewerFigure(figure: any) {
   return styled
 }
 
+function styleMissingLogPreviewFigure(figure: any, isLight: boolean) {
+  if (!figure?.layout) return figure
+  const styled = JSON.parse(JSON.stringify(figure))
+  const paper = isLight ? '#FFFFFF' : '#08111F'
+  const grid = isLight ? '#E5EAF1' : '#1E293B'
+  const text = isLight ? '#0F172A' : '#CBD5E1'
+  styled.layout.paper_bgcolor = paper
+  styled.layout.plot_bgcolor = paper
+  styled.layout.height = 520
+  styled.layout.margin = { l: 68, r: 28, t: 44, b: 70 }
+  styled.layout.font = { color: text, family: 'Inter, system-ui, sans-serif' }
+  styled.layout.legend = { orientation: 'h', x: 0, y: -0.13, bgcolor: isLight ? 'rgba(255,255,255,.9)' : 'rgba(8,17,31,.88)', bordercolor: grid, borderwidth: 1 }
+  styled.data = (styled.data || []).map((trace: any) => {
+    const name = String(trace.name || '')
+    return {
+      ...trace,
+      line: { ...(trace.line || {}), color: curveColor(name), width: 2 },
+      hoverlabel: { bgcolor: isLight ? '#F8FAFC' : '#0F172A', font: { color: text, size: 13 } },
+    }
+  })
+  Object.keys(styled.layout).forEach(key => {
+    if (key.startsWith('xaxis') || key === 'yaxis') {
+      styled.layout[key] = {
+        ...styled.layout[key],
+        gridcolor: grid,
+        zerolinecolor: grid,
+        linecolor: grid,
+        tickfont: { color: text, size: 11 },
+        titlefont: { color: text, size: 12 },
+        color: text,
+      }
+    }
+  })
+  styled.layout.yaxis = { ...styled.layout.yaxis, title: 'Depth (ft)', autorange: 'reversed' }
+  return styled
+}
+
 function LogInterpretation({ curves, selected, muted, text }: { curves: string[]; selected: string[]; muted: string; text: string }) {
   const has = (pattern: RegExp) => curves.some(curve => pattern.test(curve))
   const notes = [
@@ -662,6 +714,7 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
   const [session, setSession] = useState<any>(() => saved.session || readPetroSession())
   const [analysis, setAnalysis] = useState<any>(() => saved.analysis || null)
   const [result, setResult] = useState<any>(() => saved.result || null)
+  const [previewFigure, setPreviewFigure] = useState<any>(() => saved.previewFigure || null)
   const [busy, setBusy] = useState(false)
   const [config, setConfig] = useState<any>(() => saved.config || { target: '', model: 'extra_trees', depthMin: '', depthMax: '', features: [] })
   const border = isLight ? '#E2E8F0' : '#1E293B'
@@ -675,24 +728,47 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
   const selectedModel = modelCandidates.find(model => model.key === config.model) || modelCandidates[0]
 
   useEffect(() => {
-    transientModuleState.missingLog = { session, analysis, result, config }
-  }, [session, analysis, result, config])
+    transientModuleState.missingLog = { session, analysis, result, config, previewFigure }
+  }, [session, analysis, result, config, previewFigure])
 
   const replaceSession = (nextSession: any) => {
     setSession(nextSession)
     setAnalysis(null)
     setResult(null)
+    setPreviewFigure(null)
     setConfig({ target: '', model: 'extra_trees', depthMin: '', depthMax: '', features: [] })
+  }
+
+  const loadCurvePreview = async (currentSession = session, currentAnalysis = analysis) => {
+    if (!isUserUploadedPetroSession(currentSession)) return
+    try {
+      const available = currentAnalysis?.feature_columns || currentSession?.curve_names || []
+      const preferred = ['SP', 'ILD', 'LL8', 'ILM', 'RHOB', 'DRHO', 'CALI', 'GR', 'NPHI', 'DT']
+      const selectedCurves = preferred.filter(curve => available.includes(curve)).slice(0, 10)
+      const fallbackCurves = available.filter((curve: string) => curve !== 'DEPTH').slice(0, 10)
+      const curves = selectedCurves.length ? selectedCurves : fallbackCurves
+      if (!curves.length) return
+      const response = await petrophysicsApi.generatePetroLogViewer({
+        session_id: currentSession.session_id,
+        curves,
+        depth_min: emptyToNull(config.depthMin),
+        depth_max: emptyToNull(config.depthMax),
+      })
+      setPreviewFigure(styleMissingLogPreviewFigure(response.data.figure, isLight))
+    } catch (error: any) {
+      handleSessionError(error, setSession, 'Well log preview failed')
+    }
   }
 
   const analyze = async () => {
     if (!hasUserSession) return toast.error('Upload a real LAS file in Log Visualization first')
     setBusy(true)
     try {
-      await analyzeMissingLogSession(session, setAnalysis, setConfig)
+      const nextAnalysis = await analyzeMissingLogSession(session, setAnalysis, setConfig)
+      await loadCurvePreview(session, nextAnalysis)
       toast.success('LAS gap analysis complete')
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Missing log analysis failed')
+      handleSessionError(error, setSession, 'Missing log analysis failed')
     } finally {
       setBusy(false)
     }
@@ -708,6 +784,7 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
     setBusy(true)
     try {
       const currentAnalysis = analysis || await analyzeMissingLogSession(session, setAnalysis, setConfig)
+      if (!previewFigure) await loadCurvePreview(session, currentAnalysis)
       const preferredTargets = ['RHOB', 'NPHI', 'DT', 'GR', 'ILD', 'LL8', 'SP', 'CALI']
       const defaultTarget = preferredTargets.find(target => (currentAnalysis.target_columns || []).includes(target)) || (currentAnalysis.target_columns || [])[0] || (currentAnalysis.feature_columns || [])[0] || ''
       const targetColumn = config.target || defaultTarget
@@ -726,7 +803,7 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
       await saveProjectResultCopy('Missing Log Prediction', `${response.data?.target_column || 'missing_log'}_prediction`, response.data)
       toast.success(`Predicted ${response.data.predicted_count?.toLocaleString?.()} samples`)
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Missing log prediction failed')
+      handleSessionError(error, setSession, 'Missing log prediction failed')
     } finally {
       setBusy(false)
     }
@@ -805,6 +882,15 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
             </select>
           </Control>
         </div>
+      </div>
+
+      <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+        <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Uploaded LAS Curve Preview</div>
+        <h2 style={{ margin: '6px 0 8px', color: text, fontSize: 22 }}>Missing Log Data Context</h2>
+        <p style={{ margin: '0 0 14px', color: muted, lineHeight: 1.55, fontSize: 13 }}>
+          Review the uploaded LAS curves before prediction. Gaps and curve behavior are shown from the active project file.
+        </p>
+        {previewFigure ? <PlotlyFigure figure={styleMissingLogPreviewFigure(previewFigure, isLight)} isLight={isLight} exportName="missing_log_curve_preview" /> : <EmptyPlot border={border} muted={muted} text={hasUserSession ? 'Analyzing uploaded LAS to prepare curve preview.' : 'Upload or select a LAS file to view curve tracks.'} />}
       </div>
 
       <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
@@ -1037,7 +1123,7 @@ function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLi
       transientModuleState.prediction = { session, result: response.data, activeTab, config, draftDepth, appliedDepth }
       toast.success(`${targetTab} calculation complete`)
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'AI prediction failed')
+      handleSessionError(error, setSession, 'AI prediction failed')
     } finally {
       setBusy(false)
     }
@@ -1189,7 +1275,7 @@ function PetrophysicsUncertaintyPanel({ accent, isLight }: { accent: string; isL
       transientModuleState.uncertainty = { session, result: response.data, params }
       toast.success(`${target === 'porosity' ? 'Porosity' : 'Saturation'} uncertainty calculated`)
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Uncertainty calculation failed')
+      handleSessionError(error, setSession, 'Uncertainty calculation failed')
     } finally {
       setBusy(null)
     }
@@ -3772,7 +3858,14 @@ function SpectrumChart({ data, isLight }: { data: any[]; isLight: boolean }) {
 }
 
 function Metric({ label, value }: { label: string; value: any }) {
-  return <div style={{ padding: 12, borderRadius: 12, border: '1px solid #1E293B', background: 'rgba(15,23,42,.6)' }}><div style={{ color: '#94A3B8', fontSize: 12 }}>{label}</div><strong>{String(value)}</strong></div>
+  const theme = useStore(state => state.theme)
+  const isLight = theme === 'light'
+  return (
+    <div style={{ padding: 12, borderRadius: 12, border: `1px solid ${isLight ? '#E2E8F0' : '#1E293B'}`, background: isLight ? '#FFFFFF' : 'rgba(15,23,42,.6)', color: isLight ? '#0F172A' : '#F8FAFC' }}>
+      <div style={{ color: isLight ? '#64748B' : '#94A3B8', fontSize: 12 }}>{label}</div>
+      <strong>{String(value)}</strong>
+    </div>
+  )
 }
 
 function field(isLight: boolean): React.CSSProperties {

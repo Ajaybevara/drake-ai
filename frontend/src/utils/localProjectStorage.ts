@@ -227,6 +227,15 @@ export function listLocalProjects() {
   return readRegistry()
 }
 
+export function deleteLocalProject(projectId: string) {
+  const registry = readRegistry().filter(item => item.project_id !== projectId)
+  writeRegistry(registry)
+  const current = getCurrentLocalProject()
+  if (current?.project_id === projectId) {
+    localStorage.removeItem(CURRENT_PROJECT_KEY)
+  }
+}
+
 export function getCurrentLocalProject() {
   try {
     const raw = localStorage.getItem(CURRENT_PROJECT_KEY)

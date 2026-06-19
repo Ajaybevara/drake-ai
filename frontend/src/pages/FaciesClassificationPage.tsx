@@ -27,15 +27,59 @@ const faciesState: {
   result: null,
 }
 
-function PlotlyFigure({ figure }: { figure: any }) {
+function styleToolboxFigure(figure: any, isLight: boolean) {
+  if (!figure?.layout) return figure
+  const styled = JSON.parse(JSON.stringify(figure))
+  const paper = isLight ? '#FFFFFF' : '#06101D'
+  const text = isLight ? '#0F172A' : '#F8FAFC'
+  const muted = isLight ? '#475569' : '#E2E8F0'
+  const grid = isLight ? '#CBD5E1' : 'rgba(226,232,240,.72)'
+  styled.layout.paper_bgcolor = paper
+  styled.layout.plot_bgcolor = paper
+  styled.layout.font = { ...(styled.layout.font || {}), color: text, family: 'Inter, system-ui, sans-serif' }
+  styled.layout.margin = { ...(styled.layout.margin || {}), l: 78, r: 28, t: 64, b: 58 }
+  styled.layout.annotations = (styled.layout.annotations || []).map((item: any) => ({ ...item, font: { ...(item.font || {}), color: text, size: 15 } }))
+  Object.keys(styled.layout).forEach(key => {
+    if (key.startsWith('xaxis') || key.startsWith('yaxis')) {
+      styled.layout[key] = {
+        ...styled.layout[key],
+        gridcolor: grid,
+        zerolinecolor: grid,
+        linecolor: grid,
+        tickfont: { color: muted, size: 13 },
+        titlefont: { color: text, size: 14 },
+        color: text,
+      }
+    }
+  })
+  styled.data = (styled.data || []).map((trace: any) => ({
+    ...trace,
+    line: trace.line ? { ...trace.line, width: Math.max(Number(trace.line.width || 0), 2.4) } : trace.line,
+  }))
+  return styled
+}
+
+function PlotlyFigure({ figure, isLight }: { figure: any; isLight: boolean }) {
   const ref = useRef<HTMLDivElement | null>(null)
+  const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!ref.current || !figure) return
+    if (!ref.current || !figure?.data?.length) return
     let active = true
     import('plotly.js-dist-min').then(({ default: Plotly }) => {
       if (!active || !ref.current) return
-      Plotly.react(ref.current, figure.data || [], figure.layout || {}, { responsive: true, displaylogo: false })
+      const styled = styleToolboxFigure(figure, isLight)
+      Plotly.react(ref.current, styled.data || [], styled.layout || {}, { responsive: true, displaylogo: false })
+        .then(() => {
+          setError('')
+          window.requestAnimationFrame(() => {
+            if (ref.current) Plotly.Plots.resize(ref.current)
+          })
+          window.setTimeout(() => {
+            if (ref.current) Plotly.Plots.resize(ref.current)
+          }, 250)
+        })
+        .catch((err: any) => setError(err?.message || 'Unable to render result graph'))
     })
     return () => {
       active = false
@@ -43,9 +87,18 @@ function PlotlyFigure({ figure }: { figure: any }) {
         if (ref.current) Plotly.purge(ref.current)
       })
     }
-  }, [figure])
+  }, [figure, isLight])
 
-  return <div ref={ref} style={{ width: '100%', minHeight: 650 }} />
+  if (!figure?.data?.length) {
+    return <div style={{ minHeight: 520, display: 'grid', placeItems: 'center', color: isLight ? '#64748B' : '#94A3B8' }}>Run classification again to generate the result graph.</div>
+  }
+
+  return (
+    <div style={{ width: '100%', minHeight: 650, borderRadius: 12, overflow: 'hidden', background: isLight ? '#FFFFFF' : '#06101D' }}>
+      {error ? <div style={{ padding: 14, color: '#EF4444', fontWeight: 800 }}>{error}</div> : null}
+      <div ref={ref} style={{ width: '100%', minHeight: 650 }} />
+    </div>
+  )
 }
 
 function downloadCsv(csv: string, name: string) {
@@ -107,6 +160,8 @@ async function saveProjectResultCopy(predictionName: string, resultPayload: any)
 }
 
 export default function FaciesClassificationPage() {
+  const theme = useStore(state => state.theme)
+  const isLight = theme === 'light'
   const [busy, setBusy] = useState(false)
   const [meta, setMeta] = useState<any>(() => faciesState.meta)
   const [depthCol, setDepthCol] = useState(() => faciesState.depthCol)
@@ -181,6 +236,7 @@ export default function FaciesClassificationPage() {
   }
 
   const numeric = (meta?.numeric_columns || []).filter((c: string) => c !== depthCol)
+  const palette = pagePalette(isLight)
   const browseLas = () => {
     const input = document.createElement('input')
     input.type = 'file'
@@ -190,12 +246,12 @@ export default function FaciesClassificationPage() {
   }
 
   return (
-    <div style={{ padding: 24, minHeight: '100%', overflow: 'auto', background: '#07111F' }}>
-      <section style={{ ...card, marginBottom: 18, display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
+    <div style={{ padding: 24, minHeight: '100%', overflow: 'auto', background: palette.page }}>
+      <section style={{ ...palette.card, marginBottom: 18, display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
         <div>
           <div style={eyebrow}>AI Facies Classification</div>
-          <h1 style={pageTitle}>AI-Powered Facies Classification</h1>
-          <p style={pageSubtitle}>Cluster or classify facies from the active LAS session using selected petrophysical curves.</p>
+          <h1 style={{ ...pageTitle, color: palette.text }}>AI-Powered Facies Classification</h1>
+          <p style={{ ...pageSubtitle, color: palette.subtitle }}>Cluster or classify facies from the active LAS session using selected petrophysical curves.</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <ProjectFileSelector moduleName="Facies" allowedExtensions={['las', 'csv']} onSelectFile={file => upload(file)} compact />
@@ -203,51 +259,51 @@ export default function FaciesClassificationPage() {
         </div>
       </section>
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 18, alignItems: 'start' }}>
-        <section style={card}>
+        <section style={palette.card}>
           <div style={eyebrow}>Input Controls</div>
-          <h2 style={cardTitle}>Well Log Setup</h2>
-          {!meta && <div style={emptyHint}>Select a project file or upload LAS above to start facies classification.</div>}
+          <h2 style={{ ...cardTitle, color: palette.text }}>Well Log Setup</h2>
+          {!meta && <div style={palette.emptyHint}>Select a project file or upload LAS above to start facies classification.</div>}
 
           {meta && (
             <>
-              <div style={metaBox}>{meta.well_name} | {meta.rows.toLocaleString()} rows | {meta.columns.length} columns</div>
-              <label style={label}>Depth column</label>
-              <select value={depthCol} onChange={e => setDepthCol(e.target.value)} style={control}>
+              <div style={palette.metaBox}>{meta.well_name} | {meta.rows.toLocaleString()} rows | {meta.columns.length} columns</div>
+              <label style={palette.label}>Depth column</label>
+              <select value={depthCol} onChange={e => setDepthCol(e.target.value)} style={palette.control}>
                 {meta.columns.map((c: string) => <option key={c}>{c}</option>)}
               </select>
 
-              <label style={label}>Algorithm</label>
-              <select value={algorithm} onChange={e => setAlgorithm(e.target.value)} style={control}>
+              <label style={palette.label}>Algorithm</label>
+              <select value={algorithm} onChange={e => setAlgorithm(e.target.value)} style={palette.control}>
                 <option value="kmeans">K-Means (Unsupervised)</option>
                 <option value="random_forest">Random Forest (Supervised)</option>
               </select>
 
               {algorithm === 'kmeans' && (
                 <>
-                  <label style={label}>K-Means clusters</label>
-                  <input type="number" min={2} max={10} value={clusters} onChange={e => setClusters(Number(e.target.value))} style={control} />
+                  <label style={palette.label}>K-Means clusters</label>
+                  <input type="number" min={2} max={10} value={clusters} onChange={e => setClusters(Number(e.target.value))} style={palette.control} />
                 </>
               )}
 
-              <label style={{ ...label, display: 'flex', gap: 8, alignItems: 'center' }}>
+              <label style={{ ...palette.label, display: 'flex', gap: 8, alignItems: 'center' }}>
                 <input type="checkbox" checked={targetPresent} onChange={e => setTargetPresent(e.target.checked)} />
                 Facies labels included
               </label>
 
               {targetPresent && (
                 <>
-                  <label style={label}>Facies label column</label>
-                  <select value={faciesCol} onChange={e => setFaciesCol(e.target.value)} style={control}>
+                  <label style={palette.label}>Facies label column</label>
+                  <select value={faciesCol} onChange={e => setFaciesCol(e.target.value)} style={palette.control}>
                     <option value="">Select label</option>
                     {meta.columns.map((c: string) => <option key={c}>{c}</option>)}
                   </select>
                 </>
               )}
 
-              <label style={label}>Predictor curves (3-5)</label>
+              <label style={palette.label}>Predictor curves (3-5)</label>
               <div style={{ display: 'grid', gap: 8, maxHeight: 220, overflow: 'auto' }}>
                 {numeric.map((c: string) => (
-                  <label key={c} style={{ color: '#CBD5E1', fontSize: 13 }}>
+                  <label key={c} style={{ color: palette.text, fontSize: 13 }}>
                     <input
                       type="checkbox"
                       checked={features.includes(c)}
@@ -263,23 +319,23 @@ export default function FaciesClassificationPage() {
           )}
         </section>
 
-        <section style={card}>
+        <section style={palette.card}>
           <div style={eyebrow}>Facies Result</div>
-          <h2 style={cardTitle}>{result ? 'Classification Output' : 'Waiting for Input'}</h2>
+          <h2 style={{ ...cardTitle, color: palette.text }}>{result ? 'Classification Output' : 'Waiting for Input'}</h2>
           {result ? (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
                 <div>
-                  <h2 style={{ margin: 0, color: '#F8FAFC' }}>{result.algorithm}</h2>
-                  <p style={{ margin: '6px 0 0', color: '#94A3B8' }}>{result.classified_rows.toLocaleString()} classified rows</p>
+                  <h2 style={{ margin: 0, color: palette.text }}>{result.algorithm}</h2>
+                  <p style={{ margin: '6px 0 0', color: palette.muted }}>{result.classified_rows.toLocaleString()} classified rows</p>
                 </div>
                 <button onClick={() => downloadCsv(result.csv, 'facies_results.csv')} style={secondaryButton}>Download CSV</button>
               </div>
-              {result.metrics?.accuracy != null && <pre style={pre}>Accuracy: {(result.metrics.accuracy * 100).toFixed(2)}%{'\n\n'}{result.metrics.classification_report}</pre>}
-              <PlotlyFigure figure={result.figure} />
+              {result.metrics?.accuracy != null && <pre style={palette.pre}>Accuracy: {(result.metrics.accuracy * 100).toFixed(2)}%{'\n\n'}{result.metrics.classification_report}</pre>}
+              <PlotlyFigure figure={result.figure} isLight={isLight} />
             </>
           ) : (
-            <div style={{ minHeight: 520, display: 'grid', placeItems: 'center', color: '#94A3B8' }}>
+            <div style={{ minHeight: 520, display: 'grid', placeItems: 'center', color: palette.muted }}>
               Upload a well log, choose depth and predictors, then run classification.
             </div>
           )}
@@ -303,3 +359,24 @@ const greenButton: React.CSSProperties = { height: 56, padding: '0 22px', border
 const metaBox: React.CSSProperties = { marginTop: 14, padding: 12, borderRadius: 10, background: '#0E1622', color: '#CBD5E1', fontSize: 13 }
 const emptyHint: React.CSSProperties = { marginTop: 14, padding: 14, borderRadius: 12, border: '1px dashed #26364D', background: '#08111F', color: '#94A3B8', lineHeight: 1.5 }
 const pre: React.CSSProperties = { maxHeight: 220, overflow: 'auto', padding: 12, borderRadius: 10, background: '#0F172A', color: '#E2E8F0', fontSize: 12 }
+
+function pagePalette(isLight: boolean) {
+  return {
+    page: isLight ? '#F8FAFC' : '#07111F',
+    text: isLight ? '#0F172A' : '#F8FAFC',
+    muted: isLight ? '#64748B' : '#94A3B8',
+    subtitle: isLight ? '#475569' : '#9FC5F8',
+    card: {
+      padding: 18,
+      background: isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.92),rgba(7,17,31,.96))',
+      borderRadius: 14,
+      border: `1px solid ${isLight ? '#D6DEE9' : '#1E293B'}`,
+      color: isLight ? '#0F172A' : '#CBD5E1',
+    } as React.CSSProperties,
+    label: { ...label, color: isLight ? '#475569' : '#94A3B8' } as React.CSSProperties,
+    control: { ...control, border: `1px solid ${isLight ? '#CBD5E1' : '#26364D'}`, background: isLight ? '#FFFFFF' : '#08111F', color: isLight ? '#0F172A' : '#F8FAFC' } as React.CSSProperties,
+    metaBox: { ...metaBox, background: isLight ? '#F1F5F9' : '#0E1622', color: isLight ? '#0F172A' : '#CBD5E1' } as React.CSSProperties,
+    emptyHint: { ...emptyHint, border: `1px dashed ${isLight ? '#CBD5E1' : '#26364D'}`, background: isLight ? '#F8FAFC' : '#08111F', color: isLight ? '#64748B' : '#94A3B8' } as React.CSSProperties,
+    pre: { ...pre, background: isLight ? '#F1F5F9' : '#0F172A', color: isLight ? '#0F172A' : '#E2E8F0' } as React.CSSProperties,
+  }
+}
