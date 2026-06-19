@@ -226,7 +226,7 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
         depth_min: emptyToNull(depthRange.min),
         depth_max: emptyToNull(depthRange.max),
       })
-      const nextResult = { ...response.data, figure: styleLogViewerFigure(response.data.figure, isLight), selected_curves: activeCurves }
+      const nextResult = { ...response.data, figure: styleLogViewerFigure(response.data.figure), selected_curves: activeCurves }
       setResult(nextResult)
       await saveProjectResultCopy('Log Visualization', `${session?.well_name || 'well'}_log_visualization`, nextResult)
       toast.success('AI visualization rendered')
@@ -628,48 +628,29 @@ function smallChip(isLight: boolean, color: string, active: boolean): React.CSSP
   return { padding: '7px 11px', borderRadius: 999, border: `1px solid ${color}66`, background: active ? `${color}24` : isLight ? '#F8FAFC' : 'transparent', color, fontWeight: 900, fontSize: 12, cursor: 'pointer' }
 }
 
-function styleLogViewerFigure(figure: any, isLight: boolean) {
+function styleLogViewerFigure(figure: any) {
   if (!figure?.layout) return figure
   const styled = JSON.parse(JSON.stringify(figure))
-  const paper = isLight ? '#FFFFFF' : '#08111F'
-  const plot = isLight ? '#FFFFFF' : '#0F172A'
-  const grid = isLight ? '#E5EAF1' : '#26364F'
-  const axis = isLight ? '#CBD5E1' : '#334155'
-  const text = isLight ? '#0F172A' : '#F8FAFC'
-  const muted = isLight ? '#334155' : '#D7E7FF'
-  styled.layout.paper_bgcolor = paper
-  styled.layout.plot_bgcolor = plot
+  styled.layout.paper_bgcolor = '#FFFFFF'
+  styled.layout.plot_bgcolor = '#FFFFFF'
   styled.layout.height = 720
-  styled.layout.font = { color: text, family: 'Inter, system-ui, sans-serif', size: 13 }
+  styled.layout.font = { color: '#0F172A', family: 'Inter, system-ui, sans-serif' }
   styled.layout.margin = { l: 70, r: 30, t: 70, b: 70 }
-  styled.layout.legend = {
-    orientation: 'h',
-    x: 0,
-    y: -0.12,
-    bgcolor: isLight ? 'rgba(255,255,255,.9)' : 'rgba(15,23,42,.88)',
-    bordercolor: axis,
-    borderwidth: 1,
-    font: { color: text, size: 12 },
-  }
+  styled.layout.legend = { orientation: 'h', x: 0, y: -0.12, bgcolor: 'rgba(255,255,255,.85)', bordercolor: '#E2E8F0', borderwidth: 1 }
   styled.data = (styled.data || []).map((trace: any) => {
     const name = String(trace.name || '')
-    return {
-      ...trace,
-      type: 'scattergl',
-      line: { ...(trace.line || {}), color: curveColor(name), width: 2.6 },
-      hoverlabel: { bgcolor: isLight ? '#FFFFFF' : '#111827', bordercolor: curveColor(name), font: { color: text, size: 14 } },
-    }
+    return { ...trace, line: { ...(trace.line || {}), color: curveColor(name), width: 2.2 }, hoverlabel: { bgcolor: '#F59E0B', font: { color: '#0F172A', size: 14 } } }
   })
   Object.keys(styled.layout).forEach(key => {
     if (key.startsWith('xaxis') || key === 'yaxis') {
       styled.layout[key] = {
         ...styled.layout[key],
-        gridcolor: grid,
-        zerolinecolor: axis,
-        linecolor: axis,
-        tickfont: { color: muted, size: 12 },
-        titlefont: { color: text, size: 13 },
-        color: muted,
+        gridcolor: '#E5EAF1',
+        zerolinecolor: '#CBD5E1',
+        linecolor: '#CBD5E1',
+        tickfont: { color: '#0F172A', size: 12 },
+        titlefont: { color: '#0F172A', size: 13 },
+        color: '#0F172A',
       }
     }
   })
@@ -3613,11 +3594,15 @@ function PlotlyFigure({ figure, isLight, exportName = 'drake_ai_plot', showExpor
     let cancelled = false
     import('plotly.js-dist-min').then(({ default: Plotly }) => {
       if (cancelled || !plotRef.current) return
-      const themedFigure = stylePlotlyFigureForTheme(figure, isLight)
       Plotly.react(
         plotRef.current,
-        themedFigure.data,
-        themedFigure.layout,
+        figure.data,
+        {
+          ...figure.layout,
+          paper_bgcolor: isLight ? '#FFFFFF' : figure.layout.paper_bgcolor,
+          plot_bgcolor: isLight ? '#F8FAFC' : figure.layout.plot_bgcolor,
+          font: { ...(figure.layout.font || {}), color: isLight ? '#0F172A' : '#CBD5E1' },
+        },
         {
           responsive: true,
           displaylogo: false,
@@ -3724,51 +3709,6 @@ function PlotlyFigure({ figure, isLight, exportName = 'drake_ai_plot', showExpor
       )}
     </div>
   )
-}
-
-function stylePlotlyFigureForTheme(figure: any, isLight: boolean) {
-  const styled = JSON.parse(JSON.stringify(figure))
-  const paper = isLight ? '#FFFFFF' : '#08111F'
-  const plot = isLight ? '#F8FAFC' : '#0F172A'
-  const grid = isLight ? '#E2E8F0' : '#26364F'
-  const axis = isLight ? '#CBD5E1' : '#334155'
-  const text = isLight ? '#0F172A' : '#F8FAFC'
-  const tick = isLight ? '#334155' : '#D7E7FF'
-  styled.layout = {
-    ...(styled.layout || {}),
-    paper_bgcolor: paper,
-    plot_bgcolor: plot,
-    font: { ...(styled.layout?.font || {}), color: text, family: 'Inter, system-ui, sans-serif' },
-  }
-  if (styled.layout.title) styled.layout.title = { ...styled.layout.title, font: { ...(styled.layout.title.font || {}), color: text } }
-  if (styled.layout.legend) styled.layout.legend = {
-    ...styled.layout.legend,
-    bgcolor: isLight ? 'rgba(255,255,255,.9)' : 'rgba(15,23,42,.88)',
-    bordercolor: axis,
-    font: { ...(styled.layout.legend.font || {}), color: text },
-  }
-  Object.keys(styled.layout).forEach(key => {
-    if (key.startsWith('xaxis') || key.startsWith('yaxis')) {
-      styled.layout[key] = {
-        ...styled.layout[key],
-        gridcolor: grid,
-        zerolinecolor: axis,
-        linecolor: axis,
-        tickfont: { ...(styled.layout[key]?.tickfont || {}), color: tick },
-        titlefont: { ...(styled.layout[key]?.titlefont || {}), color: text },
-        color: tick,
-      }
-    }
-  })
-  styled.data = (styled.data || []).map((trace: any) => {
-    const name = String(trace.name || '')
-    return {
-      ...trace,
-      line: trace.line ? { ...trace.line, color: trace.line.color || curveColor(name), width: Math.max(Number(trace.line.width || 0), 2.4) } : trace.line,
-      hoverlabel: { ...(trace.hoverlabel || {}), bgcolor: isLight ? '#FFFFFF' : '#111827', font: { ...((trace.hoverlabel || {}).font || {}), color: text } },
-    }
-  })
-  return styled
 }
 
 function Guide({ color, title, text }: { color: string; title: string; text: string }) {

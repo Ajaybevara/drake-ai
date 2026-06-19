@@ -7,15 +7,15 @@ export default function LoginPage() {
   const location = useLocation()
   const storedUser = readRegisteredUser()
   const [mode, setMode] = useState<'login' | 'register'>(location.pathname === '/register' ? 'register' : 'login')
-  const [fullName, setFullName] = useState(storedUser?.full_name || 'Malleswar Y')
   const [email, setEmail] = useState(storedUser?.email || 'admin@drakeai.com')
+  const [fullName, setFullName] = useState(storedUser?.full_name || nameFromEmail(storedUser?.email || 'admin@drakeai.com'))
   const [password, setPassword] = useState('Drake@2024')
   const setAuth = useStore(s => s.setAuth)
   const navigate = useNavigate()
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
-    const displayName = fullName.trim() || email.split('@')[0] || 'User'
+    const displayName = fullName.trim() || nameFromEmail(email)
     const registeredUser = { email, full_name: displayName }
     localStorage.setItem('drake_registered_user', JSON.stringify(registeredUser))
     setAuth({
@@ -26,7 +26,7 @@ export default function LoginPage() {
       avatar_initials: initialsFor(displayName),
     }, 'ui-only-token')
     toast.success(mode === 'register' ? 'Registration complete' : `Welcome ${displayName}`)
-    navigate('/')
+    navigate(localStorage.getItem('drake_enterprise_project') ? '/dashboard' : '/')
   }
 
   return (
@@ -41,19 +41,17 @@ export default function LoginPage() {
         <p style={{ fontSize: 12, color: '#64748B', textAlign: 'center', marginBottom: 28 }}>Petrophysics Intelligence Platform</p>
 
         <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {mode === 'register' && (
-            <div>
-              <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 6 }}>Full Name</label>
-              <input
-                type="text" value={fullName} onChange={e => setFullName(e.target.value)} required
-                style={{ width: '100%', background: '#1E293B', border: '1px solid #334155', borderRadius: 8, padding: '10px 14px', color: '#E2E8F0', fontSize: 13, outline: 'none' }}
-              />
-            </div>
-          )}
+          <div>
+            <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 6 }}>Full Name</label>
+            <input
+              type="text" value={fullName} onChange={e => setFullName(e.target.value)} required
+              style={{ width: '100%', background: '#1E293B', border: '1px solid #334155', borderRadius: 8, padding: '10px 14px', color: '#E2E8F0', fontSize: 13, outline: 'none' }}
+            />
+          </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 6 }}>Email Address</label>
             <input
-              type="email" value={email} onChange={e => setEmail(e.target.value)} required
+              type="email" value={email} onChange={e => { setEmail(e.target.value); if (!fullName.trim()) setFullName(nameFromEmail(e.target.value)) }} required
               style={{ width: '100%', background: '#1E293B', border: '1px solid #334155', borderRadius: 8, padding: '10px 14px', color: '#E2E8F0', fontSize: 13, outline: 'none' }}
             />
           </div>
@@ -107,4 +105,9 @@ function initialsFor(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean)
   if (!parts.length) return 'U'
   return parts.slice(0, 2).map(part => part[0]?.toUpperCase()).join('')
+}
+
+function nameFromEmail(email: string) {
+  const local = (email || '').split('@')[0] || 'User'
+  return local.split(/[._-]+/).filter(Boolean).map(part => `${part[0]?.toUpperCase() || ''}${part.slice(1)}`).join(' ') || 'User'
 }

@@ -44,7 +44,8 @@ export default function DashboardPage() {
     try {
       const { data } = await uploadFilesToLocalProject(project, Array.from(files))
       setEnterpriseProject(data.project)
-      toast.success(`${data.files.length} file(s) added to project`)
+      if (data.files.length) toast.success(`${data.files.length} file(s) added to project`)
+      if (data.skipped?.length) toast.error(`${data.skipped.length} file(s) already existed in this project`)
     } catch (error: any) {
       toast.error(error?.message || 'Project upload failed')
     } finally {
