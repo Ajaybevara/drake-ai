@@ -2,3 +2,4 @@ frontend/vite.config.ts merge=ours
 docker-compose.yml merge=ours
 docker/nginx.conf merge=ours
 frontend/.env merge=ours
+backend/requirements.txt merge=ours
