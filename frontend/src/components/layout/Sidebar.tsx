@@ -66,9 +66,11 @@ export default function Sidebar() {
     setOpenSections(prev => ({ ...prev, [sec]: !prev[sec] }))
   }
 
-  const [width, setWidth] = useState(236)
+  const [width, setWidth] = useState(268)
   const [isResizing, setIsResizing] = useState(false)
   const [activeListTab, setActiveListTab] = useState<'wells' | 'templates'>('wells')
+  const [hoveredNav, setHoveredNav] = useState<string | null>(null)
+  const [hoveredSection, setHoveredSection] = useState<string | null>(null)
 
   const selectWell = (w: any) => {
     setActiveWell(w)
@@ -78,16 +80,20 @@ export default function Sidebar() {
     const resolvedPath = resolvePath(label, path)
     const active = location.pathname === resolvedPath || location.pathname.startsWith(resolvedPath + '/')
     return (
-      <div onClick={() => navigate(resolvedPath)} style={{
-        display: 'flex', alignItems: 'flex-start', gap: 10,
+      <div onClick={() => navigate(resolvedPath)} onMouseEnter={() => setHoveredNav(resolvedPath)} onMouseLeave={() => setHoveredNav(null)} style={{
+        display: 'flex', alignItems: 'flex-start', gap: 12,
         padding: sub ? '7px 12px 7px 26px' : '9px 12px',
-        cursor: 'pointer', fontSize: sub ? 11.2 : 11.6, lineHeight: 1.35, transition: 'all .12s',
+        cursor: 'pointer', fontSize: sub ? 14.8 : 15, lineHeight: 1.35, transition: 'all .12s',
         color: active ? '#F8FAFC' : isLight ? '#334155' : '#C3CDDC',
-        background: active ? 'linear-gradient(90deg,rgba(218,38,38,.92),rgba(218,38,38,.28))' : 'transparent',
+        background: active
+          ? 'linear-gradient(90deg,rgba(218,38,38,.92),rgba(218,38,38,.28))'
+          : hoveredNav === resolvedPath
+            ? isLight ? '#E9EEF5' : 'rgba(148,163,184,.12)'
+            : 'transparent',
         borderLeft: active ? '2px solid #DA2626' : '2px solid transparent',
         fontWeight: active ? 700 : 600,
       }}>
-        <i className={icon} style={{ fontSize: 12.4, width: 16, textAlign: 'center', lineHeight: 1.35, marginTop: 1 }}></i>
+        <i className={icon} style={{ fontSize: 16, width: 19, textAlign: 'center', lineHeight: 1.35, marginTop: 1 }}></i>
         <span style={{ minWidth: 0, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{label}</span>
       </div>
     )
@@ -98,9 +104,9 @@ export default function Sidebar() {
   }
 
   const SectionHeader = ({ id, label, rightElement }: any) => (
-    <div onClick={() => toggleSection(id)} style={{ padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
-      <div style={{ fontSize: 13.4, color: isLight ? '#64748B' : '#64748B', letterSpacing: 1.5, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, lineHeight: 1.25 }}>
-        <i className={`fas fa-chevron-${openSections[id] ? 'down' : 'right'}`} style={{ fontSize: 11, width: 13 }}></i> {label}
+    <div onClick={() => toggleSection(id)} onMouseEnter={() => setHoveredSection(id)} onMouseLeave={() => setHoveredSection(null)} style={{ padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', background: hoveredSection === id ? isLight ? '#E9EEF5' : 'rgba(148,163,184,.10)' : 'transparent', transition: 'background .12s' }}>
+      <div style={{ fontSize: 16.2, color: isLight ? '#64748B' : '#64748B', letterSpacing: 1.5, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 10, fontWeight: 800, lineHeight: 1.25 }}>
+        <i className={`fas fa-chevron-${openSections[id] ? 'down' : 'right'}`} style={{ fontSize: 14, width: 15 }}></i> {label}
       </div>
       {rightElement}
     </div>
@@ -129,7 +135,7 @@ export default function Sidebar() {
     const startWidth = width
 
     const onMouseMove = (moveEvent: MouseEvent) => {
-      const newWidth = Math.max(190, Math.min(430, startWidth + moveEvent.clientX - startX))
+      const newWidth = Math.max(230, Math.min(430, startWidth + moveEvent.clientX - startX))
       setWidth(newWidth)
     }
 
@@ -189,7 +195,7 @@ export default function Sidebar() {
       </div>
 
       {/* Collapse */}
-      <div onClick={toggleSidebar} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer', color: '#7B8798', fontSize: 9, borderTop: '1px solid #1E293B', marginTop: 'auto' }}>
+      <div onClick={toggleSidebar} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer', color: '#7B8798', fontSize: 11, borderTop: '1px solid #1E293B', marginTop: 'auto' }}>
         <i className="fas fa-angles-left"></i> Collapse
       </div>
     </div>

@@ -11,7 +11,9 @@ const STORAGE_LOCATIONS = ['Desktop', 'Documents', 'C Drive', 'D Drive', 'Custom
 
 export default function PlatformLandingPage() {
   const navigate = useNavigate()
-  const { setEnterpriseProject, enterpriseProject } = useStore()
+  const { setEnterpriseProject, enterpriseProject, theme } = useStore()
+  const isLight = theme === 'light'
+  const palette = landingPalette(isLight)
   const [mode, setMode] = useState<'create' | 'open' | null>(null)
   const [projects, setProjects] = useState<any[]>([])
   const [form, setForm] = useState({
@@ -73,59 +75,59 @@ export default function PlatformLandingPage() {
   }
 
   return (
-    <div style={page}>
-      <section style={hero}>
+    <div style={palette.page}>
+      <section style={palette.hero}>
         <div>
           <div style={eyebrow}>Drake AI Enterprise Platform</div>
-          <h1 style={title}>Project Workspace</h1>
-          <p style={muted}>Create a local study workspace or continue previous work. Existing AI modules and processing flows remain unchanged.</p>
+          <h1 style={palette.title}>Project Workspace</h1>
+          <p style={palette.muted}>Create a local study workspace or continue previous work. Existing AI modules and processing flows remain unchanged.</p>
           {enterpriseProject ? <button style={continueButton} onClick={() => navigate('/dashboard')}>Continue {enterpriseProject.project_name}</button> : null}
         </div>
       </section>
 
       <div style={grid}>
-        <button style={choiceCard} onClick={() => setMode('create')}>
+        <button style={palette.choiceCard} onClick={() => setMode('create')}>
           <Plus size={24} color="#10B981" />
-          <h2 style={cardTitle}>Create Project</h2>
-          <p style={muted}>Create a new study workspace</p>
+          <h2 style={palette.cardTitle}>Create Project</h2>
+          <p style={palette.muted}>Create a new study workspace</p>
         </button>
-        <button style={choiceCard} onClick={() => { setMode('open'); loadRegistry() }}>
+        <button style={palette.choiceCard} onClick={() => { setMode('open'); loadRegistry() }}>
           <FolderOpen size={24} color="#60A5FA" />
-          <h2 style={cardTitle}>Open Project</h2>
-          <p style={muted}>Continue previous work</p>
+          <h2 style={palette.cardTitle}>Open Project</h2>
+          <p style={palette.muted}>Continue previous work</p>
         </button>
       </div>
 
       {mode && (
         <div style={overlay}>
-          <div style={modal}>
-            <button style={closeButton} onClick={() => setMode(null)}><X size={18} /></button>
+          <div style={palette.modal}>
+            <button style={palette.closeButton} onClick={() => setMode(null)}><X size={18} /></button>
             {mode === 'create' ? (
               <>
                 <div style={eyebrow}>Create Project</div>
-                <h2 style={modalTitle}>New Local Project</h2>
+                <h2 style={palette.modalTitle}>New Local Project</h2>
                 <div style={formGrid}>
-                  <Field label="Project Name" value={form.project_name} onChange={value => setForm({ ...form, project_name: value })} />
-                  <Field label="Description" value={form.description} onChange={value => setForm({ ...form, description: value })} />
-                  <Select label="Project Type" value={form.project_type} options={PROJECT_TYPES} onChange={value => setForm({ ...form, project_type: value })} />
-                  <Select label="Storage Location" value={form.storage_location} options={STORAGE_LOCATIONS} onChange={value => setForm({ ...form, storage_location: value })} />
-                  {form.storage_location === 'Custom Folder' ? <Field label="Custom Folder" value={form.custom_folder} onChange={value => setForm({ ...form, custom_folder: value })} /> : null}
+                  <Field label="Project Name" value={form.project_name} onChange={value => setForm({ ...form, project_name: value })} palette={palette} />
+                  <Field label="Description" value={form.description} onChange={value => setForm({ ...form, description: value })} palette={palette} />
+                  <Select label="Project Type" value={form.project_type} options={PROJECT_TYPES} onChange={value => setForm({ ...form, project_type: value })} palette={palette} />
+                  <Select label="Storage Location" value={form.storage_location} options={STORAGE_LOCATIONS} onChange={value => setForm({ ...form, storage_location: value })} palette={palette} />
+                  {form.storage_location === 'Custom Folder' ? <Field label="Custom Folder" value={form.custom_folder} onChange={value => setForm({ ...form, custom_folder: value })} palette={palette} /> : null}
                 </div>
                 <button style={primaryButton} onClick={createProject}>Create New Project</button>
               </>
             ) : (
               <>
                 <div style={eyebrow}>Open Project</div>
-                <h2 style={modalTitle}>Existing Projects</h2>
+                <h2 style={palette.modalTitle}>Existing Projects</h2>
                 <button style={primaryButton} onClick={openProject}>Open Project Folder</button>
                 <div style={list}>
                   {projects.map(project => (
-                    <button key={project.project_id} style={projectRow} onClick={() => openKnownProject(project)}>
+                    <button key={project.project_id} style={palette.projectRow} onClick={() => openKnownProject(project)}>
                       <b>{project.project_name}</b>
                       <span>{project.project_type} - {project.project_path}</span>
                     </button>
                   ))}
-                  {!projects.length ? <p style={muted}>No projects found in this storage location.</p> : null}
+                  {!projects.length ? <p style={palette.muted}>No projects found in this storage location.</p> : null}
                 </div>
               </>
             )}
@@ -136,12 +138,12 @@ export default function PlatformLandingPage() {
   )
 }
 
-function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <label style={fieldLabel}>{label}<input value={value} onChange={event => onChange(event.target.value)} style={input} /></label>
+function Field({ label, value, onChange, palette }: { label: string; value: string; onChange: (value: string) => void; palette: ReturnType<typeof landingPalette> }) {
+  return <label style={palette.fieldLabel}>{label}<input value={value} onChange={event => onChange(event.target.value)} style={palette.input} /></label>
 }
 
-function Select({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
-  return <label style={fieldLabel}>{label}<select value={value} onChange={event => onChange(event.target.value)} style={input}>{options.map(option => <option key={option}>{option}</option>)}</select></label>
+function Select({ label, value, options, onChange, palette }: { label: string; value: string; options: string[]; onChange: (value: string) => void; palette: ReturnType<typeof landingPalette> }) {
+  return <label style={palette.fieldLabel}>{label}<select value={value} onChange={event => onChange(event.target.value)} style={palette.input}>{options.map(option => <option key={option}>{option}</option>)}</select></label>
 }
 
 const page: React.CSSProperties = { minHeight: '100%', padding: 28, color: '#F8FAFC', background: 'linear-gradient(135deg,#050B14,#07111F 55%,#0B1628)', overflow: 'auto' }
@@ -163,3 +165,23 @@ const input: React.CSSProperties = { borderRadius: 10, border: '1px solid #26364
 const primaryButton: React.CSSProperties = { marginTop: 18, width: '100%', border: '1px solid #10B981', background: '#10B981', color: '#00150E', borderRadius: 12, padding: 14, fontWeight: 900, cursor: 'pointer' }
 const list: React.CSSProperties = { display: 'grid', gap: 10 }
 const projectRow: React.CSSProperties = { display: 'grid', gap: 5, textAlign: 'left', border: '1px solid #26364F', background: '#08111F', color: '#F8FAFC', padding: 14, borderRadius: 12, cursor: 'pointer' }
+
+function landingPalette(isLight: boolean) {
+  const text = isLight ? '#0F172A' : '#F8FAFC'
+  const mutedColor = isLight ? '#64748B' : '#94A3B8'
+  const border = isLight ? '#D6DEE9' : '#26364F'
+  return {
+    page: { ...page, color: text, background: isLight ? '#F8FAFC' : 'linear-gradient(135deg,#050B14,#07111F 55%,#0B1628)' } as React.CSSProperties,
+    hero: { ...hero, border: `1px solid ${border}`, background: isLight ? '#FFFFFF' : 'linear-gradient(135deg,rgba(15,23,42,.95),rgba(7,17,31,.86))' } as React.CSSProperties,
+    title: { ...title, color: text, fontSize: 44 } as React.CSSProperties,
+    muted: { ...muted, color: mutedColor, fontSize: 16 } as React.CSSProperties,
+    choiceCard: { ...choiceCard, border: `1px solid ${border}`, background: isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.96),rgba(7,17,31,.98))', color: text } as React.CSSProperties,
+    cardTitle: { ...cardTitle, color: text, fontSize: 26 } as React.CSSProperties,
+    modal: { ...modal, border: `1px solid ${border}`, background: isLight ? '#FFFFFF' : '#0B111A', color: text } as React.CSSProperties,
+    closeButton: { ...closeButton, background: isLight ? '#F1F5F9' : '#111827', color: text, border: `1px solid ${border}` } as React.CSSProperties,
+    modalTitle: { ...modalTitle, color: text, fontSize: 30 } as React.CSSProperties,
+    fieldLabel: { ...fieldLabel, color: isLight ? '#475569' : '#9DB7D8', fontSize: 15 } as React.CSSProperties,
+    input: { ...input, border: `1px solid ${border}`, background: isLight ? '#FFFFFF' : '#08111F', color: text, fontSize: 16 } as React.CSSProperties,
+    projectRow: { ...projectRow, border: `1px solid ${border}`, background: isLight ? '#FFFFFF' : '#08111F', color: text, fontSize: 15 } as React.CSSProperties,
+  }
+}
