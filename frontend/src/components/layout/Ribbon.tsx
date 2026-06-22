@@ -36,14 +36,14 @@ export default function Ribbon() {
             }
             setOpen(current => !current)
           }}
-          style={{ padding: '8px 10px', borderRadius: 6, background: isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${isLight ? '#CBD5E1' : '#223047'}`, color: isLight ? '#0F172A' : '#E2E8F0', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+          style={{ padding: '8px 11px', borderRadius: 6, background: isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${isLight ? '#CBD5E1' : '#223047'}`, color: isLight ? '#0F172A' : '#E2E8F0', cursor: 'pointer', fontSize: 15, fontWeight: 800, lineHeight: 1.2 }}
         >
-          {label} <i className="fas fa-caret-down" style={{ marginLeft: 8, fontSize: 11 }}></i>
+          {label} <i className="fas fa-caret-down" style={{ marginLeft: 8, fontSize: 12 }}></i>
         </button>
         {open && (
           <div style={{ position: 'fixed', top: menuRect.top, left: menuRect.left, minWidth: menuRect.width, background: isLight ? '#FFFFFF' : '#0B111A', border: `1px solid ${isLight ? '#E2E8F0' : '#223047'}`, borderRadius: 8, boxShadow: '0 10px 30px rgba(0,0,0,.35)', zIndex: 9999, padding: '6px 0' }}>
             {items.map((it: any) => (
-              <div key={it.label} onClick={() => { setOpen(false); it.onClick?.() }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', cursor: 'pointer', color: isLight ? '#0F172A' : '#E2E8F0', fontSize: 13, whiteSpace: 'nowrap' }}>
+              <div key={it.label} onClick={() => { setOpen(false); it.onClick?.() }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', cursor: 'pointer', color: isLight ? '#0F172A' : '#E2E8F0', fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap' }}>
                 {it.icon && <i className={it.icon} style={{ width: 18, textAlign: 'center' }}></i>}
                 <div>{it.label}</div>
               </div>
@@ -55,8 +55,8 @@ export default function Ribbon() {
   }
 
   const RibbonBtn = ({ icon, label, onClick }: any) => (
-    <button onClick={onClick} title={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 12px', borderRadius: 5, border: '1px solid transparent', cursor: 'pointer', fontSize: 13, minWidth: 54, fontFamily: 'DM Sans,sans-serif', background: 'transparent', color: isLight ? '#334155' : '#CBD5E1' }}>
-      <i className={icon} style={{ fontSize: 13.1, color: isLight ? '#475569' : '#94A3B8' }}></i>
+    <button onClick={onClick} title={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 12px', borderRadius: 5, border: '1px solid transparent', cursor: 'pointer', fontSize: 14, minWidth: 54, fontFamily: 'DM Sans,sans-serif', background: 'transparent', color: isLight ? '#334155' : '#CBD5E1' }}>
+      <i className={icon} style={{ fontSize: 14, color: isLight ? '#475569' : '#94A3B8' }}></i>
       {label}
     </button>
   )

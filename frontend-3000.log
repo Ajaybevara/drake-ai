@@ -1,49 +1,18 @@
 
 > drake-ai-frontend@2.4.1 dev
-> vite --port 3000
+> vite --port 3000 --host 127.0.0.1 --port 3000
 
 
-  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m1699[22m[2m[0m ms[22m
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m3272[22m[2m[0m ms[22m
 
-  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m3000[22m/[39m
-[2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
-[2m11:18:26 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m11:18:26 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m11:18:44 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m11:18:59 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m11:19:33 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m11:20:09 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m11:21:15 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m11:21:37 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m11:23:02 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m11:35:58 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/FaciesClassificationPage.tsx, /src/index.css[22m
-[2m11:36:34 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/FaciesClassificationPage.tsx, /src/index.css[22m
-[2m11:37:03 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/FaciesClassificationPage.tsx, /src/index.css[22m
-[2m11:37:30 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/FormationTopsPage.tsx, /src/index.css[22m
-[2m11:38:51 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/FormationTopsPage.tsx, /src/index.css[22m
-[2m11:39:16 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/FormationTopsPage.tsx, /src/index.css[22m
-[2m11:52:45 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/FaciesClassificationPage.tsx, /src/index.css[22m
-[2m11:53:08 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/FaciesClassificationPage.tsx, /src/index.css[22m
-[2m11:53:47 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/DashboardPage.tsx, /src/index.css[22m
-[2m11:54:08 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/DashboardPage.tsx, /src/index.css[22m
-[2m11:54:23 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/layout/TopBar.tsx, /src/index.css[22m
-[2m11:57:49 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m
-[2m11:57:49 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/LoginPage.tsx, /src/index.css[22m
-[2m11:57:49 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/FaciesClassificationPage.tsx, /src/index.css[22m
-[2m11:57:49 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/ProjectsPage.tsx, /src/index.css[22m
-[2m2:03:46 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/LoginPage.tsx, /src/index.css[22m
-[2m2:03:46 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/project/ProjectFileSelector.tsx, /src/index.css[22m
-[2m2:03:46 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/DashboardPage.tsx, /src/pages/PlatformLandingPage.tsx, /src/pages/ProjectsPage.tsx, /src/pages/GeothermalPage.tsx, /src/pages/FaciesClassificationPage.tsx, /src/pages/FormationTopsPage.tsx, /src/pages/UIOnlyModulePage.tsx, /src/components/layout/Ribbon.tsx, /src/components/project/ProjectFileSelector.tsx[22m
-[2m2:04:49 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m2:04:49 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m2:14:51 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/DashboardPage.tsx, /src/pages/PlatformLandingPage.tsx, /src/pages/ProjectsPage.tsx, /src/pages/GeothermalPage.tsx, /src/pages/FaciesClassificationPage.tsx, /src/pages/FormationTopsPage.tsx, /src/pages/UIOnlyModulePage.tsx, /src/components/layout/Ribbon.tsx, /src/components/project/ProjectFileSelector.tsx[22m
-[2m2:15:42 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/DashboardPage.tsx, /src/index.css[22m
-[2m2:15:42 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/layout/Ribbon.tsx, /src/index.css[22m
-[2m2:35:42 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/DashboardPage.tsx, /src/pages/PlatformLandingPage.tsx, /src/pages/ProjectsPage.tsx, /src/pages/GeothermalPage.tsx, /src/pages/FaciesClassificationPage.tsx, /src/pages/FormationTopsPage.tsx, /src/pages/UIOnlyModulePage.tsx, /src/components/layout/Ribbon.tsx, /src/components/project/ProjectFileSelector.tsx[22m
-[2m3:06:52 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/layout/Sidebar.tsx, /src/index.css[22m
-[2m3:06:52 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m3:19:02 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m3:20:20 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m5:15:28 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m5:15:28 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
-[2m5:17:44 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/UIOnlyModulePage.tsx, /src/index.css[22m
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m3000[22m/[39m
+[2m10:28:48 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/PlatformLandingPage.tsx, /src/index.css[22m
+[2m10:28:48 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/PlatformLandingPage.tsx, /src/index.css[22m
+[2m10:29:59 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/layout/TopBar.tsx, /src/index.css[22m
+[2m10:30:30 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/layout/Ribbon.tsx, /src/index.css[22m
+[2m10:31:53 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/layout/Sidebar.tsx, /src/index.css[22m
+[2m10:32:34 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m10:46:30 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/layout/Sidebar.tsx, /src/index.css[22m
+[2m10:53:32 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/layout/TopBar.tsx, /src/index.css[22m
+[2m10:55:02 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/layout/Sidebar.tsx, /src/index.css[22m
+[2m10:55:02 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/layout/Sidebar.tsx, /src/index.css[22m

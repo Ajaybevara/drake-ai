@@ -18,6 +18,7 @@ export default function TopBar() {
   const [profileOpen, setProfileOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [hoveredNav, setHoveredNav] = useState<string | null>(null)
   const profileRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
@@ -103,14 +104,21 @@ export default function TopBar() {
             <button
               key={item.label}
               onClick={() => navigate(item.path)}
+              onMouseEnter={() => setHoveredNav(item.label)}
+              onMouseLeave={() => setHoveredNav(null)}
               style={{
-                padding: '10px 12px',
-                fontSize: 13,
+                padding: '10px 13px',
+                fontSize: 15,
                 fontWeight: 700,
+                lineHeight: 1.2,
                 cursor: 'pointer',
                 border: 'none',
                 borderRadius: 5,
-                background: active ? 'linear-gradient(180deg,rgba(218,38,38,.35),rgba(218,38,38,.08))' : 'transparent',
+                background: active
+                  ? 'linear-gradient(180deg,rgba(218,38,38,.35),rgba(218,38,38,.08))'
+                  : hoveredNav === item.label
+                    ? isLight ? '#EEF2F7' : 'rgba(148,163,184,.12)'
+                    : 'transparent',
                 color: active ? (isLight ? '#DA2626' : '#F8FAFC') : isLight ? '#334155' : '#E2E8F0',
                 borderBottom: active ? '3px solid #DA2626' : '3px solid transparent',
                 transition: 'all .15s',
@@ -126,13 +134,13 @@ export default function TopBar() {
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 8, flexShrink: 0 }}>
         {enterpriseProject && (
-          <button onClick={() => navigate('/dashboard')} title={enterpriseProject.project_path} style={{ height: 30, maxWidth: 210, borderRadius: 6, background: isLight ? '#ECFDF5' : 'rgba(16,185,129,.12)', border: '1px solid rgba(16,185,129,.45)', color: isLight ? '#047857' : '#A7F3D0', padding: '0 10px', cursor: 'pointer', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            <i className="fas fa-folder-open" style={{ fontSize: 12, marginRight: 7 }}></i>
+          <button onClick={() => navigate('/dashboard')} title={enterpriseProject.project_path} style={{ height: 32, maxWidth: 230, borderRadius: 6, background: isLight ? '#ECFDF5' : 'rgba(16,185,129,.12)', border: '1px solid rgba(16,185,129,.45)', color: isLight ? '#047857' : '#A7F3D0', padding: '0 11px', cursor: 'pointer', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 15, lineHeight: 1.2 }}>
+            <i className="fas fa-folder-open" style={{ fontSize: 13, marginRight: 7 }}></i>
             {enterpriseProject.project_name}
           </button>
         )}
-        <button onClick={handleSaveProject} title="Save Project to Local Disk" style={{ height: 30, borderRadius: 6, background: projectDirty ? 'linear-gradient(135deg,#EF4444,#DA2626)' : isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${projectDirty ? '#EF4444' : isLight ? '#CBD5E1' : '#223047'}`, color: projectDirty ? '#FFFFFF' : isLight ? '#0F172A' : '#F8FAFC', display: 'flex', alignItems: 'center', gap: 7, padding: '0 12px', cursor: 'pointer', fontWeight: 800, whiteSpace: 'nowrap' }}>
-          <i className="fas fa-save" style={{ fontSize: 12 }}></i>
+        <button onClick={handleSaveProject} title="Save Project to Local Disk" style={{ height: 32, borderRadius: 6, background: projectDirty ? 'linear-gradient(135deg,#EF4444,#DA2626)' : isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${projectDirty ? '#EF4444' : isLight ? '#CBD5E1' : '#223047'}`, color: projectDirty ? '#FFFFFF' : isLight ? '#0F172A' : '#F8FAFC', display: 'flex', alignItems: 'center', gap: 7, padding: '0 12px', cursor: 'pointer', fontWeight: 800, whiteSpace: 'nowrap', fontSize: 15, lineHeight: 1.2 }}>
+          <i className="fas fa-save" style={{ fontSize: 13 }}></i>
           Save Project
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
@@ -146,35 +154,35 @@ export default function TopBar() {
                 if (event.key === 'Escape') setSearchOpen(false)
               }}
               placeholder="Search..."
-              style={{ width: 180, height: 30, borderRadius: 6, border: `1px solid ${isLight ? '#CBD5E1' : '#223047'}`, background: isLight ? '#F8FAFC' : '#070B12', color: isLight ? '#0F172A' : '#F8FAFC', outline: 'none', padding: '0 10px', fontSize: 13 }}
+              style={{ width: 190, height: 32, borderRadius: 6, border: `1px solid ${isLight ? '#CBD5E1' : '#223047'}`, background: isLight ? '#F8FAFC' : '#070B12', color: isLight ? '#0F172A' : '#F8FAFC', outline: 'none', padding: '0 10px', fontSize: 14 }}
             />
           )}
-          <button onClick={toggleSearch} title={searchOpen ? 'Close search' : 'Search wells and projects'} style={{ width: 30, height: 30, borderRadius: 6, background: isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${isLight ? '#CBD5E1' : '#223047'}`, color: isLight ? '#0F172A' : '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-            <i className={`fas ${searchOpen ? 'fa-xmark' : 'fa-search'}`} style={{ fontSize: 12 }}></i>
+          <button onClick={toggleSearch} title={searchOpen ? 'Close search' : 'Search wells and projects'} style={{ width: 32, height: 32, borderRadius: 6, background: isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${isLight ? '#CBD5E1' : '#223047'}`, color: isLight ? '#0F172A' : '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <i className={`fas ${searchOpen ? 'fa-xmark' : 'fa-search'}`} style={{ fontSize: 13 }}></i>
           </button>
         </div>
-        <button onClick={toggleTheme} title="Toggle theme" style={{ width: 30, height: 30, borderRadius: 6, background: isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${isLight ? '#CBD5E1' : '#223047'}`, color: isLight ? '#0F172A' : '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-          <i className="fas fa-circle-half-stroke" style={{ fontSize: 12 }}></i>
+        <button onClick={toggleTheme} title="Toggle theme" style={{ width: 32, height: 32, borderRadius: 6, background: isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${isLight ? '#CBD5E1' : '#223047'}`, color: isLight ? '#0F172A' : '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <i className="fas fa-circle-half-stroke" style={{ fontSize: 13 }}></i>
         </button>
-        <button onClick={() => toast('Help center coming soon')} style={{ width: 30, height: 30, borderRadius: 6, background: isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${isLight ? '#CBD5E1' : '#223047'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-          <i className="fas fa-question-circle" style={{ color: isLight ? '#334155' : '#94A3B8', fontSize: 12 }}></i>
+        <button onClick={() => toast('Help center coming soon')} style={{ width: 32, height: 32, borderRadius: 6, background: isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${isLight ? '#CBD5E1' : '#223047'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <i className="fas fa-question-circle" style={{ color: isLight ? '#334155' : '#94A3B8', fontSize: 13 }}></i>
         </button>
         <div ref={profileRef} style={{ position: 'relative' }}>
           <button type="button" onClick={() => setProfileOpen((current) => !current)} title="Profile menu" style={{ display: 'flex', alignItems: 'center', gap: 7, background: profileOpen ? (isLight ? '#F1F5F9' : '#0E1622') : 'transparent', border: `1px solid ${profileOpen ? (isLight ? '#CBD5E1' : '#223047') : 'transparent'}`, borderRadius: 7, padding: '4px 10px', cursor: 'pointer' }}>
-            <div style={{ width: 34, height: 34, background: 'linear-gradient(135deg,#FF4B4B,#DA2626)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff' }}>{user?.avatar_initials || 'U'}</div>
+            <div style={{ width: 34, height: 34, background: 'linear-gradient(135deg,#FF4B4B,#DA2626)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff' }}>{user?.avatar_initials || 'U'}</div>
             <div>
-              <div style={{ fontSize: 12, color: isLight ? '#0F172A' : '#E2E8F0', fontWeight: 700, lineHeight: 1.2 }}>{displayName}</div>
-              <div style={{ fontSize: 10, color: '#64748B' }}>{roleLabel}</div>
+              <div style={{ fontSize: 14, color: isLight ? '#0F172A' : '#E2E8F0', fontWeight: 700, lineHeight: 1.2 }}>{displayName}</div>
+              <div style={{ fontSize: 12, color: '#64748B' }}>{roleLabel}</div>
             </div>
             <i className="fas fa-chevron-down" style={{ color: '#64748B', fontSize: 11 }}></i>
           </button>
           {profileOpen && (
             <div style={{ position: 'absolute', top: 46, right: 0, minWidth: 220, borderRadius: 10, background: isLight ? '#FFFFFF' : '#0B111A', border: `1px solid ${isLight ? '#E2E8F0' : '#223047'}`, boxShadow: '0 18px 48px rgba(0,0,0,.32)', zIndex: 10000, overflow: 'hidden' }}>
               <div style={{ padding: '12px 14px', borderBottom: `1px solid ${isLight ? '#E2E8F0' : '#1E293B'}` }}>
-                <div style={{ color: isLight ? '#0F172A' : '#F8FAFC', fontSize: 13, fontWeight: 900 }}>{displayName}</div>
-                <div style={{ color: '#64748B', fontSize: 11, marginTop: 3 }}>{user?.email || 'Signed in'}</div>
+                <div style={{ color: isLight ? '#0F172A' : '#F8FAFC', fontSize: 14, fontWeight: 900 }}>{displayName}</div>
+                <div style={{ color: '#64748B', fontSize: 12, marginTop: 3 }}>{user?.email || 'Signed in'}</div>
               </div>
-              <button type="button" onClick={handleLogout} style={{ width: '100%', height: 44, padding: '0 14px', textAlign: 'left', background: 'transparent', border: 'none', color: isLight ? '#B91C1C' : '#FCA5A5', cursor: 'pointer', fontSize: 13, fontWeight: 900, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button type="button" onClick={handleLogout} style={{ width: '100%', height: 44, padding: '0 14px', textAlign: 'left', background: 'transparent', border: 'none', color: isLight ? '#B91C1C' : '#FCA5A5', cursor: 'pointer', fontSize: 14, fontWeight: 900, display: 'flex', alignItems: 'center', gap: 10 }}>
                 <i className="fas fa-right-from-bracket" style={{ width: 16, textAlign: 'center' }}></i>
                 Logout
               </button>
