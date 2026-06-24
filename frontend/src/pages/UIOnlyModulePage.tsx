@@ -731,8 +731,10 @@ function LogInterpretation({ curves, selected, muted, text }: { curves: string[]
 function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
   const saved = transientModuleState.missingLog || {}
   const [session, setSession] = useState<any>(() => saved.session || readPetroSession())
+  const [sessions, setSessions] = useState<any[]>(() => saved.sessions || (saved.session ? [saved.session] : (readPetroSession() ? [readPetroSession()] : [])))
   const [analysis, setAnalysis] = useState<any>(() => saved.analysis || null)
   const [result, setResult] = useState<any>(() => saved.result || null)
+  const [results, setResults] = useState<any[]>(() => saved.results || (saved.result ? [saved.result] : []))
   const [previewFigure, setPreviewFigure] = useState<any>(() => saved.previewFigure || null)
   const [busy, setBusy] = useState(false)
   const [config, setConfig] = useState<any>(() => saved.config || { target: '', model: 'extra_trees', depthMin: '', depthMax: '', features: [] })
@@ -747,25 +749,54 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
   const selectedModel = modelCandidates.find(model => model.key === config.model) || modelCandidates[0]
 
   useEffect(() => {
-    transientModuleState.missingLog = { session, analysis, result, config, previewFigure }
-  }, [session, analysis, result, config, previewFigure])
+    transientModuleState.missingLog = { session, sessions, analysis, result, results, config, previewFigure }
+  }, [session, sessions, analysis, result, results, config, previewFigure])
 
   const replaceSession = (nextSession: any) => {
+    setSession(nextSession)
+    setSessions([nextSession])
+    setAnalysis(null)
+    setResult(null)
+    setResults([])
+    setPreviewFigure(null)
+    setConfig({ target: '', model: 'extra_trees', depthMin: '', depthMax: '', features: [] })
+  }
+
+  const replaceSessions = (nextSessions: any[]) => {
+    const validSessions = nextSessions.filter(Boolean)
+    const active = validSessions[validSessions.length - 1]
+    setSessions(validSessions)
+    if (active) setSession(active)
+    setAnalysis(null)
+    setResult(null)
+    setResults([])
+    setPreviewFigure(null)
+    setConfig({ target: '', model: 'extra_trees', depthMin: '', depthMax: '', features: [] })
+  }
+
+  const activateSessionForSetup = async (nextSession: any) => {
+    if (!nextSession) return
     setSession(nextSession)
     setAnalysis(null)
     setResult(null)
     setPreviewFigure(null)
     setConfig({ target: '', model: 'extra_trees', depthMin: '', depthMax: '', features: [] })
+    setBusy(true)
+    try {
+      const nextAnalysis = await analyzeMissingLogSession(nextSession, setAnalysis, setConfig)
+      await loadCurvePreview(nextSession, nextAnalysis)
+    } catch (error: any) {
+      handleSessionError(error, setSession, 'Well log analysis failed')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const loadCurvePreview = async (currentSession = session, currentAnalysis = analysis) => {
     if (!isUserUploadedPetroSession(currentSession)) return
     try {
       const available = currentAnalysis?.feature_columns || currentSession?.curve_names || []
-      const preferred = ['SP', 'ILD', 'LL8', 'ILM', 'RHOB', 'DRHO', 'CALI', 'GR', 'NPHI', 'DT']
-      const selectedCurves = preferred.filter(curve => available.includes(curve)).slice(0, 10)
-      const fallbackCurves = available.filter((curve: string) => curve !== 'DEPTH').slice(0, 10)
-      const curves = selectedCurves.length ? selectedCurves : fallbackCurves
+      const curves = available.filter((curve: string) => curve !== 'DEPTH')
       if (!curves.length) return
       const response = await petrophysicsApi.generatePetroLogViewer({
         session_id: currentSession.session_id,
@@ -802,27 +833,45 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
     if (!hasUserSession) return toast.error('Upload a real LAS file in Log Visualization first')
     setBusy(true)
     try {
-      const currentAnalysis = analysis || await analyzeMissingLogSession(session, setAnalysis, setConfig)
-      if (!previewFigure) await loadCurvePreview(session, currentAnalysis)
-      const preferredTargets = ['RHOB', 'NPHI', 'DT', 'GR', 'ILD', 'LL8', 'SP', 'CALI']
-      const defaultTarget = preferredTargets.find(target => (currentAnalysis.target_columns || []).includes(target)) || (currentAnalysis.target_columns || [])[0] || (currentAnalysis.feature_columns || [])[0] || ''
-      const targetColumn = config.target || defaultTarget
-      const defaultFeatures = ['SP', 'ILD', 'LL8', 'CALI', 'GR', 'NPHI', 'DT', 'RHOB', 'DRHO'].filter(feature => feature !== targetColumn && (currentAnalysis.feature_columns || []).includes(feature))
-      const selectedFeatures = config.features?.length ? config.features : (defaultFeatures.length ? defaultFeatures : (currentAnalysis.feature_columns || []).filter((curve: string) => curve !== targetColumn).slice(0, 7))
-      if (!targetColumn) return toast.error('Select a target curve')
-      const response = await petrophysicsApi.predictMissingLog({
-        session_id: session.session_id,
-        target_column: targetColumn,
-        selected_features: selectedFeatures,
-        depth_min: emptyToNull(config.depthMin || String(Math.round(Number(currentAnalysis.summary?.depth_min ?? session.depth_min)))),
-        depth_max: emptyToNull(config.depthMax || String(Math.round(Number(currentAnalysis.summary?.depth_max ?? session.depth_max)))),
-        model_name: config.model,
-      })
-      setResult(response.data)
-      await saveProjectResultCopy('Missing Log Prediction', `${response.data?.target_column || 'missing_log'}_prediction`, response.data)
-      toast.success(`Predicted ${response.data.predicted_count?.toLocaleString?.()} samples`)
+      const runSessions = (sessions.length ? sessions : [session]).filter(isUserUploadedPetroSession)
+      if (!runSessions.length) return toast.error('Upload one or more real LAS files first')
+      const runResults = []
+      for (const currentSession of runSessions) {
+        const currentAnalysis = currentSession.session_id === session?.session_id && analysis ? analysis : (await petrophysicsApi.analyzeMissingLog(currentSession.session_id)).data
+        if (currentSession.session_id === session?.session_id) {
+          setAnalysis(currentAnalysis)
+          if (!previewFigure) await loadCurvePreview(currentSession, currentAnalysis)
+        }
+        const preferredTargets = ['RHOB', 'NPHI', 'DT', 'GR', 'ILD', 'LL8', 'SP', 'CALI']
+        const defaultTarget = preferredTargets.find(target => (currentAnalysis.target_columns || []).includes(target)) || (currentAnalysis.target_columns || [])[0] || (currentAnalysis.feature_columns || [])[0] || ''
+        const targetColumn = config.target && (currentAnalysis.target_columns || currentSession.curve_names || []).includes(config.target) ? config.target : defaultTarget
+        const defaultFeatures = ['SP', 'ILD', 'LL8', 'CALI', 'GR', 'NPHI', 'DT', 'RHOB', 'DRHO'].filter(feature => feature !== targetColumn && (currentAnalysis.feature_columns || []).includes(feature))
+        const configuredFeatures = (config.features || []).filter((feature: string) => feature !== targetColumn && (currentAnalysis.feature_columns || []).includes(feature))
+        const selectedFeatures = configuredFeatures.length ? configuredFeatures : (defaultFeatures.length ? defaultFeatures : (currentAnalysis.feature_columns || []).filter((curve: string) => curve !== targetColumn).slice(0, 7))
+        if (!targetColumn) throw new Error(`No target curve is available for ${currentSession.file_name || currentSession.well_name || 'uploaded LAS'}`)
+        const response = await petrophysicsApi.predictMissingLog({
+          session_id: currentSession.session_id,
+          target_column: targetColumn,
+          selected_features: selectedFeatures,
+          depth_min: emptyToNull(config.depthMin || String(Math.round(Number(currentAnalysis.summary?.depth_min ?? currentSession.depth_min)))),
+          depth_max: emptyToNull(config.depthMax || String(Math.round(Number(currentAnalysis.summary?.depth_max ?? currentSession.depth_max)))),
+          model_name: config.model,
+        })
+        const nextResult = {
+          ...response.data,
+          session_id: currentSession.session_id,
+          source_file_name: currentSession.file_name,
+          well_name: currentSession.well_name || response.data?.summary?.well_name || currentSession.file_name,
+        }
+        runResults.push(nextResult)
+        await saveProjectResultCopy('Missing Log Prediction', `${nextResult.well_name || 'well'}_${nextResult.target_column || 'missing_log'}_prediction`, nextResult)
+      }
+      setResults(runResults)
+      setResult(runResults[0] || null)
+      toast.success(runResults.length === 1 ? `Predicted ${runResults[0].predicted_count?.toLocaleString?.()} samples` : `Predicted missing logs for ${runResults.length} wells`)
     } catch (error: any) {
-      handleSessionError(error, setSession, 'Missing log prediction failed')
+      if (error?.response) handleSessionError(error, setSession, 'Missing log prediction failed')
+      else toast.error(error?.message || 'Missing log prediction failed')
     } finally {
       setBusy(false)
     }
@@ -850,13 +899,17 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
 
   return (
     <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
-      <ActionHeader accent={accent} isLight={isLight} label="Missing Log Prediction" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? `${session.file_name} - select a target log and run prediction.` : 'Select a project LAS file or upload a LAS file, then run prediction.'} actions={<><SharedLasActions isLight={isLight} busy={busy} setBusy={setBusy} onSession={replaceSession} /><button onClick={run} disabled={busy || !hasUserSession} style={{ ...primaryButton(accent), width: 210 }}>{busy ? 'Running...' : 'Run Prediction'}</button></>} />
+      <ActionHeader accent={accent} isLight={isLight} label="Missing Log Prediction" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? `${sessions.length > 1 ? `${sessions.length} LAS files ready. Active setup: ` : ''}${session.file_name} - select a target log and run prediction.` : 'Select a project LAS file or upload one or multiple LAS files, then run prediction.'} actions={<><SharedLasActions isLight={isLight} busy={busy} setBusy={setBusy} onSession={replaceSession} onSessions={replaceSessions} /><button onClick={run} disabled={busy || !hasUserSession} style={{ ...primaryButton(accent), width: 210 }}>{busy ? 'Running...' : sessions.length > 1 ? 'Run Multi Prediction' : 'Run Prediction'}</button></>} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px,430px) minmax(0,1fr)', gap: 18 }}>
         <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
           <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Configuration</div>
-          <h2 style={{ margin: '6px 0 14px', color: text, fontSize: 22 }}>Single Well Prediction</h2>
+          <h2 style={{ margin: '6px 0 14px', color: text, fontSize: 22 }}>{sessions.length > 1 ? 'Multi Well Prediction' : 'Single Well Prediction'}</h2>
           <div style={{ display: 'grid', gap: 12 }}>
+            {sessions.length > 1 ? <Control label="Active Setup Well"><select style={field(isLight)} value={session?.session_id || ''} onChange={event => {
+              const nextSession = sessions.find(item => item.session_id === event.target.value)
+              if (nextSession) activateSessionForSetup(nextSession)
+            }}>{sessions.map(item => <option key={item.session_id} value={item.session_id}>{item.well_name || item.file_name}</option>)}</select></Control> : null}
             <Control label="Target Missing Curve"><select style={field(isLight)} value={config.target} onChange={event => setConfig((prev: any) => ({ ...prev, target: event.target.value, features: (prev.features || []).filter((f: string) => f !== event.target.value) }))} disabled={!analysis}><option value="">Select target</option>{targets.map(target => <option key={target} value={target}>{target}</option>)}</select></Control>
             <Control label="Selected Machine Learning Model"><select style={field(isLight)} value={config.model} onChange={event => setConfig((prev: any) => ({ ...prev, model: event.target.value }))}><option value="extra_trees">Extra Trees</option><option value="rf">Random Forest</option><option value="gbr">Gradient Boosting</option></select></Control>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -905,9 +958,20 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
 
       <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
         <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Uploaded LAS Curve Preview</div>
-        <h2 style={{ margin: '6px 0 8px', color: text, fontSize: 22 }}>Missing Log Data Context</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'end', flexWrap: 'wrap' }}>
+          <div>
+            <h2 style={{ margin: '6px 0 8px', color: text, fontSize: 22 }}>Missing Log Data Context</h2>
+            <p style={{ margin: '0 0 14px', color: muted, lineHeight: 1.55, fontSize: 13 }}>
+              Review the uploaded LAS curves before prediction. Gaps and curve behavior are shown from the active project file.
+            </p>
+          </div>
+          {sessions.length > 1 ? <Control label="Select Well"><select style={{ ...field(isLight), minWidth: 280 }} value={session?.session_id || ''} onChange={event => {
+            const nextSession = sessions.find(item => item.session_id === event.target.value)
+            if (nextSession) activateSessionForSetup(nextSession)
+          }}>{sessions.map(item => <option key={item.session_id} value={item.session_id}>{item.well_name || item.file_name}</option>)}</select></Control> : null}
+        </div>
         <p style={{ margin: '0 0 14px', color: muted, lineHeight: 1.55, fontSize: 13 }}>
-          Review the uploaded LAS curves before prediction. Gaps and curve behavior are shown from the active project file.
+          {sessions.length > 1 ? `${session?.well_name || session?.file_name || 'Selected well'} available logs: ${(analysis?.feature_columns || session?.curve_names || []).filter((curve: string) => curve !== 'DEPTH').join(', ') || 'analyze the selected well to list logs'}` : `Available logs: ${(analysis?.feature_columns || session?.curve_names || []).filter((curve: string) => curve !== 'DEPTH').join(', ') || 'analyze the selected well to list logs'}`}
         </p>
         {previewFigure ? <PlotlyFigure figure={styleMissingLogPreviewFigure(previewFigure, isLight)} isLight={isLight} exportName="missing_log_curve_preview" /> : <EmptyPlot border={border} muted={muted} text={hasUserSession ? 'Analyzing uploaded LAS to prepare curve preview.' : 'Upload or select a LAS file to view curve tracks.'} />}
       </div>
@@ -942,6 +1006,27 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
         {result?.figure ? <PlotlyFigure figure={result.figure} isLight={isLight} showExport exportName={`${result.target_column}_missing_log_prediction`} /> : <EmptyPlot border={border} muted={muted} text="Run prediction to view original vs predicted missing-log result." />}
       </div>
       {result?.rows?.length ? <ResultTable title={`${result.target_column || 'Log'} Filled Output - First Rows`} rows={result.rows} isLight={isLight} accent={accent} /> : null}
+      {results.length > 1 ? <div style={{ display: 'grid', gap: 18 }}>
+        {results.map((item, index) => <div key={`${item.session_id || index}-${item.target_column || 'result'}`} style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Well {index + 1} Missing Log Result</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+            <div>
+              <h2 style={{ margin: '6px 0 6px', color: text, fontSize: 22 }}>{item.well_name || item.source_file_name || `Well ${index + 1}`}</h2>
+              <p style={{ margin: 0, color: muted, fontSize: 13 }}>{item.source_file_name || item.file_name || 'Uploaded LAS'} - {item.target_column} - {item.predicted_count?.toLocaleString?.() || '--'} predicted samples</p>
+            </div>
+            <button onClick={() => {
+              const blob = new Blob([item.export_csv], { type: 'text/csv;charset=utf-8' })
+              const link = document.createElement('a')
+              link.href = URL.createObjectURL(blob)
+              link.download = item.file_name || `${item.well_name || 'well'}_${item.target_column || 'missing_log'}_filled.csv`
+              link.click()
+              URL.revokeObjectURL(link.href)
+            }} disabled={!item.export_csv} style={{ ...primaryButton(accent), width: 220 }}>Download Well CSV</button>
+          </div>
+          {item.figure ? <PlotlyFigure figure={item.figure} isLight={isLight} showExport exportName={`${item.well_name || 'well'}_${item.target_column}_missing_log_prediction`} /> : null}
+          {item.rows?.length ? <ResultTable title={`${item.well_name || item.source_file_name || 'Well'} ${item.target_column || 'Log'} Filled Output - First Rows`} rows={item.rows} isLight={isLight} accent={accent} /> : null}
+        </div>)}
+      </div> : null}
     </section>
   )
 }
@@ -970,11 +1055,13 @@ function SharedLasActions({
   busy,
   setBusy,
   onSession,
+  onSessions,
 }: {
   isLight: boolean
   busy: boolean
   setBusy: (value: boolean) => void
   onSession: (session: any) => void
+  onSessions?: (sessions: any[]) => void
 }) {
   const uploadLas = async (file?: File) => {
     if (!file) return
@@ -995,14 +1082,52 @@ function SharedLasActions({
     }
   }
 
+  const uploadManyLas = async (files?: FileList | File[], saveToProject = true) => {
+    const selectedFiles = Array.from(files || []).filter(file => file.name.toLowerCase().endsWith('.las'))
+    if (!selectedFiles.length) return
+    setBusy(true)
+    try {
+      const nextSessions = []
+      for (const file of selectedFiles) {
+        if (saveToProject) await uploadFileToActiveProject(file)
+        const response = await petrophysicsApi.uploadPetroLas(file)
+        nextSessions.push({ ...response.data, is_demo: false })
+      }
+      const active = nextSessions[nextSessions.length - 1]
+      savePetroSession(active)
+      if (onSessions) onSessions(nextSessions)
+      else onSession(active)
+      transientModuleState.prediction = {}
+      transientModuleState.uncertainty = {}
+      transientModuleState.missingLog = {}
+      toast.success(`${nextSessions.length} LAS file${nextSessions.length === 1 ? '' : 's'} uploaded and ready`)
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'LAS upload failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return <>
-    <ProjectFileSelector moduleName="Petrophysics" allowedExtensions={['las', 'csv', 'xlsx']} onSelectFile={file => uploadLas(file)} compact />
+    <ProjectFileSelector
+      moduleName="Petrophysics"
+      allowedExtensions={['las', 'csv', 'xlsx']}
+      onSelectFile={file => uploadLas(file)}
+      onSelectFiles={items => uploadManyLas(items.map(item => item.file), false)}
+      multiple={!!onSessions}
+      compact
+    />
     <button
       onClick={() => {
         const input = document.createElement('input')
         input.type = 'file'
         input.accept = '.las'
-        input.onchange = event => uploadLas((event.target as HTMLInputElement).files?.[0])
+        input.multiple = !!onSessions
+        input.onchange = event => {
+          const files = (event.target as HTMLInputElement).files
+          if (onSessions) uploadManyLas(files || undefined)
+          else uploadLas(files?.[0])
+        }
         input.click()
       }}
       disabled={busy}
