@@ -109,6 +109,13 @@ async function saveGeothermalResult(resultPayload: any, predictionName: string) 
       result_payload: resultPayload,
     })
     useStore.getState().setEnterpriseProject(data.project)
+    const projectWithLiveState = await saveModuleViewStateToLocalProject(data.project, 'geothermal', {
+      ...getGeothermalProjectState(),
+      result: resultPayload,
+      restoredResult: data.result,
+      restoredAt: data.result?.created_at || new Date().toISOString(),
+    })
+    useStore.getState().setEnterpriseProject(projectWithLiveState)
   } catch {
     // Result snapshot failure should not block the module workflow.
   }

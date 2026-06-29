@@ -2083,9 +2083,41 @@ async function saveProjectResultCopy(moduleName: string, predictionName: string,
       result_payload: resultPayload,
     })
     useStore.getState().setEnterpriseProject(data.project)
+    const moduleKey = liveModuleKeyForSavedResult(moduleName, predictionName)
+    const liveState = liveStateForSavedResult(moduleKey, getProjectModuleState(moduleKey), resultPayload, data.result)
+    const projectWithLiveState = await saveModuleViewStateToLocalProject(data.project, moduleKey, liveState)
+    useStore.getState().setEnterpriseProject(projectWithLiveState)
   } catch {
     // Result snapshot failure should not block the module workflow.
   }
+}
+
+function liveModuleKeyForSavedResult(moduleName: string, predictionName: string) {
+  const moduleText = moduleName.toLowerCase()
+  const predictionText = predictionName.toLowerCase()
+  if (moduleText.includes('missing')) return 'missingLog'
+  if (moduleText.includes('uncertainty')) return 'uncertainty'
+  if (moduleText.includes('parameter') || moduleText.includes('prediction')) return 'prediction'
+  if (moduleText.includes('auto')) return 'autoSplicer'
+  if (moduleText.includes('crossplot')) return 'crossplot'
+  if (moduleText.includes('histogram')) return 'histogram'
+  if (moduleText.includes('ccus')) return 'ccusScreening'
+  if (moduleText.includes('seismic')) return 'seismicEnhancer'
+  if (moduleText.includes('production')) return 'production'
+  if (moduleText.includes('log visualization') && predictionText.includes('crossplot')) return 'logVisualizationCrossplot'
+  if (moduleText.includes('log visualization') && predictionText.includes('histogram')) return 'logVisualizationHistogram'
+  return 'logVisualization'
+}
+
+function liveStateForSavedResult(moduleKey: string, currentState: any, payload: any, resultRecord: any) {
+  const restored = { restoredResult: resultRecord, restoredAt: resultRecord?.created_at || new Date().toISOString() }
+  if (moduleKey === 'missingLog') return { ...currentState, result: payload, results: [payload], ...restored }
+  if (moduleKey === 'uncertainty') {
+    const key = String(resultRecord?.prediction_name || '').toLowerCase().includes('sat') ? 'saturation' : 'porosity'
+    return { ...currentState, result: { ...(currentState?.result || {}), [key]: payload }, ...restored }
+  }
+  if (moduleKey === 'crossplot' || moduleKey === 'logVisualizationCrossplot') return { ...currentState, plotData: payload, ...restored }
+  return { ...currentState, result: payload, ...restored }
 }
 
 async function saveProjectExportCopy(filename: string, content: string, exportType: string, moduleName = 'Petrophysics') {

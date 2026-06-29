@@ -175,7 +175,10 @@ function Browser({ title, rows, columns, palette, onRowClick }: { title: string;
         <table style={table}>
           <thead><tr>{columns.map(col => <th key={col} style={palette.th}>{col.replace(/_/g, ' ').toUpperCase()}</th>)}</tr></thead>
           <tbody>
-            {rows.slice(0, 12).map((row, index) => <tr key={row.file_id || row.result_id || row.export_id || row.id || index} onClick={() => onRowClick?.(row)} style={onRowClick ? clickableRow : undefined}>{columns.map(col => <td key={col} style={palette.td}>{String(row[col] ?? '-')}</td>)}</tr>)}
+            {rows.slice(0, 12).map((row, index) => <tr key={row.file_id || row.result_id || row.export_id || row.id || index} onClick={() => onRowClick?.(row)} style={onRowClick ? clickableRow : undefined}>{columns.map(col => {
+              const value = String(row[col] ?? '-')
+              return <td key={col} style={palette.td} title={value}>{value}</td>
+            })}</tr>)}
             {!rows.length ? <tr><td style={palette.td} colSpan={columns.length}>No records yet</td></tr> : null}
           </tbody>
         </table>
@@ -200,14 +203,14 @@ const statLabel: React.CSSProperties = { color: '#94A3B8', fontSize: 12, fontWei
 const statValue: React.CSSProperties = { color: '#F8FAFC', fontSize: 20, fontWeight: 900, marginTop: 4, wordBreak: 'break-word' }
 const panel: React.CSSProperties = { marginTop: 18, padding: 18, borderRadius: 16, border: '1px solid #1E293B', background: 'rgba(15,23,42,.82)' }
 const sectionHead: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }
-const panelTitle: React.CSSProperties = { margin: '6px 0 14px', fontSize: 22 }
+const panelTitle: React.CSSProperties = { margin: '6px 0 18px', fontSize: 28, lineHeight: 1.18 }
 const moduleGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 10 }
 const moduleButton: React.CSSProperties = { borderRadius: 10, border: '1px solid #26364F', background: '#08111F', color: '#F8FAFC', padding: 13, cursor: 'pointer', fontWeight: 900, textAlign: 'left' }
 const twoCol: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(360px,1fr))', gap: 16 }
-const table: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: 12 }
+const table: React.CSSProperties = { width: '100%', minWidth: 860, borderCollapse: 'collapse', fontSize: 15, tableLayout: 'fixed' }
 const clickableRow: React.CSSProperties = { cursor: 'pointer' }
-const th: React.CSSProperties = { textAlign: 'left', color: '#93C5FD', padding: '10px 8px', borderBottom: '1px solid #24324A', whiteSpace: 'nowrap' }
-const td: React.CSSProperties = { color: '#E2E8F0', padding: '10px 8px', borderBottom: '1px solid #1E293B', whiteSpace: 'nowrap' }
+const th: React.CSSProperties = { textAlign: 'left', color: '#93C5FD', padding: '13px 10px', borderBottom: '1px solid #24324A', whiteSpace: 'nowrap', fontSize: 14, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis' }
+const td: React.CSSProperties = { color: '#E2E8F0', padding: '14px 10px', borderBottom: '1px solid #1E293B', whiteSpace: 'nowrap', fontSize: 15, lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis' }
 const empty: React.CSSProperties = { minHeight: 360, display: 'grid', placeItems: 'center', alignContent: 'center', textAlign: 'center', gap: 8 }
 
 function dashboardPalette(isLight: boolean) {

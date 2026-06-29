@@ -180,6 +180,13 @@ async function saveProjectResultCopy(predictionName: string, resultPayload: any)
       result_payload: resultPayload,
     })
     useStore.getState().setEnterpriseProject(data.project)
+    const projectWithLiveState = await saveModuleViewStateToLocalProject(data.project, 'faciesClassification', {
+      ...getFaciesProjectState(),
+      result: resultPayload,
+      restoredResult: data.result,
+      restoredAt: data.result?.created_at || new Date().toISOString(),
+    })
+    useStore.getState().setEnterpriseProject(projectWithLiveState)
   } catch {
     // Result snapshot failure should not block the module workflow.
   }
