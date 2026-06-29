@@ -3,7 +3,7 @@ import toast from 'react-hot-toast'
 import { petrophysicsApi } from '../services/api'
 import { useStore } from '../store'
 import ProjectFileSelector from '../components/project/ProjectFileSelector'
-import { saveExportToLocalProject, saveResultToLocalProject, uploadFilesToLocalProject } from '../utils/localProjectStorage'
+import { getCurrentLocalProjectFromFolder, getSavedModuleViewState, saveExportToLocalProject, saveModuleViewStateToLocalProject, saveResultToLocalProject, uploadFilesToLocalProject } from '../utils/localProjectStorage'
 
 const PETRO_SESSION_KEY = 'drake_active_petro_las_session'
 
@@ -25,6 +25,34 @@ const faciesState: {
   faciesCol: '',
   clusters: 5,
   result: null,
+}
+
+let faciesStateSaveTimer = 0
+
+function getFaciesProjectState() {
+  const project = useStore.getState().enterpriseProject
+  return getSavedModuleViewState(project, 'faciesClassification') || (project?.project_id ? {
+    meta: null,
+    depthCol: '',
+    features: [],
+    algorithm: 'kmeans',
+    targetPresent: false,
+    faciesCol: '',
+    clusters: 5,
+    result: null,
+  } : faciesState)
+}
+
+function persistFaciesProjectState(state: typeof faciesState) {
+  Object.assign(faciesState, state)
+  const project = useStore.getState().enterpriseProject
+  if (!project?.project_id) return
+  if (faciesStateSaveTimer) window.clearTimeout(faciesStateSaveTimer)
+  faciesStateSaveTimer = window.setTimeout(() => {
+    saveModuleViewStateToLocalProject(project, 'faciesClassification', state)
+      .then(updated => useStore.getState().setEnterpriseProject(updated))
+      .catch(() => undefined)
+  }, 450)
 }
 
 function styleToolboxFigure(figure: any, isLight: boolean) {
@@ -109,9 +137,9 @@ function downloadCsv(csv: string, name: string) {
   link.download = name
   link.click()
   URL.revokeObjectURL(url)
-  const project = localStorage.getItem('drake_enterprise_project')
+  const project = useStore.getState().enterpriseProject
   if (project) {
-    saveExportToLocalProject(JSON.parse(project), {
+    saveExportToLocalProject(project, {
       module_name: 'Facies',
       export_type: 'csv',
       prediction_name: name.replace(/\.[^.]+$/, ''),
@@ -132,9 +160,8 @@ function readPetroSession() {
 
 async function uploadFileToActiveProject(file: File) {
   try {
-    const project = localStorage.getItem('drake_enterprise_project')
-    if (!project) return
-    const activeProject = JSON.parse(project)
+    const activeProject = useStore.getState().enterpriseProject
+    if (!activeProject) return
     const { data } = await uploadFilesToLocalProject(activeProject, [file])
     useStore.getState().setEnterpriseProject(data.project)
   } catch {
@@ -144,9 +171,8 @@ async function uploadFileToActiveProject(file: File) {
 
 async function saveProjectResultCopy(predictionName: string, resultPayload: any) {
   try {
-    const project = localStorage.getItem('drake_enterprise_project')
-    if (!project) return
-    const activeProject = JSON.parse(project)
+    const activeProject = useStore.getState().enterpriseProject
+    if (!activeProject) return
     const { data } = await saveResultToLocalProject(activeProject, {
       module_name: 'Facies',
       prediction_name: predictionName,
@@ -160,26 +186,44 @@ async function saveProjectResultCopy(predictionName: string, resultPayload: any)
 }
 
 export default function FaciesClassificationPage() {
+  const setEnterpriseProject = useStore(state => state.setEnterpriseProject)
+  const [projectHydrated, setProjectHydrated] = useState(false)
+  useEffect(() => {
+    let active = true
+    getCurrentLocalProjectFromFolder()
+      .then(project => {
+        if (active && project) setEnterpriseProject(project)
+      })
+      .finally(() => {
+        if (active) setProjectHydrated(true)
+      })
+    return () => { active = false }
+  }, [setEnterpriseProject])
+  if (!projectHydrated) return null
+  return <FaciesClassificationWorkspace />
+}
+
+function FaciesClassificationWorkspace() {
   const theme = useStore(state => state.theme)
   const isLight = theme === 'light'
+  const saved = getFaciesProjectState()
   const [busy, setBusy] = useState(false)
-  const [meta, setMeta] = useState<any>(() => faciesState.meta)
-  const [depthCol, setDepthCol] = useState(() => faciesState.depthCol)
-  const [features, setFeatures] = useState<string[]>(() => faciesState.features)
-  const [algorithm, setAlgorithm] = useState(() => faciesState.algorithm)
-  const [targetPresent, setTargetPresent] = useState(() => faciesState.targetPresent)
-  const [faciesCol, setFaciesCol] = useState(() => faciesState.faciesCol)
-  const [clusters, setClusters] = useState(() => faciesState.clusters)
-  const [result, setResult] = useState<any>(() => faciesState.result)
+  const [meta, setMeta] = useState<any>(() => saved.meta)
+  const [depthCol, setDepthCol] = useState(() => saved.depthCol)
+  const [features, setFeatures] = useState<string[]>(() => saved.features)
+  const [algorithm, setAlgorithm] = useState(() => saved.algorithm)
+  const [targetPresent, setTargetPresent] = useState(() => saved.targetPresent)
+  const [faciesCol, setFaciesCol] = useState(() => saved.faciesCol)
+  const [clusters, setClusters] = useState(() => saved.clusters)
+  const [result, setResult] = useState<any>(() => saved.result)
 
   useEffect(() => {
-    Object.assign(faciesState, { meta, depthCol, features, algorithm, targetPresent, faciesCol, clusters, result })
+    persistFaciesProjectState({ meta, depthCol, features, algorithm, targetPresent, faciesCol, clusters, result })
   }, [meta, depthCol, features, algorithm, targetPresent, faciesCol, clusters, result])
 
   async function upload(file?: File) {
     if (!file) return
     setBusy(true)
-    setResult(null)
     try {
       await uploadFileToActiveProject(file)
       const { data } = await petrophysicsApi.uploadToolboxLog(file)
@@ -198,7 +242,6 @@ export default function FaciesClassificationPage() {
     const active = readPetroSession()
     if (!active?.session_id) return toast.error('Upload LAS in Log Visualization first')
     setBusy(true)
-    setResult(null)
     try {
       const { data } = await petrophysicsApi.loadToolboxFromPetroSession(active.session_id)
       setMeta(data)

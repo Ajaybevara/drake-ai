@@ -4,7 +4,7 @@ import { Database, Download, FolderOpen, History, Upload } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useStore } from '../store'
-import { getCurrentLocalProject, uploadFilesToLocalProject } from '../utils/localProjectStorage'
+import { getCurrentLocalProjectFromFolder, getSavedModuleViewState, readProjectResultPayload, saveModuleViewStateToLocalProject, uploadFilesToLocalProject } from '../utils/localProjectStorage'
 
 const MODULES = [
   { label: 'Log Visualization', path: '/petrophysics/log-visualization' },
@@ -27,8 +27,9 @@ export default function DashboardPage() {
   const palette = dashboardPalette(isLight)
 
   useEffect(() => {
-    const current = getCurrentLocalProject()
-    if (current) setEnterpriseProject(current)
+    getCurrentLocalProjectFromFolder().then(current => {
+      if (current) setEnterpriseProject(current)
+    }).catch(() => undefined)
   }, [setEnterpriseProject])
 
   const project = enterpriseProject
@@ -50,6 +51,21 @@ export default function DashboardPage() {
       toast.error(error?.message || 'Project upload failed')
     } finally {
       if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  const openSavedResult = async (result: any) => {
+    if (!project) return
+    try {
+      const payload = await readProjectResultPayload(project, result)
+      const target = moduleTargetForResult(result)
+      const currentState = getSavedModuleViewState(project, target.moduleKey) || {}
+      const nextProject = await saveModuleViewStateToLocalProject(project, target.moduleKey, buildLiveResultState(target.moduleKey, currentState, payload, result))
+      setEnterpriseProject(nextProject)
+      toast.success(`Opened saved result: ${result.prediction_name || result.file_name}`)
+      navigate(target.path)
+    } catch (error: any) {
+      toast.error(error?.message || 'Unable to open saved result')
     }
   }
 
@@ -103,7 +119,7 @@ export default function DashboardPage() {
 
       <div style={twoCol}>
         <Browser title="Uploaded File List" rows={project.uploaded_files || []} columns={['file_name', 'file_type', 'bucket', 'uploaded_at']} palette={palette} />
-        <Browser title="Result List" rows={project.generated_results || []} columns={['file_name', 'module_name', 'created_at']} palette={palette} />
+        <Browser title="Result List" rows={project.generated_results || []} columns={['file_name', 'module_name', 'created_at']} palette={palette} onRowClick={openSavedResult} />
       </div>
       <div style={twoCol}>
         <Browser title="Export List" rows={project.exported_files || []} columns={['file_name', 'module_name', 'export_type', 'created_at']} palette={palette} />
@@ -113,11 +129,45 @@ export default function DashboardPage() {
   )
 }
 
+function moduleTargetForResult(result: any) {
+  const moduleName = String(result?.module_name || '').toLowerCase()
+  const predictionName = String(result?.prediction_name || result?.file_name || '').toLowerCase()
+  if (moduleName.includes('facies')) return { moduleKey: 'faciesClassification', path: '/petrophysics/ai-facies-classification' }
+  if (moduleName.includes('formation')) return { moduleKey: 'formationTops', path: '/petrophysics/ai-formation-tops' }
+  if (moduleName.includes('geothermal')) return { moduleKey: 'geothermal', path: '/geothermal/log-based-screening' }
+  if (moduleName.includes('missing')) return { moduleKey: 'missingLog', path: '/petrophysics/missing-log-prediction' }
+  if (moduleName.includes('uncertainty')) return { moduleKey: 'uncertainty', path: '/petrophysics/ai-uncertainty' }
+  if (moduleName.includes('parameter') || moduleName.includes('prediction')) return { moduleKey: 'prediction', path: '/petrophysics/ai-parameter-prediction' }
+  if (moduleName.includes('auto')) return { moduleKey: 'autoSplicer', path: '/petrophysics/auto-splicer' }
+  if (moduleName.includes('crossplot')) return { moduleKey: 'crossplot', path: '/petrophysics/crossplot' }
+  if (moduleName.includes('histogram')) return { moduleKey: 'histogram', path: '/petrophysics/histogram' }
+  if (moduleName.includes('ccus')) return { moduleKey: 'ccusScreening', path: '/ccus/ai-preliminary-screening' }
+  if (moduleName.includes('seismic')) return { moduleKey: 'seismicEnhancer', path: '/seismic/frequency-enhancer' }
+  if (moduleName.includes('production')) return { moduleKey: 'production', path: '/production/intelligence' }
+  if (moduleName.includes('log visualization') && predictionName.includes('crossplot')) return { moduleKey: 'logVisualizationCrossplot', path: '/petrophysics/log-visualization' }
+  if (moduleName.includes('log visualization') && predictionName.includes('histogram')) return { moduleKey: 'logVisualizationHistogram', path: '/petrophysics/log-visualization' }
+  return { moduleKey: 'logVisualization', path: '/petrophysics/log-visualization' }
+}
+
+function buildLiveResultState(moduleKey: string, currentState: any, payload: any, result: any) {
+  const savedAt = result?.created_at || new Date().toISOString()
+  if (moduleKey === 'missingLog') return { ...currentState, result: payload, results: [payload], restoredResult: result, restoredAt: savedAt }
+  if (moduleKey === 'prediction') return { ...currentState, result: payload, restoredResult: result, restoredAt: savedAt }
+  if (moduleKey === 'uncertainty') {
+    const key = String(result?.prediction_name || '').toLowerCase().includes('sat') ? 'saturation' : 'porosity'
+    return { ...currentState, result: { ...(currentState?.result || {}), [key]: payload }, restoredResult: result, restoredAt: savedAt }
+  }
+  if (moduleKey === 'crossplot' || moduleKey === 'logVisualizationCrossplot') return { ...currentState, plotData: payload, restoredResult: result, restoredAt: savedAt }
+  if (moduleKey === 'histogram' || moduleKey === 'logVisualizationHistogram') return { ...currentState, result: payload, restoredResult: result, restoredAt: savedAt }
+  if (moduleKey === 'geothermal') return { ...currentState, result: payload, restoredResult: result, restoredAt: savedAt }
+  return { ...currentState, result: payload, restoredResult: result, restoredAt: savedAt }
+}
+
 function Stat({ label, value, icon, palette }: { label: string; value: string; icon: React.ReactNode; palette: ReturnType<typeof dashboardPalette> }) {
   return <div style={palette.stat}><div style={{ color: '#10B981' }}>{icon}</div><div><div style={palette.statLabel}>{label}</div><div style={palette.statValue}>{value}</div></div></div>
 }
 
-function Browser({ title, rows, columns, palette }: { title: string; rows: any[]; columns: string[]; palette: ReturnType<typeof dashboardPalette> }) {
+function Browser({ title, rows, columns, palette, onRowClick }: { title: string; rows: any[]; columns: string[]; palette: ReturnType<typeof dashboardPalette>; onRowClick?: (row: any) => void }) {
   return (
     <section style={palette.panel}>
       <h2 style={{ ...panelTitle, color: palette.text }}>{title}</h2>
@@ -125,7 +175,7 @@ function Browser({ title, rows, columns, palette }: { title: string; rows: any[]
         <table style={table}>
           <thead><tr>{columns.map(col => <th key={col} style={palette.th}>{col.replace(/_/g, ' ').toUpperCase()}</th>)}</tr></thead>
           <tbody>
-            {rows.slice(0, 12).map((row, index) => <tr key={row.file_id || row.result_id || row.export_id || row.id || index}>{columns.map(col => <td key={col} style={palette.td}>{String(row[col] ?? '-')}</td>)}</tr>)}
+            {rows.slice(0, 12).map((row, index) => <tr key={row.file_id || row.result_id || row.export_id || row.id || index} onClick={() => onRowClick?.(row)} style={onRowClick ? clickableRow : undefined}>{columns.map(col => <td key={col} style={palette.td}>{String(row[col] ?? '-')}</td>)}</tr>)}
             {!rows.length ? <tr><td style={palette.td} colSpan={columns.length}>No records yet</td></tr> : null}
           </tbody>
         </table>
@@ -155,6 +205,7 @@ const moduleGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 
 const moduleButton: React.CSSProperties = { borderRadius: 10, border: '1px solid #26364F', background: '#08111F', color: '#F8FAFC', padding: 13, cursor: 'pointer', fontWeight: 900, textAlign: 'left' }
 const twoCol: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(360px,1fr))', gap: 16 }
 const table: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: 12 }
+const clickableRow: React.CSSProperties = { cursor: 'pointer' }
 const th: React.CSSProperties = { textAlign: 'left', color: '#93C5FD', padding: '10px 8px', borderBottom: '1px solid #24324A', whiteSpace: 'nowrap' }
 const td: React.CSSProperties = { color: '#E2E8F0', padding: '10px 8px', borderBottom: '1px solid #1E293B', whiteSpace: 'nowrap' }
 const empty: React.CSSProperties = { minHeight: 360, display: 'grid', placeItems: 'center', alignContent: 'center', textAlign: 'center', gap: 8 }

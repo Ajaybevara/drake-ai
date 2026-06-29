@@ -3,7 +3,7 @@ import toast from 'react-hot-toast'
 import { petrophysicsApi } from '../services/api'
 import { useStore } from '../store'
 import ProjectFileSelector from '../components/project/ProjectFileSelector'
-import { saveExportToLocalProject, saveResultToLocalProject, uploadFilesToLocalProject } from '../utils/localProjectStorage'
+import { getCurrentLocalProjectFromFolder, getSavedModuleViewState, saveExportToLocalProject, saveModuleViewStateToLocalProject, saveResultToLocalProject, uploadFilesToLocalProject } from '../utils/localProjectStorage'
 
 const PETRO_SESSION_KEY = 'drake_active_petro_las_session'
 
@@ -33,6 +33,38 @@ const formationTopsState: {
   smoothWindow: 21,
   manualTopsText: '',
   result: null,
+}
+
+let formationTopsStateSaveTimer = 0
+
+function getFormationTopsProjectState() {
+  const project = useStore.getState().enterpriseProject
+  return getSavedModuleViewState(project, 'formationTops') || (project?.project_id ? {
+    meta: null,
+    topsMeta: null,
+    depthCol: '',
+    curves: [],
+    mode: 'unsupervised',
+    topsDepthCol: '',
+    formationCol: '',
+    sensitivity: 18,
+    minThickness: 20,
+    smoothWindow: 21,
+    manualTopsText: '',
+    result: null,
+  } : formationTopsState)
+}
+
+function persistFormationTopsProjectState(state: typeof formationTopsState) {
+  Object.assign(formationTopsState, state)
+  const project = useStore.getState().enterpriseProject
+  if (!project?.project_id) return
+  if (formationTopsStateSaveTimer) window.clearTimeout(formationTopsStateSaveTimer)
+  formationTopsStateSaveTimer = window.setTimeout(() => {
+    saveModuleViewStateToLocalProject(project, 'formationTops', state)
+      .then(updated => useStore.getState().setEnterpriseProject(updated))
+      .catch(() => undefined)
+  }, 450)
 }
 
 function styleToolboxFigure(figure: any, isLight: boolean) {
@@ -99,9 +131,9 @@ function downloadCsv(csv: string, name: string) {
   link.download = name
   link.click()
   URL.revokeObjectURL(url)
-  const project = localStorage.getItem('drake_enterprise_project')
+  const project = useStore.getState().enterpriseProject
   if (project) {
-    saveExportToLocalProject(JSON.parse(project), {
+    saveExportToLocalProject(project, {
       module_name: 'Formation Tops',
       export_type: 'csv',
       prediction_name: name.replace(/\.[^.]+$/, ''),
@@ -122,9 +154,8 @@ function readPetroSession() {
 
 async function uploadFileToActiveProject(file: File) {
   try {
-    const project = localStorage.getItem('drake_enterprise_project')
-    if (!project) return
-    const activeProject = JSON.parse(project)
+    const activeProject = useStore.getState().enterpriseProject
+    if (!activeProject) return
     const { data } = await uploadFilesToLocalProject(activeProject, [file])
     useStore.getState().setEnterpriseProject(data.project)
   } catch {
@@ -134,9 +165,8 @@ async function uploadFileToActiveProject(file: File) {
 
 async function saveProjectResultCopy(predictionName: string, resultPayload: any) {
   try {
-    const project = localStorage.getItem('drake_enterprise_project')
-    if (!project) return
-    const activeProject = JSON.parse(project)
+    const activeProject = useStore.getState().enterpriseProject
+    if (!activeProject) return
     const { data } = await saveResultToLocalProject(activeProject, {
       module_name: 'Formation Tops',
       prediction_name: predictionName,
@@ -157,30 +187,48 @@ function parseManualTops(text: string) {
 }
 
 export default function FormationTopsPage() {
+  const setEnterpriseProject = useStore(state => state.setEnterpriseProject)
+  const [projectHydrated, setProjectHydrated] = useState(false)
+  useEffect(() => {
+    let active = true
+    getCurrentLocalProjectFromFolder()
+      .then(project => {
+        if (active && project) setEnterpriseProject(project)
+      })
+      .finally(() => {
+        if (active) setProjectHydrated(true)
+      })
+    return () => { active = false }
+  }, [setEnterpriseProject])
+  if (!projectHydrated) return null
+  return <FormationTopsWorkspace />
+}
+
+function FormationTopsWorkspace() {
   const theme = useStore(state => state.theme)
   const isLight = theme === 'light'
+  const saved = getFormationTopsProjectState()
   const [busy, setBusy] = useState(false)
-  const [meta, setMeta] = useState<any>(() => formationTopsState.meta)
-  const [topsMeta, setTopsMeta] = useState<any>(() => formationTopsState.topsMeta)
-  const [depthCol, setDepthCol] = useState(() => formationTopsState.depthCol)
-  const [curves, setCurves] = useState<string[]>(() => formationTopsState.curves)
-  const [mode, setMode] = useState(() => formationTopsState.mode)
-  const [topsDepthCol, setTopsDepthCol] = useState(() => formationTopsState.topsDepthCol)
-  const [formationCol, setFormationCol] = useState(() => formationTopsState.formationCol)
-  const [sensitivity, setSensitivity] = useState(() => formationTopsState.sensitivity)
-  const [minThickness, setMinThickness] = useState(() => formationTopsState.minThickness)
-  const [smoothWindow, setSmoothWindow] = useState(() => formationTopsState.smoothWindow)
-  const [manualTopsText, setManualTopsText] = useState(() => formationTopsState.manualTopsText)
-  const [result, setResult] = useState<any>(() => formationTopsState.result)
+  const [meta, setMeta] = useState<any>(() => saved.meta)
+  const [topsMeta, setTopsMeta] = useState<any>(() => saved.topsMeta)
+  const [depthCol, setDepthCol] = useState(() => saved.depthCol)
+  const [curves, setCurves] = useState<string[]>(() => saved.curves)
+  const [mode, setMode] = useState(() => saved.mode)
+  const [topsDepthCol, setTopsDepthCol] = useState(() => saved.topsDepthCol)
+  const [formationCol, setFormationCol] = useState(() => saved.formationCol)
+  const [sensitivity, setSensitivity] = useState(() => saved.sensitivity)
+  const [minThickness, setMinThickness] = useState(() => saved.minThickness)
+  const [smoothWindow, setSmoothWindow] = useState(() => saved.smoothWindow)
+  const [manualTopsText, setManualTopsText] = useState(() => saved.manualTopsText)
+  const [result, setResult] = useState<any>(() => saved.result)
 
   useEffect(() => {
-    Object.assign(formationTopsState, { meta, topsMeta, depthCol, curves, mode, topsDepthCol, formationCol, sensitivity, minThickness, smoothWindow, manualTopsText, result })
+    persistFormationTopsProjectState({ meta, topsMeta, depthCol, curves, mode, topsDepthCol, formationCol, sensitivity, minThickness, smoothWindow, manualTopsText, result })
   }, [meta, topsMeta, depthCol, curves, mode, topsDepthCol, formationCol, sensitivity, minThickness, smoothWindow, manualTopsText, result])
 
   async function uploadLog(file?: File) {
     if (!file) return
     setBusy(true)
-    setResult(null)
     try {
       await uploadFileToActiveProject(file)
       const { data } = await petrophysicsApi.uploadToolboxLog(file)
@@ -199,7 +247,6 @@ export default function FormationTopsPage() {
     const active = readPetroSession()
     if (!active?.session_id) return toast.error('Upload LAS in Log Visualization first')
     setBusy(true)
-    setResult(null)
     try {
       const { data } = await petrophysicsApi.loadToolboxFromPetroSession(active.session_id)
       setMeta(data)
