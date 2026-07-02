@@ -213,8 +213,21 @@ function readRegistry(): EnterpriseProject[] {
   }
 }
 
+function setStorageJson(key: string, value: any) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch (error) {
+    if (error instanceof DOMException && (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+      localStorage.removeItem(key)
+      localStorage.setItem(key, JSON.stringify(value))
+      return
+    }
+    throw error
+  }
+}
+
 function writeRegistry(projects: EnterpriseProject[]) {
-  localStorage.setItem(REGISTRY_KEY, JSON.stringify(projects))
+  setStorageJson(REGISTRY_KEY, projects.map(compactProjectForStorage))
 }
 
 function dedupeUploadedFiles(files: EnterpriseProjectFile[] = []) {
@@ -238,11 +251,61 @@ function normalizeProject(project: EnterpriseProject): EnterpriseProject {
   }
 }
 
+function jsonSafe(value: any) {
+  return JSON.parse(JSON.stringify(value, (_key, item) => {
+    if (typeof item === 'function') return undefined
+    if (typeof File !== 'undefined' && item instanceof File) {
+      return {
+        __drake_file__: true,
+        name: item.name,
+        size: item.size,
+        type: item.type,
+        lastModified: item.lastModified,
+      }
+    }
+    if (typeof Blob !== 'undefined' && item instanceof Blob) return undefined
+    return item
+  }))
+}
+
+function compactDashboardState(project: EnterpriseProject) {
+  const dashboardState = project.dashboard_state || {}
+  const moduleViews = dashboardState.module_views || {}
+  const compactViews = Object.fromEntries(Object.entries(moduleViews).map(([key, value]: [string, any]) => [
+    key,
+    { saved_at: value?.saved_at },
+  ]))
+  return { ...dashboardState, module_views: compactViews }
+}
+
+export function compactProjectForStorage(project: EnterpriseProject): EnterpriseProject {
+  const normalized = normalizeProject(project)
+  return {
+    ...normalized,
+    uploaded_files: (normalized.uploaded_files || []).slice(0, 200),
+    generated_results: normalized.generated_results || [],
+    exported_files: normalized.exported_files || [],
+    module_history: (normalized.module_history || []).slice(0, 200),
+    dashboard_state: compactDashboardState(normalized),
+  }
+}
+
 function rememberProject(project: EnterpriseProject) {
   const normalized = normalizeProject(project)
-  const registry = [normalized, ...readRegistry().filter(item => item.project_id !== normalized.project_id)]
+  const compact = compactProjectForStorage(normalized)
+  const registry = [compact, ...readRegistry().filter(item => item.project_id !== normalized.project_id)]
   writeRegistry(registry)
-  localStorage.setItem(CURRENT_PROJECT_KEY, JSON.stringify(normalized))
+  try {
+    setStorageJson(CURRENT_PROJECT_KEY, compact)
+  } catch {
+    setStorageJson(CURRENT_PROJECT_KEY, {
+      ...compact,
+      uploaded_files: [],
+      generated_results: [],
+      exported_files: [],
+      module_history: [],
+    })
+  }
 }
 
 async function writeProjectJson(handle: DirectoryHandle, project: EnterpriseProject) {
@@ -272,6 +335,56 @@ export function getCurrentLocalProject() {
   } catch {
     return null
   }
+}
+
+export async function getCurrentLocalProjectFromFolder() {
+  const current = getCurrentLocalProject()
+  if (!current?.project_id) return null
+  const handle = await getProjectHandle(current.project_id)
+  if (!handle) return current
+  if (!(await ensurePermission(handle, 'readwrite'))) return current
+  try {
+    const fullProject = normalizeProject(JSON.parse(await readText(handle, 'project.json')) as EnterpriseProject)
+    rememberProject(fullProject)
+    return fullProject
+  } catch {
+    return current
+  }
+}
+
+export function getSavedModuleViewState(project: EnterpriseProject | null | undefined, moduleKey: string) {
+  return project?.dashboard_state?.module_views?.[moduleKey]?.state || null
+}
+
+export async function saveModuleViewStateToLocalProject(project: EnterpriseProject, moduleKey: string, viewState: any) {
+  const handle = await writableProjectHandle(project)
+  let baseProject = project
+  try {
+    baseProject = normalizeProject(JSON.parse(await readText(handle, 'project.json')) as EnterpriseProject)
+  } catch {
+    baseProject = project
+  }
+  const updated: EnterpriseProject = {
+    ...baseProject,
+    dashboard_state: {
+      ...(baseProject.dashboard_state || {}),
+      module_views: {
+        ...(baseProject.dashboard_state?.module_views || {}),
+        [moduleKey]: {
+          saved_at: nowIso(),
+          state: jsonSafe(viewState),
+        },
+      },
+    },
+  }
+  return writeProjectJson(handle, updated)
+}
+
+export async function readProjectResultPayload(project: EnterpriseProject, result: { relative_path?: string }) {
+  if (!result?.relative_path) throw new Error('Saved result file path is missing.')
+  const handle = await writableProjectHandle(project)
+  const raw = await readText(handle, result.relative_path)
+  return JSON.parse(raw)
 }
 
 export async function createLocalFolderProject(form: ProjectForm) {

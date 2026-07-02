@@ -1,20 +1,43 @@
-**/__pycache__/
-**/*.pyc
-frontend/node_modules/
-frontend/node_modules/
-backend/**/__pycache__/
-**/*.pyc
-backend/backend/
-uploads/
-frontend/.env
-*.log
-frontend/dist/
-backend/app/**/__pycache__/
-**/*.pyc
-backend/D:/
-backend/mdf/
-frontend/node_modules/
-frontend/dist/
-*.log
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+.venv/
+venv/
+venv*/
+.venv_*/
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# Logs
+*.log
+*.err.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local databases and generated data
+*.db
+*.sqlite
+*.sqlite3
+uploads/
+backend/uploads/
+backend/local_project_storage/
+
+# Local runtime/cache folders
+.codex_tmp_*/
+module_zips_staging_*/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

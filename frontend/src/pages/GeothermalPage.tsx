@@ -3,7 +3,7 @@ import toast from 'react-hot-toast'
 import { geothermalApi } from '../services/api'
 import { useStore } from '../store'
 import ProjectFileSelector from '../components/project/ProjectFileSelector'
-import { saveExportToLocalProject, saveResultToLocalProject, uploadFilesToLocalProject } from '../utils/localProjectStorage'
+import { getCurrentLocalProjectFromFolder, getSavedModuleViewState, saveExportToLocalProject, saveModuleViewStateToLocalProject, saveResultToLocalProject, uploadFilesToLocalProject } from '../utils/localProjectStorage'
 
 const TRACK_GROUPS: Record<string, string[]> = {
   logs: ['gr_api', 'res_ohmm', 'rhob_gcc', 'nphi_frac', 'dt_usft'],
@@ -25,6 +25,29 @@ const geothermalState: {
   trackMode: 'logs',
 }
 
+let geothermalStateSaveTimer = 0
+
+function getGeothermalProjectState() {
+  const project = useStore.getState().enterpriseProject
+  return getSavedModuleViewState(project, 'geothermal') || (project?.project_id ? {
+    sessionId: '',
+    result: null,
+    trackMode: 'logs',
+  } : geothermalState)
+}
+
+function persistGeothermalProjectState(state: typeof geothermalState) {
+  Object.assign(geothermalState, state)
+  const project = useStore.getState().enterpriseProject
+  if (!project?.project_id) return
+  if (geothermalStateSaveTimer) window.clearTimeout(geothermalStateSaveTimer)
+  geothermalStateSaveTimer = window.setTimeout(() => {
+    saveModuleViewStateToLocalProject(project, 'geothermal', state)
+      .then(updated => useStore.getState().setEnterpriseProject(updated))
+      .catch(() => undefined)
+  }, 450)
+}
+
 function fmt(value: any, digits = 1) {
   const number = Number(value)
   return Number.isFinite(number) ? number.toFixed(digits) : '-'
@@ -36,7 +59,7 @@ function extensionFromUrl(url: string) {
 
 async function saveDownloadCopy(url: string, filename: string) {
   try {
-    const project = localStorage.getItem('drake_enterprise_project')
+    const project = useStore.getState().enterpriseProject
     if (!project) return
     const response = await fetch(url)
     if (!response.ok) return
@@ -45,7 +68,7 @@ async function saveDownloadCopy(url: string, filename: string) {
     reader.onloadend = () => {
       const base64 = String(reader.result || '').split(',')[1]
       if (!base64) return
-      saveExportToLocalProject(JSON.parse(project), {
+      saveExportToLocalProject(project, {
         module_name: 'Geothermal',
         export_type: extensionFromUrl(filename),
         prediction_name: filename.replace(/\.[^.]+$/, ''),
@@ -66,9 +89,8 @@ function download(url: string, filename = 'geothermal_export.csv') {
 
 async function uploadGeothermalFileToProject(file: File, setEnterpriseProject: (project: any) => void) {
   try {
-    const project = localStorage.getItem('drake_enterprise_project')
-    if (!project) return
-    const activeProject = JSON.parse(project)
+    const activeProject = useStore.getState().enterpriseProject
+    if (!activeProject) return
     const { data } = await uploadFilesToLocalProject(activeProject, [file])
     setEnterpriseProject(data.project)
   } catch {
@@ -78,9 +100,8 @@ async function uploadGeothermalFileToProject(file: File, setEnterpriseProject: (
 
 async function saveGeothermalResult(resultPayload: any, predictionName: string) {
   try {
-    const project = localStorage.getItem('drake_enterprise_project')
-    if (!project || !resultPayload) return
-    const activeProject = JSON.parse(project)
+    const activeProject = useStore.getState().enterpriseProject
+    if (!activeProject || !resultPayload) return
     const { data } = await saveResultToLocalProject(activeProject, {
       module_name: 'Geothermal',
       prediction_name: predictionName,
@@ -88,23 +109,47 @@ async function saveGeothermalResult(resultPayload: any, predictionName: string) 
       result_payload: resultPayload,
     })
     useStore.getState().setEnterpriseProject(data.project)
+    const projectWithLiveState = await saveModuleViewStateToLocalProject(data.project, 'geothermal', {
+      ...getGeothermalProjectState(),
+      result: resultPayload,
+      restoredResult: data.result,
+      restoredAt: data.result?.created_at || new Date().toISOString(),
+    })
+    useStore.getState().setEnterpriseProject(projectWithLiveState)
   } catch {
     // Result snapshot failure should not block the module workflow.
   }
 }
 
 export default function GeothermalPage() {
+  const setEnterpriseProject = useStore(state => state.setEnterpriseProject)
+  const [projectHydrated, setProjectHydrated] = useState(false)
+  useEffect(() => {
+    let active = true
+    getCurrentLocalProjectFromFolder()
+      .then(project => {
+        if (active && project) setEnterpriseProject(project)
+      })
+      .finally(() => {
+        if (active) setProjectHydrated(true)
+      })
+    return () => { active = false }
+  }, [setEnterpriseProject])
+  if (!projectHydrated) return null
+  return <GeothermalWorkspace />
+}
+
+function GeothermalWorkspace() {
   const { theme, setEnterpriseProject } = useStore()
   const isLight = theme === 'light'
+  const saved = getGeothermalProjectState()
   const [busy, setBusy] = useState(false)
-  const [sessionId, setSessionId] = useState(() => geothermalState.sessionId)
-  const [result, setResult] = useState<any>(() => geothermalState.result)
-  const [trackMode, setTrackMode] = useState(() => geothermalState.trackMode)
+  const [sessionId, setSessionId] = useState(() => saved.sessionId)
+  const [result, setResult] = useState<any>(() => saved.result)
+  const [trackMode, setTrackMode] = useState(() => saved.trackMode)
 
   useEffect(() => {
-    geothermalState.sessionId = sessionId
-    geothermalState.result = result
-    geothermalState.trackMode = trackMode
+    persistGeothermalProjectState({ sessionId, result, trackMode })
   }, [sessionId, result, trackMode])
 
   const palette = {

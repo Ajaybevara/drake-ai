@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { compactProjectForStorage } from '../utils/localProjectStorage'
 
 interface User {
   id: number
@@ -393,7 +394,19 @@ export const useStore = create<AppState>((set) => ({
     : null,
   setEnterpriseProject: (enterpriseProject) => {
     if (enterpriseProject) {
-      localStorage.setItem('drake_enterprise_project', JSON.stringify(enterpriseProject))
+      const compact = compactProjectForStorage(enterpriseProject)
+      try {
+        localStorage.setItem('drake_enterprise_project', JSON.stringify(compact))
+      } catch {
+        localStorage.removeItem('drake_enterprise_project')
+        localStorage.setItem('drake_enterprise_project', JSON.stringify({
+          ...compact,
+          uploaded_files: [],
+          generated_results: [],
+          exported_files: [],
+          module_history: [],
+        }))
+      }
     } else {
       localStorage.removeItem('drake_enterprise_project')
     }

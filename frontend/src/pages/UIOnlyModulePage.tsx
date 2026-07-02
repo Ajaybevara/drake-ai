@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { ccusApi, petrophysicsApi, productionApi, seismicApi } from '../services/api'
 import ProjectFileSelector from '../components/project/ProjectFileSelector'
-import { saveExportToLocalProject, saveResultToLocalProject, uploadFilesToLocalProject } from '../utils/localProjectStorage'
+import { getCurrentLocalProjectFromFolder, getSavedModuleViewState, saveExportToLocalProject, saveModuleViewStateToLocalProject, saveResultToLocalProject, uploadFilesToLocalProject } from '../utils/localProjectStorage'
 
 interface Props {
   title: string
@@ -16,7 +16,20 @@ interface Props {
 const DEFAULT_SUBTITLE = 'UI-only Drake AI module screen. Backend integrations have been removed from this prototype view.'
 
 export default function UIOnlyModulePage({ title, subtitle = DEFAULT_SUBTITLE, accent = '#DA2626', kind = 'generic' }: Props) {
-  const { theme } = useStore()
+  const { theme, setEnterpriseProject } = useStore()
+  const [projectHydrated, setProjectHydrated] = useState(false)
+  useEffect(() => {
+    let active = true
+    getCurrentLocalProjectFromFolder()
+      .then(project => {
+        if (active && project) setEnterpriseProject(project)
+      })
+      .finally(() => {
+        if (active) setProjectHydrated(true)
+      })
+    return () => { active = false }
+  }, [setEnterpriseProject])
+  if (!projectHydrated) return null
   const isLight = theme === 'light'
   const isSeismicEnhancer = kind === 'seismic' && title.toLowerCase().includes('frequency enhancer')
   const isCcusScreening = kind === 'ccus' && title.toLowerCase().includes('preliminary screening')
@@ -121,7 +134,31 @@ export default function UIOnlyModulePage({ title, subtitle = DEFAULT_SUBTITLE, a
 }
 
 const PETRO_SESSION_KEY = 'drake_active_petro_las_session'
-const transientModuleState: Record<string, any> = {}
+const transientModuleState: Record<string, Record<string, any>> = {}
+const moduleStateSaveTimers: Record<string, number> = {}
+
+function activeProjectStateKey() {
+  return useStore.getState().enterpriseProject?.project_id || '__no_project__'
+}
+
+function getProjectModuleState(moduleKey: string) {
+  const project = useStore.getState().enterpriseProject
+  return getSavedModuleViewState(project, moduleKey) || transientModuleState[activeProjectStateKey()]?.[moduleKey] || {}
+}
+
+function persistProjectModuleState(moduleKey: string, state: any) {
+  const projectKey = activeProjectStateKey()
+  transientModuleState[projectKey] = { ...(transientModuleState[projectKey] || {}), [moduleKey]: state }
+  const project = useStore.getState().enterpriseProject
+  if (!project?.project_id) return
+  const timerKey = `${project.project_id}:${moduleKey}`
+  if (moduleStateSaveTimers[timerKey]) window.clearTimeout(moduleStateSaveTimers[timerKey])
+  moduleStateSaveTimers[timerKey] = window.setTimeout(() => {
+    saveModuleViewStateToLocalProject(project, moduleKey, state)
+      .then(updated => useStore.getState().setEnterpriseProject(updated))
+      .catch(() => undefined)
+  }, 450)
+}
 
 function savePetroSession(session: any) {
   try {
@@ -134,11 +171,11 @@ function savePetroSession(session: any) {
 function handleSessionError(error: any, setSession: any, fallback: string) {
   if (error?.response?.status === 404 && error?.response?.data?.detail === 'SESSION_EXPIRED') {
     localStorage.removeItem(PETRO_SESSION_KEY)
-    transientModuleState.missingLog = {}
-    transientModuleState.prediction = {}
-    transientModuleState.uncertainty = {}
-    transientModuleState.crossplot = {}
-    transientModuleState.histogram = {}
+    persistProjectModuleState('missingLog', {})
+    persistProjectModuleState('prediction', {})
+    persistProjectModuleState('uncertainty', {})
+    persistProjectModuleState('crossplot', {})
+    persistProjectModuleState('histogram', {})
     setSession(null)
     toast.error('Session expired — please re-upload your LAS file')
   } else {
@@ -162,7 +199,7 @@ function isUserUploadedPetroSession(session: any) {
 }
 
 function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
-  const saved = transientModuleState.logVisualization || {}
+  const saved = getProjectModuleState('logVisualization')
   const [session, setSession] = useState<any>(() => saved.session || readPetroSession())
   const [selected, setSelected] = useState<string[]>(() => saved.selected || [])
   const [result, setResult] = useState<any>(() => saved.result || null)
@@ -177,18 +214,17 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
   const activeCurves = selected.filter(curve => curves.includes(curve))
 
   useEffect(() => {
-    transientModuleState.logVisualization = { session, selected, result, depthRange, activeLogTab }
+    persistProjectModuleState('logVisualization', { session, selected, result, depthRange, activeLogTab })
   }, [session, selected, result, depthRange, activeLogTab])
 
   const hydrate = (data: any) => {
     const defaults = ['GR', 'ILD', 'RT', 'DRHO', 'RHOB', 'NPHI', 'DT'].filter(name => data.curve_names?.includes(name))
-    transientModuleState.prediction = {}
-    transientModuleState.uncertainty = {}
+    persistProjectModuleState('prediction', {})
+    persistProjectModuleState('uncertainty', {})
     setSession(data)
     savePetroSession(data)
     setSelected(defaults.length ? defaults : (data.curve_names || []).slice(0, 5))
     setDepthRange({ min: data.depth_min ? String(Math.round(Number(data.depth_min))) : '', max: data.depth_max ? String(Math.round(Number(data.depth_max))) : '', unit: 'Feet (ft)' })
-    setResult(null)
   }
   const loadDemo = async () => {
     setBusy(true)
@@ -316,7 +352,7 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
 }
 
 function LogVisualizationCrossplotTab({ session, accent, isLight }: { session: any; accent: string; isLight: boolean }) {
-  const saved = transientModuleState.logVisualizationCrossplot || {}
+  const saved = getProjectModuleState('logVisualizationCrossplot')
   const [bridge, setBridge] = useState<any>(() => saved.bridge || null)
   const [plotData, setPlotData] = useState<any>(() => saved.plotData || null)
   const [loading, setLoading] = useState(false)
@@ -337,15 +373,13 @@ function LogVisualizationCrossplotTab({ session, accent, isLight }: { session: a
   const muted = isLight ? '#64748B' : '#94A3B8'
 
   useEffect(() => {
-    transientModuleState.logVisualizationCrossplot = { sourceSessionId: session?.session_id, bridge, config, plotData }
+    persistProjectModuleState('logVisualizationCrossplot', { sourceSessionId: session?.session_id, bridge, config, plotData })
   }, [session?.session_id, bridge, config, plotData])
 
   useEffect(() => {
     if (!session?.session_id) return
-    const stored = transientModuleState.logVisualizationCrossplot || {}
+    const stored = getProjectModuleState('logVisualizationCrossplot')
     if (stored.sourceSessionId === session.session_id) return
-    setBridge(null)
-    setPlotData(null)
     const nextX = curves.includes('NPHI') ? 'NPHI' : curves.includes('GR') ? 'GR' : curves[0] || ''
     const nextY = curves.includes('RHOB') ? 'RHOB' : curves.includes('DT') ? 'DT' : curves.find(curve => curve !== nextX) || ''
     setConfig((prev: any) => ({ ...prev, x_curve: nextX, y_curve: nextY, color_by: curves.includes('GR') ? 'GR' : 'Depth' }))
@@ -381,7 +415,7 @@ function LogVisualizationCrossplotTab({ session, accent, isLight }: { session: a
       data.figure = applyCrossplotFigureStyle(data.figure, config, isLight, accent)
       setPlotData(data)
       await saveProjectResultCopy('Log Visualization', `log_visualization_crossplot_${data.x_curve || 'x'}_${data.y_curve || 'y'}`, data)
-      transientModuleState.logVisualizationCrossplot = { sourceSessionId: session.session_id, bridge: { ...activeBridge, source_session_id: session.session_id }, config, plotData: data }
+      persistProjectModuleState('logVisualizationCrossplot', { sourceSessionId: session.session_id, bridge: { ...activeBridge, source_session_id: session.session_id }, config, plotData: data })
       if (!silent) toast.success(`Crossplot generated from ${session.file_name}`)
     } catch (error: any) {
       if (!silent) handleSessionError(error, () => undefined, 'Crossplot generation failed')
@@ -426,7 +460,7 @@ function LogVisualizationCrossplotTab({ session, accent, isLight }: { session: a
 }
 
 function LogVisualizationHistogramTab({ session, accent, isLight }: { session: any; accent: string; isLight: boolean }) {
-  const saved = transientModuleState.logVisualizationHistogram || {}
+  const saved = getProjectModuleState('logVisualizationHistogram')
   const [metadata, setMetadata] = useState<any>(() => saved.metadata || null)
   const [result, setResult] = useState<any>(() => saved.result || null)
   const [loading, setLoading] = useState(false)
@@ -451,15 +485,13 @@ function LogVisualizationHistogramTab({ session, accent, isLight }: { session: a
   const muted = isLight ? '#64748B' : '#94A3B8'
 
   useEffect(() => {
-    transientModuleState.logVisualizationHistogram = { sourceSessionId: session?.session_id, metadata, settings, result }
+    persistProjectModuleState('logVisualizationHistogram', { sourceSessionId: session?.session_id, metadata, settings, result })
   }, [session?.session_id, metadata, settings, result])
 
   useEffect(() => {
     if (!session?.session_id) return
-    const stored = transientModuleState.logVisualizationHistogram || {}
+    const stored = getProjectModuleState('logVisualizationHistogram')
     if (stored.sourceSessionId === session.session_id) return
-    setMetadata(null)
-    setResult(null)
     setSettings((prev: any) => ({ ...prev, selectedCurve: curves.includes('GR') ? 'GR' : curves[0] || '', depthFrom: '', depthTo: '' }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.session_id])
@@ -490,7 +522,7 @@ function LogVisualizationHistogramTab({ session, accent, isLight }: { session: a
       })
       setResult(response.data)
       await saveProjectResultCopy('Log Visualization', `log_visualization_histogram_${settings.selectedCurve || 'curve'}`, response.data)
-      transientModuleState.logVisualizationHistogram = { sourceSessionId: session.session_id, metadata: { ...activeMetadata, source_session_id: session.session_id }, settings, result: response.data }
+      persistProjectModuleState('logVisualizationHistogram', { sourceSessionId: session.session_id, metadata: { ...activeMetadata, source_session_id: session.session_id }, settings, result: response.data })
       toast.success(`Histogram generated from ${session.file_name}`)
     } catch (error: any) {
       handleSessionError(error, () => undefined, 'Histogram generation failed')
@@ -729,10 +761,12 @@ function LogInterpretation({ curves, selected, muted, text }: { curves: string[]
 }
 
 function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
-  const saved = transientModuleState.missingLog || {}
+  const saved = getProjectModuleState('missingLog')
   const [session, setSession] = useState<any>(() => saved.session || readPetroSession())
+  const [sessions, setSessions] = useState<any[]>(() => saved.sessions || (saved.session ? [saved.session] : (readPetroSession() ? [readPetroSession()] : [])))
   const [analysis, setAnalysis] = useState<any>(() => saved.analysis || null)
   const [result, setResult] = useState<any>(() => saved.result || null)
+  const [results, setResults] = useState<any[]>(() => saved.results || (saved.result ? [saved.result] : []))
   const [previewFigure, setPreviewFigure] = useState<any>(() => saved.previewFigure || null)
   const [busy, setBusy] = useState(false)
   const [config, setConfig] = useState<any>(() => saved.config || { target: '', model: 'extra_trees', depthMin: '', depthMax: '', features: [] })
@@ -747,25 +781,46 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
   const selectedModel = modelCandidates.find(model => model.key === config.model) || modelCandidates[0]
 
   useEffect(() => {
-    transientModuleState.missingLog = { session, analysis, result, config, previewFigure }
-  }, [session, analysis, result, config, previewFigure])
+    persistProjectModuleState('missingLog', { session, sessions, analysis, result, results, config, previewFigure })
+  }, [session, sessions, analysis, result, results, config, previewFigure])
 
   const replaceSession = (nextSession: any) => {
     setSession(nextSession)
+    setSessions([nextSession])
     setAnalysis(null)
-    setResult(null)
-    setPreviewFigure(null)
     setConfig({ target: '', model: 'extra_trees', depthMin: '', depthMax: '', features: [] })
+  }
+
+  const replaceSessions = (nextSessions: any[]) => {
+    const validSessions = nextSessions.filter(Boolean)
+    const active = validSessions[validSessions.length - 1]
+    setSessions(validSessions)
+    if (active) setSession(active)
+    setAnalysis(null)
+    setConfig({ target: '', model: 'extra_trees', depthMin: '', depthMax: '', features: [] })
+  }
+
+  const activateSessionForSetup = async (nextSession: any) => {
+    if (!nextSession) return
+    setSession(nextSession)
+    setAnalysis(null)
+    setConfig({ target: '', model: 'extra_trees', depthMin: '', depthMax: '', features: [] })
+    setBusy(true)
+    try {
+      const nextAnalysis = await analyzeMissingLogSession(nextSession, setAnalysis, setConfig)
+      await loadCurvePreview(nextSession, nextAnalysis)
+    } catch (error: any) {
+      handleSessionError(error, setSession, 'Well log analysis failed')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const loadCurvePreview = async (currentSession = session, currentAnalysis = analysis) => {
     if (!isUserUploadedPetroSession(currentSession)) return
     try {
       const available = currentAnalysis?.feature_columns || currentSession?.curve_names || []
-      const preferred = ['SP', 'ILD', 'LL8', 'ILM', 'RHOB', 'DRHO', 'CALI', 'GR', 'NPHI', 'DT']
-      const selectedCurves = preferred.filter(curve => available.includes(curve)).slice(0, 10)
-      const fallbackCurves = available.filter((curve: string) => curve !== 'DEPTH').slice(0, 10)
-      const curves = selectedCurves.length ? selectedCurves : fallbackCurves
+      const curves = available.filter((curve: string) => curve !== 'DEPTH')
       if (!curves.length) return
       const response = await petrophysicsApi.generatePetroLogViewer({
         session_id: currentSession.session_id,
@@ -802,27 +857,45 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
     if (!hasUserSession) return toast.error('Upload a real LAS file in Log Visualization first')
     setBusy(true)
     try {
-      const currentAnalysis = analysis || await analyzeMissingLogSession(session, setAnalysis, setConfig)
-      if (!previewFigure) await loadCurvePreview(session, currentAnalysis)
-      const preferredTargets = ['RHOB', 'NPHI', 'DT', 'GR', 'ILD', 'LL8', 'SP', 'CALI']
-      const defaultTarget = preferredTargets.find(target => (currentAnalysis.target_columns || []).includes(target)) || (currentAnalysis.target_columns || [])[0] || (currentAnalysis.feature_columns || [])[0] || ''
-      const targetColumn = config.target || defaultTarget
-      const defaultFeatures = ['SP', 'ILD', 'LL8', 'CALI', 'GR', 'NPHI', 'DT', 'RHOB', 'DRHO'].filter(feature => feature !== targetColumn && (currentAnalysis.feature_columns || []).includes(feature))
-      const selectedFeatures = config.features?.length ? config.features : (defaultFeatures.length ? defaultFeatures : (currentAnalysis.feature_columns || []).filter((curve: string) => curve !== targetColumn).slice(0, 7))
-      if (!targetColumn) return toast.error('Select a target curve')
-      const response = await petrophysicsApi.predictMissingLog({
-        session_id: session.session_id,
-        target_column: targetColumn,
-        selected_features: selectedFeatures,
-        depth_min: emptyToNull(config.depthMin || String(Math.round(Number(currentAnalysis.summary?.depth_min ?? session.depth_min)))),
-        depth_max: emptyToNull(config.depthMax || String(Math.round(Number(currentAnalysis.summary?.depth_max ?? session.depth_max)))),
-        model_name: config.model,
-      })
-      setResult(response.data)
-      await saveProjectResultCopy('Missing Log Prediction', `${response.data?.target_column || 'missing_log'}_prediction`, response.data)
-      toast.success(`Predicted ${response.data.predicted_count?.toLocaleString?.()} samples`)
+      const runSessions = (sessions.length ? sessions : [session]).filter(isUserUploadedPetroSession)
+      if (!runSessions.length) return toast.error('Upload one or more real LAS files first')
+      const runResults = []
+      for (const currentSession of runSessions) {
+        const currentAnalysis = currentSession.session_id === session?.session_id && analysis ? analysis : (await petrophysicsApi.analyzeMissingLog(currentSession.session_id)).data
+        if (currentSession.session_id === session?.session_id) {
+          setAnalysis(currentAnalysis)
+          if (!previewFigure) await loadCurvePreview(currentSession, currentAnalysis)
+        }
+        const preferredTargets = ['RHOB', 'NPHI', 'DT', 'GR', 'ILD', 'LL8', 'SP', 'CALI']
+        const defaultTarget = preferredTargets.find(target => (currentAnalysis.target_columns || []).includes(target)) || (currentAnalysis.target_columns || [])[0] || (currentAnalysis.feature_columns || [])[0] || ''
+        const targetColumn = config.target && (currentAnalysis.target_columns || currentSession.curve_names || []).includes(config.target) ? config.target : defaultTarget
+        const defaultFeatures = ['SP', 'ILD', 'LL8', 'CALI', 'GR', 'NPHI', 'DT', 'RHOB', 'DRHO'].filter(feature => feature !== targetColumn && (currentAnalysis.feature_columns || []).includes(feature))
+        const configuredFeatures = (config.features || []).filter((feature: string) => feature !== targetColumn && (currentAnalysis.feature_columns || []).includes(feature))
+        const selectedFeatures = configuredFeatures.length ? configuredFeatures : (defaultFeatures.length ? defaultFeatures : (currentAnalysis.feature_columns || []).filter((curve: string) => curve !== targetColumn).slice(0, 7))
+        if (!targetColumn) throw new Error(`No target curve is available for ${currentSession.file_name || currentSession.well_name || 'uploaded LAS'}`)
+        const response = await petrophysicsApi.predictMissingLog({
+          session_id: currentSession.session_id,
+          target_column: targetColumn,
+          selected_features: selectedFeatures,
+          depth_min: emptyToNull(config.depthMin || String(Math.round(Number(currentAnalysis.summary?.depth_min ?? currentSession.depth_min)))),
+          depth_max: emptyToNull(config.depthMax || String(Math.round(Number(currentAnalysis.summary?.depth_max ?? currentSession.depth_max)))),
+          model_name: config.model,
+        })
+        const nextResult = {
+          ...response.data,
+          session_id: currentSession.session_id,
+          source_file_name: currentSession.file_name,
+          well_name: currentSession.well_name || response.data?.summary?.well_name || currentSession.file_name,
+        }
+        runResults.push(nextResult)
+        await saveProjectResultCopy('Missing Log Prediction', `${nextResult.well_name || 'well'}_${nextResult.target_column || 'missing_log'}_prediction`, nextResult)
+      }
+      setResults(runResults)
+      setResult(runResults[0] || null)
+      toast.success(runResults.length === 1 ? `Predicted ${runResults[0].predicted_count?.toLocaleString?.()} samples` : `Predicted missing logs for ${runResults.length} wells`)
     } catch (error: any) {
-      handleSessionError(error, setSession, 'Missing log prediction failed')
+      if (error?.response) handleSessionError(error, setSession, 'Missing log prediction failed')
+      else toast.error(error?.message || 'Missing log prediction failed')
     } finally {
       setBusy(false)
     }
@@ -850,13 +923,17 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
 
   return (
     <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
-      <ActionHeader accent={accent} isLight={isLight} label="Missing Log Prediction" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? `${session.file_name} - select a target log and run prediction.` : 'Select a project LAS file or upload a LAS file, then run prediction.'} actions={<><SharedLasActions isLight={isLight} busy={busy} setBusy={setBusy} onSession={replaceSession} /><button onClick={run} disabled={busy || !hasUserSession} style={{ ...primaryButton(accent), width: 210 }}>{busy ? 'Running...' : 'Run Prediction'}</button></>} />
+      <ActionHeader accent={accent} isLight={isLight} label="Missing Log Prediction" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? `${sessions.length > 1 ? `${sessions.length} LAS files ready. Active setup: ` : ''}${session.file_name} - select a target log and run prediction.` : 'Select a project LAS file or upload one or multiple LAS files, then run prediction.'} actions={<><SharedLasActions isLight={isLight} busy={busy} setBusy={setBusy} onSession={replaceSession} onSessions={replaceSessions} /><button onClick={run} disabled={busy || !hasUserSession} style={{ ...primaryButton(accent), width: 210 }}>{busy ? 'Running...' : sessions.length > 1 ? 'Run Multi Prediction' : 'Run Prediction'}</button></>} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px,430px) minmax(0,1fr)', gap: 18 }}>
         <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
           <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Configuration</div>
-          <h2 style={{ margin: '6px 0 14px', color: text, fontSize: 22 }}>Single Well Prediction</h2>
+          <h2 style={{ margin: '6px 0 14px', color: text, fontSize: 22 }}>{sessions.length > 1 ? 'Multi Well Prediction' : 'Single Well Prediction'}</h2>
           <div style={{ display: 'grid', gap: 12 }}>
+            {sessions.length > 1 ? <Control label="Active Setup Well"><select style={field(isLight)} value={session?.session_id || ''} onChange={event => {
+              const nextSession = sessions.find(item => item.session_id === event.target.value)
+              if (nextSession) activateSessionForSetup(nextSession)
+            }}>{sessions.map(item => <option key={item.session_id} value={item.session_id}>{item.well_name || item.file_name}</option>)}</select></Control> : null}
             <Control label="Target Missing Curve"><select style={field(isLight)} value={config.target} onChange={event => setConfig((prev: any) => ({ ...prev, target: event.target.value, features: (prev.features || []).filter((f: string) => f !== event.target.value) }))} disabled={!analysis}><option value="">Select target</option>{targets.map(target => <option key={target} value={target}>{target}</option>)}</select></Control>
             <Control label="Selected Machine Learning Model"><select style={field(isLight)} value={config.model} onChange={event => setConfig((prev: any) => ({ ...prev, model: event.target.value }))}><option value="extra_trees">Extra Trees</option><option value="rf">Random Forest</option><option value="gbr">Gradient Boosting</option></select></Control>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -905,9 +982,20 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
 
       <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
         <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Uploaded LAS Curve Preview</div>
-        <h2 style={{ margin: '6px 0 8px', color: text, fontSize: 22 }}>Missing Log Data Context</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'end', flexWrap: 'wrap' }}>
+          <div>
+            <h2 style={{ margin: '6px 0 8px', color: text, fontSize: 22 }}>Missing Log Data Context</h2>
+            <p style={{ margin: '0 0 14px', color: muted, lineHeight: 1.55, fontSize: 13 }}>
+              Review the uploaded LAS curves before prediction. Gaps and curve behavior are shown from the active project file.
+            </p>
+          </div>
+          {sessions.length > 1 ? <Control label="Select Well"><select style={{ ...field(isLight), minWidth: 280 }} value={session?.session_id || ''} onChange={event => {
+            const nextSession = sessions.find(item => item.session_id === event.target.value)
+            if (nextSession) activateSessionForSetup(nextSession)
+          }}>{sessions.map(item => <option key={item.session_id} value={item.session_id}>{item.well_name || item.file_name}</option>)}</select></Control> : null}
+        </div>
         <p style={{ margin: '0 0 14px', color: muted, lineHeight: 1.55, fontSize: 13 }}>
-          Review the uploaded LAS curves before prediction. Gaps and curve behavior are shown from the active project file.
+          {sessions.length > 1 ? `${session?.well_name || session?.file_name || 'Selected well'} available logs: ${(analysis?.feature_columns || session?.curve_names || []).filter((curve: string) => curve !== 'DEPTH').join(', ') || 'analyze the selected well to list logs'}` : `Available logs: ${(analysis?.feature_columns || session?.curve_names || []).filter((curve: string) => curve !== 'DEPTH').join(', ') || 'analyze the selected well to list logs'}`}
         </p>
         {previewFigure ? <PlotlyFigure figure={styleMissingLogPreviewFigure(previewFigure, isLight)} isLight={isLight} exportName="missing_log_curve_preview" /> : <EmptyPlot border={border} muted={muted} text={hasUserSession ? 'Analyzing uploaded LAS to prepare curve preview.' : 'Upload or select a LAS file to view curve tracks.'} />}
       </div>
@@ -942,6 +1030,27 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
         {result?.figure ? <PlotlyFigure figure={result.figure} isLight={isLight} showExport exportName={`${result.target_column}_missing_log_prediction`} /> : <EmptyPlot border={border} muted={muted} text="Run prediction to view original vs predicted missing-log result." />}
       </div>
       {result?.rows?.length ? <ResultTable title={`${result.target_column || 'Log'} Filled Output - First Rows`} rows={result.rows} isLight={isLight} accent={accent} /> : null}
+      {results.length > 1 ? <div style={{ display: 'grid', gap: 18 }}>
+        {results.map((item, index) => <div key={`${item.session_id || index}-${item.target_column || 'result'}`} style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
+          <div style={{ color: accent, letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }}>Well {index + 1} Missing Log Result</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+            <div>
+              <h2 style={{ margin: '6px 0 6px', color: text, fontSize: 22 }}>{item.well_name || item.source_file_name || `Well ${index + 1}`}</h2>
+              <p style={{ margin: 0, color: muted, fontSize: 13 }}>{item.source_file_name || item.file_name || 'Uploaded LAS'} - {item.target_column} - {item.predicted_count?.toLocaleString?.() || '--'} predicted samples</p>
+            </div>
+            <button onClick={() => {
+              const blob = new Blob([item.export_csv], { type: 'text/csv;charset=utf-8' })
+              const link = document.createElement('a')
+              link.href = URL.createObjectURL(blob)
+              link.download = item.file_name || `${item.well_name || 'well'}_${item.target_column || 'missing_log'}_filled.csv`
+              link.click()
+              URL.revokeObjectURL(link.href)
+            }} disabled={!item.export_csv} style={{ ...primaryButton(accent), width: 220 }}>Download Well CSV</button>
+          </div>
+          {item.figure ? <PlotlyFigure figure={item.figure} isLight={isLight} showExport exportName={`${item.well_name || 'well'}_${item.target_column}_missing_log_prediction`} /> : null}
+          {item.rows?.length ? <ResultTable title={`${item.well_name || item.source_file_name || 'Well'} ${item.target_column || 'Log'} Filled Output - First Rows`} rows={item.rows} isLight={isLight} accent={accent} /> : null}
+        </div>)}
+      </div> : null}
     </section>
   )
 }
@@ -970,11 +1079,13 @@ function SharedLasActions({
   busy,
   setBusy,
   onSession,
+  onSessions,
 }: {
   isLight: boolean
   busy: boolean
   setBusy: (value: boolean) => void
   onSession: (session: any) => void
+  onSessions?: (sessions: any[]) => void
 }) {
   const uploadLas = async (file?: File) => {
     if (!file) return
@@ -984,9 +1095,9 @@ function SharedLasActions({
       const response = await petrophysicsApi.uploadPetroLas(file)
       savePetroSession({ ...response.data, is_demo: false })
       onSession({ ...response.data, is_demo: false })
-      transientModuleState.prediction = {}
-      transientModuleState.uncertainty = {}
-      transientModuleState.missingLog = {}
+      persistProjectModuleState('prediction', {})
+      persistProjectModuleState('uncertainty', {})
+      persistProjectModuleState('missingLog', {})
       toast.success(`LAS "${file.name}" uploaded and active`)
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'LAS upload failed')
@@ -995,14 +1106,52 @@ function SharedLasActions({
     }
   }
 
+  const uploadManyLas = async (files?: FileList | File[], saveToProject = true) => {
+    const selectedFiles = Array.from(files || []).filter(file => file.name.toLowerCase().endsWith('.las'))
+    if (!selectedFiles.length) return
+    setBusy(true)
+    try {
+      const nextSessions = []
+      for (const file of selectedFiles) {
+        if (saveToProject) await uploadFileToActiveProject(file)
+        const response = await petrophysicsApi.uploadPetroLas(file)
+        nextSessions.push({ ...response.data, is_demo: false })
+      }
+      const active = nextSessions[nextSessions.length - 1]
+      savePetroSession(active)
+      if (onSessions) onSessions(nextSessions)
+      else onSession(active)
+      persistProjectModuleState('prediction', {})
+      persistProjectModuleState('uncertainty', {})
+      persistProjectModuleState('missingLog', {})
+      toast.success(`${nextSessions.length} LAS file${nextSessions.length === 1 ? '' : 's'} uploaded and ready`)
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'LAS upload failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return <>
-    <ProjectFileSelector moduleName="Petrophysics" allowedExtensions={['las', 'csv', 'xlsx']} onSelectFile={file => uploadLas(file)} compact />
+    <ProjectFileSelector
+      moduleName="Petrophysics"
+      allowedExtensions={['las', 'csv', 'xlsx']}
+      onSelectFile={file => uploadLas(file)}
+      onSelectFiles={items => uploadManyLas(items.map(item => item.file), false)}
+      multiple={!!onSessions}
+      compact
+    />
     <button
       onClick={() => {
         const input = document.createElement('input')
         input.type = 'file'
         input.accept = '.las'
-        input.onchange = event => uploadLas((event.target as HTMLInputElement).files?.[0])
+        input.multiple = !!onSessions
+        input.onchange = event => {
+          const files = (event.target as HTMLInputElement).files
+          if (onSessions) uploadManyLas(files || undefined)
+          else uploadLas(files?.[0])
+        }
         input.click()
       }}
       disabled={busy}
@@ -1039,9 +1188,9 @@ async function uploadPredictionLas(file: File, onSession: (session: any) => void
     const nextSession = { ...response.data, is_demo: false }
     savePetroSession(nextSession)
     onSession(nextSession)
-    transientModuleState.prediction = {}
-    transientModuleState.uncertainty = {}
-    transientModuleState.missingLog = {}
+    persistProjectModuleState('prediction', {})
+    persistProjectModuleState('uncertainty', {})
+    persistProjectModuleState('missingLog', {})
     toast.success(`LAS "${file.name}" uploaded and active`)
   } catch (error: any) {
     toast.error(error?.response?.data?.detail || 'LAS upload failed')
@@ -1062,7 +1211,7 @@ function browsePredictionLas(onSession: (session: any) => void, setBusy: (value:
 }
 
 function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
-  const saved = transientModuleState.prediction || {}
+  const saved = getProjectModuleState('prediction')
   const [session, setSession] = useState<any>(() => saved.session || readPetroSession())
   const [result, setResult] = useState<any>(() => saved.result || null)
   const [activeTab, setActiveTab] = useState<string>(() => saved.activeTab || 'Vsh')
@@ -1113,11 +1262,10 @@ function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLi
     const latest = readPetroSession()
     if (latest?.session_id && latest.session_id !== session?.session_id) {
       setSession(latest)
-      setResult(null)
     }
   }, [])
   useEffect(() => {
-    transientModuleState.prediction = { session, result, activeTab, config, draftDepth, appliedDepth }
+    persistProjectModuleState('prediction', { session, result, activeTab, config, draftDepth, appliedDepth })
   }, [session, result, activeTab, config, draftDepth, appliedDepth])
   useEffect(() => {
     if (!curves.length) return
@@ -1130,7 +1278,6 @@ function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLi
   }, [session?.session_id])
   const replaceSession = (nextSession: any) => {
     setSession(nextSession)
-    setResult(null)
   }
   const run = async (targetTab = activeTab) => {
     if (!hasUserSession) return toast.error('Upload a real LAS file in Log Visualization first')
@@ -1139,7 +1286,7 @@ function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLi
       const response = await petrophysicsApi.generatePetroPrediction({ session_id: session.session_id, ...config, ai_model: predictionModelForTab(targetTab, config) })
       setResult(response.data)
       await saveProjectResultCopy('AI Parameter Prediction', `${targetTab}_prediction`, response.data)
-      transientModuleState.prediction = { session, result: response.data, activeTab, config, draftDepth, appliedDepth }
+      persistProjectModuleState('prediction', { session, result: response.data, activeTab, config, draftDepth, appliedDepth })
       toast.success(`${targetTab} calculation complete`)
     } catch (error: any) {
       handleSessionError(error, setSession, 'AI prediction failed')
@@ -1217,7 +1364,7 @@ function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLi
 }
 
 function PetrophysicsUncertaintyPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
-  const saved = transientModuleState.uncertainty || {}
+  const saved = getProjectModuleState('uncertainty')
   const [session, setSession] = useState<any>(() => saved.session || readPetroSession())
   const [result, setResult] = useState<any>(() => saved.result || null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -1257,11 +1404,10 @@ function PetrophysicsUncertaintyPanel({ accent, isLight }: { accent: string; isL
     const latest = readPetroSession()
     if (latest?.session_id && latest.session_id !== session?.session_id) {
       setSession(latest)
-      setResult(null)
     }
   }, [])
   useEffect(() => {
-    transientModuleState.uncertainty = { session, result, params }
+    persistProjectModuleState('uncertainty', { session, result, params })
   }, [session, result, params])
   useEffect(() => {
     if (!curves.length) return
@@ -1272,30 +1418,29 @@ function PetrophysicsUncertaintyPanel({ accent, isLight }: { accent: string; isL
     }))
   }, [session?.session_id])
   const loadPredictionLas = () => {
-    const prediction = transientModuleState.prediction || {}
+    const prediction = getProjectModuleState('prediction')
     const nextSession = prediction.session || readPetroSession()
     if (!nextSession?.session_id || !isUserUploadedPetroSession(nextSession)) {
       toast.error('Run AI Parameter Prediction or load a real LAS from Log Visualization first')
       return
     }
     setSession(nextSession)
-    setResult(null)
     toast.success(`Loaded LAS for uncertainty: ${nextSession.file_name}`)
   }
   const run = async (target: 'porosity' | 'saturation') => {
     if (!hasUserSession) return toast.error('Upload a real LAS file in Log Visualization first')
     setBusy(target)
     try {
-      const prediction = transientModuleState.prediction || {}
+      const prediction = getProjectModuleState('prediction')
       if (!prediction.result || prediction.session?.session_id !== session.session_id) {
         const predictionResponse = await petrophysicsApi.generatePetroPrediction({ session_id: session.session_id, ai_model: params.aiModel })
-        transientModuleState.prediction = { session, result: predictionResponse.data }
+        persistProjectModuleState('prediction', { session, result: predictionResponse.data })
       }
       const response = await petrophysicsApi.generatePetroUncertainty({ session_id: session.session_id, target, ...params })
       const nextResult = { ...(result || {}), [target]: response.data }
       setResult(nextResult)
       await saveProjectResultCopy('AI Uncertainty', `${target}_uncertainty`, response.data)
-      transientModuleState.uncertainty = { session, result: nextResult, params }
+      persistProjectModuleState('uncertainty', { session, result: nextResult, params })
       toast.success(`${target === 'porosity' ? 'Porosity' : 'Saturation'} uncertainty calculated`)
     } catch (error: any) {
       handleSessionError(error, setSession, 'Uncertainty calculation failed')
@@ -1319,7 +1464,7 @@ function PetrophysicsUncertaintyPanel({ accent, isLight }: { accent: string; isL
   const hasAnyUncertaintyResult = !!porosityResult || !!saturationResult
   return (
     <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
-      <ActionHeader accent={accent} isLight={isLight} label="AI Uncertainty" title={hasUserSession ? session?.well_name : 'Select Prediction LAS'} subtitle={hasUserSession ? 'Use separate porosity and saturation calculators with LAS-aware log selections.' : 'Select a project LAS file or upload a LAS file, then calculate uncertainty.'} actions={<><ProjectFileSelector moduleName="Petrophysics" allowedExtensions={['las', 'csv', 'xlsx']} onSelectFile={file => uploadPredictionLas(file, nextSession => { setSession(nextSession); setResult(null) }, setBusy)} compact /><button onClick={() => browsePredictionLas(nextSession => { setSession(nextSession); setResult(null) }, setBusy)} disabled={!!busy} style={greenActionButton()}>Upload LAS</button></>} />
+      <ActionHeader accent={accent} isLight={isLight} label="AI Uncertainty" title={hasUserSession ? session?.well_name : 'Select Prediction LAS'} subtitle={hasUserSession ? 'Use separate porosity and saturation calculators with LAS-aware log selections.' : 'Select a project LAS file or upload a LAS file, then calculate uncertainty.'} actions={<><ProjectFileSelector moduleName="Petrophysics" allowedExtensions={['las', 'csv', 'xlsx']} onSelectFile={file => uploadPredictionLas(file, nextSession => { setSession(nextSession) }, setBusy)} compact /><button onClick={() => browsePredictionLas(nextSession => { setSession(nextSession) }, setBusy)} disabled={!!busy} style={greenActionButton()}>Upload LAS</button></>} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(360px,1fr))', gap: 18 }}>
         <UncertaintyConfigCard title="Porosity Uncertainty" tone="#2563EB" isLight={isLight}>
           <Control label="AI Model"><select style={field(isLight)} value={params.aiModel} onChange={e => setParams((prev: any) => ({ ...prev, aiModel: e.target.value }))}><option>Random Forest AI</option><option>Gradient Boosting AI</option><option>Decision Tree AI</option></select></Control>
@@ -1765,7 +1910,7 @@ function styleUncertaintyFigure(figure: any, kind: 'porosity' | 'saturation', is
 }
 
 function AutoSplicerPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
-  const saved = transientModuleState.autoSplicer || {}
+  const saved = getProjectModuleState('autoSplicer')
   const [files, setFiles] = useState<File[]>(() => saved.files || [])
   const [result, setResult] = useState<any>(() => saved.result || null)
   const [busy, setBusy] = useState(false)
@@ -1774,7 +1919,7 @@ function AutoSplicerPanel({ accent, isLight }: { accent: string; isLight: boolea
   const muted = isLight ? '#64748B' : '#94A3B8'
   const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
   useEffect(() => {
-    transientModuleState.autoSplicer = { files, result }
+    persistProjectModuleState('autoSplicer', { files, result })
   }, [files, result])
   const run = async () => {
     if (files.length < 2) return toast.error('Select at least two LAS files')
@@ -1918,11 +2063,9 @@ async function downloadRowsAsCsv(rows: any[], filename: string) {
 
 async function uploadFileToActiveProject(file: File) {
   try {
-    const project = localStorage.getItem('drake_enterprise_project')
-    if (!project) return
-    const activeProject = JSON.parse(project)
+    const activeProject = useStore.getState().enterpriseProject
+    if (!activeProject) return
     const { data } = await uploadFilesToLocalProject(activeProject, [file])
-    localStorage.setItem('drake_enterprise_project', JSON.stringify(data.project))
     useStore.getState().setEnterpriseProject(data.project)
   } catch {
     // Module processing should continue even if the project copy cannot be saved.
@@ -1931,27 +2074,56 @@ async function uploadFileToActiveProject(file: File) {
 
 async function saveProjectResultCopy(moduleName: string, predictionName: string, resultPayload: any) {
   try {
-    const project = localStorage.getItem('drake_enterprise_project')
-    if (!project) return
-    const activeProject = JSON.parse(project)
+    const activeProject = useStore.getState().enterpriseProject
+    if (!activeProject) return
     const { data } = await saveResultToLocalProject(activeProject, {
       module_name: moduleName,
       prediction_name: predictionName,
       extension: 'json',
       result_payload: resultPayload,
     })
-    localStorage.setItem('drake_enterprise_project', JSON.stringify(data.project))
     useStore.getState().setEnterpriseProject(data.project)
+    const moduleKey = liveModuleKeyForSavedResult(moduleName, predictionName)
+    const liveState = liveStateForSavedResult(moduleKey, getProjectModuleState(moduleKey), resultPayload, data.result)
+    const projectWithLiveState = await saveModuleViewStateToLocalProject(data.project, moduleKey, liveState)
+    useStore.getState().setEnterpriseProject(projectWithLiveState)
   } catch {
     // Result snapshot failure should not block the module workflow.
   }
 }
 
+function liveModuleKeyForSavedResult(moduleName: string, predictionName: string) {
+  const moduleText = moduleName.toLowerCase()
+  const predictionText = predictionName.toLowerCase()
+  if (moduleText.includes('missing')) return 'missingLog'
+  if (moduleText.includes('uncertainty')) return 'uncertainty'
+  if (moduleText.includes('parameter') || moduleText.includes('prediction')) return 'prediction'
+  if (moduleText.includes('auto')) return 'autoSplicer'
+  if (moduleText.includes('crossplot')) return 'crossplot'
+  if (moduleText.includes('histogram')) return 'histogram'
+  if (moduleText.includes('ccus')) return 'ccusScreening'
+  if (moduleText.includes('seismic')) return 'seismicEnhancer'
+  if (moduleText.includes('production')) return 'production'
+  if (moduleText.includes('log visualization') && predictionText.includes('crossplot')) return 'logVisualizationCrossplot'
+  if (moduleText.includes('log visualization') && predictionText.includes('histogram')) return 'logVisualizationHistogram'
+  return 'logVisualization'
+}
+
+function liveStateForSavedResult(moduleKey: string, currentState: any, payload: any, resultRecord: any) {
+  const restored = { restoredResult: resultRecord, restoredAt: resultRecord?.created_at || new Date().toISOString() }
+  if (moduleKey === 'missingLog') return { ...currentState, result: payload, results: [payload], ...restored }
+  if (moduleKey === 'uncertainty') {
+    const key = String(resultRecord?.prediction_name || '').toLowerCase().includes('sat') ? 'saturation' : 'porosity'
+    return { ...currentState, result: { ...(currentState?.result || {}), [key]: payload }, ...restored }
+  }
+  if (moduleKey === 'crossplot' || moduleKey === 'logVisualizationCrossplot') return { ...currentState, plotData: payload, ...restored }
+  return { ...currentState, result: payload, ...restored }
+}
+
 async function saveProjectExportCopy(filename: string, content: string, exportType: string, moduleName = 'Petrophysics') {
   try {
-    const project = localStorage.getItem('drake_enterprise_project')
-    if (!project) return
-    const activeProject = JSON.parse(project)
+    const activeProject = useStore.getState().enterpriseProject
+    if (!activeProject) return
     const { data } = await saveExportToLocalProject(activeProject, {
       module_name: moduleName,
       export_type: exportType,
@@ -1959,7 +2131,6 @@ async function saveProjectExportCopy(filename: string, content: string, exportTy
       extension: exportType,
       content,
     })
-    localStorage.setItem('drake_enterprise_project', JSON.stringify(data.project))
     useStore.getState().setEnterpriseProject(data.project)
   } catch {
     // Export copy failure must not block the existing browser download.
@@ -1968,9 +2139,8 @@ async function saveProjectExportCopy(filename: string, content: string, exportTy
 
 async function saveProjectBinaryExportCopy(filename: string, contentBase64: string, exportType: string, moduleName = 'Petrophysics') {
   try {
-    const project = localStorage.getItem('drake_enterprise_project')
-    if (!project) return
-    const activeProject = JSON.parse(project)
+    const activeProject = useStore.getState().enterpriseProject
+    if (!activeProject) return
     const { data } = await saveExportToLocalProject(activeProject, {
       module_name: moduleName,
       export_type: exportType,
@@ -1978,7 +2148,6 @@ async function saveProjectBinaryExportCopy(filename: string, contentBase64: stri
       extension: exportType,
       content_base64: contentBase64,
     })
-    localStorage.setItem('drake_enterprise_project', JSON.stringify(data.project))
     useStore.getState().setEnterpriseProject(data.project)
   } catch {
     // Export copy failure must not block the existing browser download.
@@ -2003,7 +2172,7 @@ async function saveDownloadedExportFromUrl(url: string, filename: string, export
 }
 
 function ProductionIntelligencePanel({ accent, isLight }: { accent: string; isLight: boolean }) {
-  const saved = transientModuleState.production || {}
+  const saved = getProjectModuleState('production')
   const [result, setResult] = useState<any>(() => saved.result || null)
   const [selectedModule, setSelectedModule] = useState<string>(() => saved.selectedModule || 'optimizer')
   const [busy, setBusy] = useState(false)
@@ -2012,7 +2181,7 @@ function ProductionIntelligencePanel({ accent, isLight }: { accent: string; isLi
   const text = isLight ? '#0F172A' : '#F8FAFC'
   const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
   useEffect(() => {
-    transientModuleState.production = { result, selectedModule }
+    persistProjectModuleState('production', { result, selectedModule })
   }, [result, selectedModule])
   const runSample = async () => {
     setBusy(true)
@@ -2173,7 +2342,7 @@ function tableCell(isLight: boolean): React.CSSProperties {
 }
 
 function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
-  const saved = transientModuleState.crossplot || {}
+  const saved = getProjectModuleState('crossplot')
   const [session, setSession] = useState<any>(() => saved.session || null)
   const [config, setConfig] = useState<any>(() => saved.config || {
     x_curve: '',
@@ -2197,7 +2366,7 @@ function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLig
   const curves: string[] = session?.curve_names || []
 
   useEffect(() => {
-    transientModuleState.crossplot = { session, config, plotData }
+    persistProjectModuleState('crossplot', { session, config, plotData })
   }, [session, config, plotData])
 
   const hydrateSession = (data: any) => {
@@ -2211,7 +2380,6 @@ function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLig
       y_curve: defaultY,
       color_by: names.includes('GR') ? 'GR' : 'Depth',
     }))
-    setPlotData(null)
   }
 
   const loadDemo = async () => {
@@ -2440,7 +2608,7 @@ function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLig
 }
 
 function PetrophysicsHistogramPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
-  const saved = transientModuleState.histogram || {}
+  const saved = getProjectModuleState('histogram')
   const [metadata, setMetadata] = useState<any>(() => saved.metadata || null)
   const [settings, setSettings] = useState<any>(() => saved.settings || {
     selectedCurve: '',
@@ -2467,7 +2635,7 @@ function PetrophysicsHistogramPanel({ accent, isLight }: { accent: string; isLig
   const muted = isLight ? '#64748B' : '#94A3B8'
 
   useEffect(() => {
-    transientModuleState.histogram = { metadata, settings, result }
+    persistProjectModuleState('histogram', { metadata, settings, result })
   }, [metadata, settings, result])
 
   const hydrateMetadata = (data: any) => {
@@ -2478,7 +2646,6 @@ function PetrophysicsHistogramPanel({ accent, isLight }: { accent: string; isLig
       depthFrom: '',
       depthTo: '',
     }))
-    setResult(null)
   }
 
   const loadDemo = async () => {
@@ -2691,7 +2858,7 @@ function PetrophysicsHistogramPanel({ accent, isLight }: { accent: string; isLig
 }
 
 function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
-  const saved = transientModuleState.ccusScreening || {}
+  const saved = getProjectModuleState('ccusScreening')
   const [session, setSession] = useState<any>(() => saved.session || null)
   const [mapping, setMapping] = useState<Record<string, string>>(() => saved.mapping || {})
   const [params, setParams] = useState<any>(() => saved.params || {
@@ -2723,7 +2890,7 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
   const muted = isLight ? '#64748B' : '#94A3B8'
 
   useEffect(() => {
-    transientModuleState.ccusScreening = { session, mapping, params, selectedCurves, result }
+    persistProjectModuleState('ccusScreening', { session, mapping, params, selectedCurves, result })
   }, [session, mapping, params, selectedCurves, result])
 
   const hydrateSession = (data: any) => {
@@ -2736,7 +2903,6 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
       PHIE: data.mapping?.PHIE || '',
       PERM: data.mapping?.PERM || '',
     })
-    setResult(null)
   }
 
   const loadSample = async () => {
@@ -3055,7 +3221,7 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
 }
 
 function SeismicEnhancerPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
-  const saved = transientModuleState.seismicEnhancer || {}
+  const saved = getProjectModuleState('seismicEnhancer')
   const [result, setResult] = useState<any>(() => saved.result || null)
   const [loading, setLoading] = useState(false)
   const [freqLow, setFreqLow] = useState(() => saved.freqLow ?? 0)
@@ -3074,7 +3240,7 @@ function SeismicEnhancerPanel({ accent, isLight }: { accent: string; isLight: bo
   } | null>(() => saved.uploadedFileInfo || null)
 
   useEffect(() => {
-    transientModuleState.seismicEnhancer = { result, freqLow, freqHigh, view, inlineNo, crosslineNo, dimension, workflow, amplitudeRange, colorScale, uploadedFileInfo }
+    persistProjectModuleState('seismicEnhancer', { result, freqLow, freqHigh, view, inlineNo, crosslineNo, dimension, workflow, amplitudeRange, colorScale, uploadedFileInfo })
   }, [result, freqLow, freqHigh, view, inlineNo, crosslineNo, dimension, workflow, amplitudeRange, colorScale, uploadedFileInfo])
 
   const handleFileUpload = async (file: File) => {
@@ -4064,3 +4230,5 @@ function visualBackground(kind: Props['kind'], accent: string, isLight: boolean)
   if (kind === 'seismic') return isLight ? `repeating-linear-gradient(90deg,${accent}12 0 8px,${accent}18 8px 16px),#F8FAFC` : `repeating-linear-gradient(90deg,${accent}12 0 8px,${accent}18 8px 16px),#050B14`
   return isLight ? `radial-gradient(circle at 25% 25%,${accent}22,transparent 32%),linear-gradient(135deg,#F1F5F9,#FFFFFF)` : `radial-gradient(circle at 25% 25%,${accent}22,transparent 32%),linear-gradient(135deg,#050B14,#08111F)`
 }
+
+

@@ -4,7 +4,7 @@ import { FolderOpen, Plus, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useStore } from '../store'
-import { createLocalFolderProject, getCurrentLocalProject, listLocalProjects, openKnownLocalProject, openLocalFolderProject } from '../utils/localProjectStorage'
+import { createLocalFolderProject, getCurrentLocalProjectFromFolder, listLocalProjects, openKnownLocalProject, openLocalFolderProject } from '../utils/localProjectStorage'
 
 const PROJECT_TYPES = ['Petrophysics', 'Seismic', 'Production', 'CCUS', 'Geothermal', 'Digitizer', 'Integrated Study', 'Custom']
 const STORAGE_LOCATIONS = ['Desktop', 'Documents', 'C Drive', 'D Drive', 'Custom Folder']
@@ -25,8 +25,9 @@ export default function PlatformLandingPage() {
   })
 
   useEffect(() => {
-    const current = getCurrentLocalProject()
-    if (current) setEnterpriseProject(current)
+    getCurrentLocalProjectFromFolder().then(current => {
+      if (current) setEnterpriseProject(current)
+    }).catch(() => undefined)
   }, [setEnterpriseProject])
 
   const loadRegistry = () => {
