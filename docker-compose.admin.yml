@@ -1,0 +1,17 @@
+version: "3.9"
+
+# Deploy only the admin dashboard.
+# Set VITE_API_URL to the shared backend URL, for example:
+# VITE_API_URL=https://api.your-domain.com docker compose -f docker-compose.admin.yml up --build -d
+
+services:
+  admin_dashboard:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.admin
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8002}
+    container_name: drakeai_admin_dashboard
+    ports:
+      - "${ADMIN_DASHBOARD_PORT:-8080}:3000"
+    restart: unless-stopped

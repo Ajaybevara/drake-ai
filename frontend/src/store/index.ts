@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { compactProjectForStorage } from '../utils/localProjectStorage'
+import type { ModuleId } from '../utils/accessControl'
 
 interface User {
   id: number
@@ -7,6 +8,7 @@ interface User {
   full_name: string
   role: string
   avatar_initials: string
+  accessModules?: ModuleId[]
 }
 
 interface Project { id: number; name: string; well_count: number }

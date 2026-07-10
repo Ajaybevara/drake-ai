@@ -47,11 +47,26 @@ class User(Base):
     role = Column(SAEnum(UserRole), default=UserRole.petrophysicist)
     is_active = Column(Boolean, default=True)
     avatar_initials = Column(String(4), default="U")
+    access_modules = Column(JSON, default=[])
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     projects = relationship("Project", back_populates="owner")
     ai_jobs = relationship("AIJob", back_populates="created_by_user")
+    activities = relationship("UserActivity", back_populates="user", cascade="all, delete-orphan")
+
+
+class UserActivity(Base):
+    __tablename__ = "user_activities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    action = Column(String(40), nullable=False)
+    ip_address = Column(String(80))
+    user_agent = Column(String(500))
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    user = relationship("User", back_populates="activities")
 
 
 # ── Project ──────────────────────────────────────────────────────────────────

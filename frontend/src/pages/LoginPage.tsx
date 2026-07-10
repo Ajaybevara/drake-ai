@@ -1,113 +1,78 @@
 import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useStore } from '../store'
+import { firstAllowedPath } from '../utils/accessControl'
+import { authApi } from '../services/api'
 
 export default function LoginPage() {
-  const location = useLocation()
-  const storedUser = readRegisteredUser()
-  const [mode, setMode] = useState<'login' | 'register'>(location.pathname === '/register' ? 'register' : 'login')
-  const [email, setEmail] = useState(storedUser?.email || 'admin@drakeai.com')
-  const [fullName, setFullName] = useState(storedUser?.full_name || nameFromEmail(storedUser?.email || 'admin@drakeai.com'))
-  const [password, setPassword] = useState('Drake@2024')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const setAuth = useStore(s => s.setAuth)
   const navigate = useNavigate()
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault()
-    const displayName = fullName.trim() || nameFromEmail(email)
-    const registeredUser = { email, full_name: displayName }
-    localStorage.setItem('drake_registered_user', JSON.stringify(registeredUser))
-    setAuth({
-      id: 1,
-      email,
-      full_name: displayName,
-      role: 'admin',
-      avatar_initials: initialsFor(displayName),
-    }, 'ui-only-token')
-    toast.success(mode === 'register' ? 'Registration complete' : `Welcome ${displayName}`)
-    navigate(localStorage.getItem('drake_enterprise_project') ? '/dashboard' : '/')
+  const handleLogin = async (event: React.FormEvent) => {
+    event.preventDefault()
+
+    try {
+      const { data } = await authApi.login(username.trim(), password)
+      const user = data.user
+      if (user.role === 'admin') {
+        toast.error('Admin credentials cannot be used on the user login page')
+        return
+      }
+      setAuth(user, data.access_token)
+      toast.success(`Welcome ${user.full_name}`)
+      navigate(firstAllowedPath(user.role, user.accessModules))
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'Login failed. Please check your username and password.')
+    }
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: 400, background: '#111827', borderRadius: 16, border: '1px solid #334155', padding: '40px 36px' }}>
-        {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 32, justifyContent: 'center' }}>
-          <img src="/logo.png" alt="Drake AI Logo" style={{ width: 240, maxHeight: 92, objectFit: 'contain' }} />
+    <div style={page}>
+      <div style={shell}>
+        <div style={brand}>
+          <img src="/logo.png" alt="Drake AI Logo" style={logo} />
+          <div style={eyebrow}>Drake AI Enterprise Platform</div>
+          <h1 style={title}>User Access</h1>
+          <p style={subtitle}>Sign in with the username and password provided by your administrator.</p>
         </div>
 
-        <h2 style={{ fontSize: 18, fontWeight: 600, color: '#E2E8F0', marginBottom: 6, textAlign: 'center' }}>{mode === 'register' ? 'Create your account' : 'Sign in to your account'}</h2>
-        <p style={{ fontSize: 12, color: '#64748B', textAlign: 'center', marginBottom: 28 }}>Petrophysics Intelligence Platform</p>
-
-        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 6 }}>Full Name</label>
-            <input
-              type="text" value={fullName} onChange={e => setFullName(e.target.value)} required
-              style={{ width: '100%', background: '#1E293B', border: '1px solid #334155', borderRadius: 8, padding: '10px 14px', color: '#E2E8F0', fontSize: 13, outline: 'none' }}
-            />
+        <form onSubmit={handleLogin} style={form}>
+          <div style={formHead}>
+            <i className="fas fa-user-lock" style={formIcon}></i>
+            <div>
+              <div style={eyebrow}>User Login</div>
+              <h2 style={formTitle}>User Credentials</h2>
+            </div>
           </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 6 }}>Email Address</label>
-            <input
-              type="email" value={email} onChange={e => { setEmail(e.target.value); if (!fullName.trim()) setFullName(nameFromEmail(e.target.value)) }} required
-              style={{ width: '100%', background: '#1E293B', border: '1px solid #334155', borderRadius: 8, padding: '10px 14px', color: '#E2E8F0', fontSize: 13, outline: 'none' }}
-            />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 6 }}>Password</label>
-            <input
-              type="password" value={password} onChange={e => setPassword(e.target.value)} required
-              style={{ width: '100%', background: '#1E293B', border: '1px solid #334155', borderRadius: 8, padding: '10px 14px', color: '#E2E8F0', fontSize: 13, outline: 'none' }}
-            />
-          </div>
-          <button
-            type="submit"
-            style={{ background: 'linear-gradient(135deg,#D32F2F,#388E3C)', color: '#fff', border: 'none', borderRadius: 8, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'Rajdhani,sans-serif', letterSpacing: 1, marginTop: 8 }}
-          >
-            {mode === 'register' ? 'Register' : 'Sign In'}
-          </button>
+          <label style={fieldLabel}>
+            Username
+            <input value={username} onChange={event => setUsername(event.target.value)} required autoFocus style={input} />
+          </label>
+          <label style={fieldLabel}>
+            Password
+            <input type="password" value={password} onChange={event => setPassword(event.target.value)} required style={input} />
+          </label>
+          <button type="submit" style={submitButton}>Login as User</button>
         </form>
-
-        <button
-          type="button"
-          onClick={() => {
-            const nextMode = mode === 'login' ? 'register' : 'login'
-            setMode(nextMode)
-            navigate(nextMode === 'register' ? '/register' : '/login', { replace: true })
-          }}
-          style={{ width: '100%', marginTop: 14, background: 'transparent', border: 0, color: '#93C5FD', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}
-        >
-          {mode === 'register' ? 'Already registered? Sign in' : 'Need an account? Register'}
-        </button>
-
-        <div style={{ marginTop: 20, padding: 12, background: '#1E293B', borderRadius: 8, border: '1px solid #334155' }}>
-          <div style={{ fontSize: 10, color: '#64748B', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Demo Credentials</div>
-          <div style={{ fontSize: 12, color: '#94A3B8' }}>Email: <span style={{ color: '#EF4444' }}>admin@drakeai.com</span></div>
-          <div style={{ fontSize: 12, color: '#94A3B8' }}>Password: <span style={{ color: '#22C55E' }}>Drake@2024</span></div>
-        </div>
       </div>
     </div>
   )
 }
 
-function readRegisteredUser() {
-  try {
-    const raw = localStorage.getItem('drake_registered_user')
-    return raw ? JSON.parse(raw) : null
-  } catch {
-    return null
-  }
-}
-
-function initialsFor(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (!parts.length) return 'U'
-  return parts.slice(0, 2).map(part => part[0]?.toUpperCase()).join('')
-}
-
-function nameFromEmail(email: string) {
-  const local = (email || '').split('@')[0] || 'User'
-  return local.split(/[._-]+/).filter(Boolean).map(part => `${part[0]?.toUpperCase() || ''}${part.slice(1)}`).join(' ') || 'User'
-}
+const page: React.CSSProperties = { minHeight: '100vh', background: 'linear-gradient(135deg,#050B14,#07111F 52%,#0B1628)', display: 'grid', placeItems: 'center', padding: 24, color: '#F8FAFC' }
+const shell: React.CSSProperties = { width: 'min(920px,100%)', display: 'grid', gridTemplateColumns: 'minmax(280px,.9fr) minmax(320px,1fr)', gap: 24, alignItems: 'stretch' }
+const brand: React.CSSProperties = { border: '1px solid #26364F', background: 'rgba(15,23,42,.82)', borderRadius: 16, padding: 30, display: 'flex', flexDirection: 'column', justifyContent: 'center' }
+const logo: React.CSSProperties = { width: 250, maxWidth: '100%', maxHeight: 110, objectFit: 'contain', marginBottom: 26 }
+const eyebrow: React.CSSProperties = { color: '#10B981', letterSpacing: 4, textTransform: 'uppercase', fontSize: 12, fontWeight: 900 }
+const title: React.CSSProperties = { margin: '10px 0', fontSize: 42, lineHeight: 1.05 }
+const subtitle: React.CSSProperties = { margin: 0, color: '#9DB7D8', fontSize: 16, lineHeight: 1.6 }
+const form: React.CSSProperties = { border: '1px solid #26364F', background: 'rgba(8,17,31,.96)', borderRadius: 16, padding: 28, display: 'grid', gap: 18, alignContent: 'center' }
+const formHead: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 14, marginBottom: 4 }
+const formIcon: React.CSSProperties = { color: '#60A5FA', fontSize: 30 }
+const formTitle: React.CSSProperties = { margin: '5px 0 0', fontSize: 28 }
+const fieldLabel: React.CSSProperties = { display: 'grid', gap: 7, color: '#9DB7D8', fontSize: 13, fontWeight: 900 }
+const input: React.CSSProperties = { width: '100%', borderRadius: 10, border: '1px solid #26364F', background: '#07111F', color: '#F8FAFC', padding: '13px 14px', outline: 'none', fontSize: 16 }
+const submitButton: React.CSSProperties = { border: '1px solid #10B981', background: '#10B981', color: '#00150E', borderRadius: 12, padding: 14, fontWeight: 900, cursor: 'pointer', fontSize: 16 }

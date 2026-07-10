@@ -1,255 +1,206 @@
-# Drake AI Enterprise Platform — Deployment Guide
+# Drake AI Deployment Guide
 
-## ══ OPTION 1: Docker Compose (Recommended) ══════════════════════════
+This project now has two production deployment targets:
 
-### Prerequisites
-- Docker Desktop (Windows/Mac) or Docker + Docker Compose (Linux)
-- 8 GB RAM minimum, 16 GB recommended
-- 20 GB disk space
+- AWS first: `docker-compose.aws.yml`
+- Local server later: `docker-compose.local-server.yml`
 
-### Steps
+Both targets run the same application stack:
 
-```bash
-# 1. Clone / extract the project
-cd drake-ai
+- Nginx reverse proxy
+- React frontend
+- FastAPI backend
+- PostgreSQL database
+- Redis
+- MinIO object storage
 
-# 2. Copy environment files
-cp .env.example .env
-cp frontend/.env.example frontend/.env
+## Default Admin Login
 
-# 3. Edit .env — set your Anthropic API key (optional, enables Drake GPT)
-#    ANTHROPIC_API_KEY=sk-ant-...
-
-# 4. Start all services
-docker compose up --build -d
-
-# 5. Check logs
-docker compose logs -f backend
-
-# 6. Access the application
-#    Frontend:  http://localhost:3000
-#    API Docs:  http://localhost:8000/docs
-#    MinIO:     http://localhost:9001  (user: drakeai_minio / drakeai_minio_secret)
+```text
+Username: Drake6105
+Password: Drake123@
 ```
 
-### Default Login
-| Field    | Value               |
-|----------|---------------------|
-| Email    | admin@drakeai.com   |
-| Password | Drake@2024          |
+## AWS Deployment
 
-### Stop / Restart
-```bash
-docker compose down          # stop
-docker compose down -v       # stop + delete data volumes
-docker compose restart       # restart all
-docker compose restart backend  # restart only backend
-```
+Use this when deploying to an AWS EC2 server.
 
----
-
-## ══ OPTION 2: Manual Local Setup ═══════════════════════════════════
-
-### A. Database (PostgreSQL 15)
-
-**Windows:** Download from https://www.postgresql.org/download/windows/
-**Mac:** `brew install postgresql@15 && brew services start postgresql@15`
-**Linux:** `sudo apt install postgresql-15`
-
-```sql
--- Connect as postgres superuser then run:
-CREATE DATABASE drakeai;
-CREATE USER drakeai WITH PASSWORD 'drakeai_secret';
-GRANT ALL PRIVILEGES ON DATABASE drakeai TO drakeai;
-```
-
-### B. Redis (optional — for caching)
-
-**Windows:** https://github.com/microsoftarchive/redis/releases
-**Mac:** `brew install redis && brew services start redis`
-**Linux:** `sudo apt install redis-server`
-
-### C. Backend (Python 3.11+)
+1. Install Docker and Docker Compose on the EC2 instance.
+2. Open inbound ports in the EC2 security group:
+   - `80` for HTTP
+   - `443` later if you add TLS
+   - SSH only from your IP
+3. Copy the project to the EC2 instance.
+4. Create the AWS environment file:
 
 ```bash
-cd backend
+cp .env.aws.example .env.aws
+```
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate          # Linux/Mac
-# OR: venv\Scripts\activate       # Windows
+5. Edit `.env.aws`:
 
-# Install dependencies
-pip install -r requirements.txt
+```text
+POSTGRES_PASSWORD=your-strong-postgres-password
+SECRET_KEY=your-long-random-jwt-secret
+MINIO_SECRET_KEY=your-strong-minio-password
+PUBLIC_ORIGIN=https://your-domain.example.com
+CORS_ORIGINS=["https://your-domain.example.com","http://your-ec2-public-dns"]
+VITE_API_URL=/
+```
 
-# Configure environment
-cp .env.example .env
-# Edit .env — update DATABASE_URL if needed
+6. Start AWS deployment:
 
-# Run database migrations
+```bash
+docker compose --env-file .env.aws -f docker-compose.aws.yml up -d --build
+```
+
+On Windows PowerShell:
+
+```powershell
+.\scripts\deploy-aws.ps1
+```
+
+7. Check status:
+
+```bash
+docker compose --env-file .env.aws -f docker-compose.aws.yml ps
+docker compose --env-file .env.aws -f docker-compose.aws.yml logs -f backend
+```
+
+The app will be available at:
+
+```text
+http://your-ec2-public-dns
+```
+
+### AWS RDS Option
+
+By default, `docker-compose.aws.yml` runs PostgreSQL inside Docker on the EC2 host.
+
+If you later use AWS RDS, set `DATABASE_URL` in `.env.aws`:
+
+```text
+DATABASE_URL=postgresql://drakeai:your-password@your-rds-endpoint:5432/drakeai
+```
+
+The backend will use RDS without code changes.
+
+## Local Server Deployment
+
+Use this when moving from AWS to an office/local server.
+
+1. Install Docker and Docker Compose on the local server.
+2. Copy the project to the local server.
+3. Create the local server environment file:
+
+```bash
+cp .env.local-server.example .env.local-server
+```
+
+4. Edit `.env.local-server`:
+
+```text
+POSTGRES_PASSWORD=your-local-postgres-password
+SECRET_KEY=your-local-server-jwt-secret
+MINIO_SECRET_KEY=your-local-minio-password
+LOCAL_SERVER_ORIGIN=http://192.168.1.100
+CORS_ORIGINS=["http://192.168.1.100","http://localhost","http://127.0.0.1"]
+VITE_API_URL=/
+```
+
+5. Start local server deployment:
+
+```bash
+docker compose --env-file .env.local-server -f docker-compose.local-server.yml up -d --build
+```
+
+On Windows PowerShell:
+
+```powershell
+.\scripts\deploy-local-server.ps1
+```
+
+The app will be available at:
+
+```text
+http://192.168.1.100
+```
+
+Replace `192.168.1.100` with the actual local server IP address.
+
+## Database Migration and Seed
+
+Both AWS and local-server compose files run this automatically when backend starts:
+
+```bash
 alembic upgrade head
-
-# Seed demo data (admin user + sample wells)
-python -c "from app.core.seed import seed_db; seed_db()"
-
-# Start the backend
-uvicorn app.main:app --reload --port 8000
+python -c 'from app.core.seed import seed_db; seed_db()'
 ```
 
-Backend will be available at: http://localhost:8000
-Swagger API docs at: http://localhost:8000/docs
+This creates/updates tables and ensures the admin user exists.
 
-### D. Frontend (Node.js 18+)
+## Backup PostgreSQL
+
+AWS:
 
 ```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Configure environment
-cp .env.example .env
-# VITE_API_URL=http://localhost:8000
-
-# Start development server
-npm run dev
+docker compose --env-file .env.aws -f docker-compose.aws.yml exec postgres pg_dump -U drakeai drakeai > drakeai_backup.sql
 ```
 
-Frontend will be available at: http://localhost:3000
-
----
-
-## ══ OPTION 3: Cloud Deployment ════════════════════════════════════
-
-### Render.com (Free Tier)
-
-**Backend:**
-1. New Web Service → Connect GitHub repo
-2. Root Directory: `backend`
-3. Build Command: `pip install -r requirements.txt`
-4. Start Command: `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-5. Add environment variables from `.env`
-
-**Frontend:**
-1. New Static Site → Connect GitHub repo
-2. Root Directory: `frontend`
-3. Build Command: `npm install && npm run build`
-4. Publish Directory: `dist`
-5. Add env: `VITE_API_URL=https://your-backend.onrender.com`
-
-### Railway.app
+Local server:
 
 ```bash
-# Install Railway CLI
-npm i -g @railway/cli
-railway login
-
-# Deploy backend
-cd backend
-railway init
-railway up
-
-# Deploy frontend
-cd ../frontend
-railway init
-railway up
+docker compose --env-file .env.local-server -f docker-compose.local-server.yml exec postgres pg_dump -U drakeai drakeai > drakeai_backup.sql
 ```
 
-### AWS / Azure / GCP (Production)
-
-Use `docker-compose.prod.yml`:
+## Restore PostgreSQL
 
 ```bash
-# Set production secrets
-export POSTGRES_PASSWORD=your_strong_password
-export SECRET_KEY=your_64_char_random_string
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# Deploy
-docker compose -f docker-compose.prod.yml up -d
+docker compose --env-file .env.local-server -f docker-compose.local-server.yml exec -T postgres psql -U drakeai drakeai < drakeai_backup.sql
 ```
 
----
+Use `.env.aws` and `docker-compose.aws.yml` instead when restoring on AWS.
 
-## ══ API REFERENCE ═══════════════════════════════════════════════
+## Health Checks
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/health` | GET | Health check |
-| `/api/auth/login` | POST | Login → JWT token |
-| `/api/auth/register` | POST | Register new user |
-| `/api/auth/me` | GET | Current user info |
-| `/api/projects/` | GET/POST | List / create projects |
-| `/api/projects/{id}` | GET/DELETE | Get / delete project |
-| `/api/wells/project/{id}` | GET | List wells in project |
-| `/api/wells/` | POST | Create well |
-| `/api/wells/{id}` | GET/DELETE | Get / delete well |
-| `/api/curves/well/{id}` | GET | List curves for well |
-| `/api/curves/{id}/data` | GET | Get curve data (depths + values) |
-| `/api/files/upload/{well_id}` | POST | Upload LAS/DLIS/CSV file |
-| `/api/files/well/{id}` | GET | List files for well |
-| `/api/ai/run` | POST | Run AI petrophysics module |
-| `/api/ai/well/{id}` | GET | List AI jobs for well |
-| `/api/ai/{id}` | GET | Poll job status + progress |
-| `/api/gpt/chat` | POST | Drake GPT chat |
-| `/api/reports/generate` | POST | Generate PDF/LAS report |
+Frontend:
 
-### AI Module Types
-```
-missing_log         → Missing Log Prediction (LSTM + RF)
-facies              → Facies Classification (Random Forest)
-formation_tops      → Formation Tops Detection (CNN)
-porosity            → Effective Porosity (GBM)
-permeability        → Permeability (RF + FZI)
-water_saturation    → Water Saturation (Archie + NN)
-auto_splice         → Auto Splice (depth-match merge)
+```text
+http://your-host/
 ```
 
----
+Backend:
 
-## ══ ADDING ANTHROPIC API KEY ════════════════════════════════════
+```text
+http://your-host/api/health
+```
 
-Drake GPT uses Claude claude-sonnet-4-20250514 for real AI responses.
+API docs:
 
-1. Get API key from https://console.anthropic.com
-2. Add to `.env`:
-   ```
-   ANTHROPIC_API_KEY=sk-ant-api03-...
-   ```
-3. Restart backend: `docker compose restart backend`
+```text
+http://your-host/docs
+```
 
-Without an API key, Drake GPT uses rule-based petrophysics responses (still works).
+## Stop / Restart
 
----
+AWS:
 
-## ══ TROUBLESHOOTING ══════════════════════════════════════════════
-
-**DB connection fails:**
 ```bash
-docker compose logs postgres
-# Check DATABASE_URL in .env matches postgres container credentials
+docker compose --env-file .env.aws -f docker-compose.aws.yml restart
+docker compose --env-file .env.aws -f docker-compose.aws.yml down
 ```
 
-**Backend won't start:**
+Local server:
+
 ```bash
-docker compose logs backend
-# Usually a missing package or DB not ready
+docker compose --env-file .env.local-server -f docker-compose.local-server.yml restart
+docker compose --env-file .env.local-server -f docker-compose.local-server.yml down
 ```
 
-**Frontend can't reach API:**
-```bash
-# Check VITE_API_URL in frontend/.env
-# Ensure backend is running: curl http://localhost:8000/api/health
-```
+## Production Notes
 
-**LAS file parse fails:**
-```bash
-# Check file encoding — lasio supports LAS 1.2 and 2.0
-# Null value issues: lasio auto-detects -9999.25 and -999.25
-```
-
-**Reset everything:**
-```bash
-docker compose down -v
-docker compose up --build -d
-```
+- Use HTTPS before exposing real users publicly.
+- Keep `.env.aws` and `.env.local-server` private.
+- Commit only `.env.example`, `.env.aws.example`, and `.env.local-server.example`.
+- Use long random values for `SECRET_KEY`, `POSTGRES_PASSWORD`, and `MINIO_SECRET_KEY`.
+- Restrict AWS security group access to only required ports.

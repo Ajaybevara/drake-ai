@@ -3,7 +3,7 @@ from typing import List
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "sqlite:///./drakeai.db"
+    DATABASE_URL: str = "postgresql://drakeai:Drake_AI_Kalpra123@127.0.0.1:5432/drakeai"
     REDIS_URL: str = "redis://localhost:6379/0"
 
     SECRET_KEY: str = "change-in-production"

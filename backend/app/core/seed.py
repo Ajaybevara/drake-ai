@@ -1,15 +1,76 @@
 """Seed initial data: admin user + demo project + wells"""
+import os
 import numpy as np
+from sqlalchemy import inspect, text
 from app.core.database import SessionLocal, engine, Base
 from app.core.security import hash_password
 from app.models import User, Project, Well, Curve, FormationTop, UserRole
 import random
 
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "Drake6105")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "Drake123@")
+ADMIN_FULL_NAME = os.getenv("ADMIN_FULL_NAME", "Admin")
+
+ALL_ACCESS_MODULES = [
+    "log-visualization",
+    "missing-log-prediction",
+    "ai-facies-classification",
+    "ai-formation-tops",
+    "ai-parameter-prediction",
+    "ai-uncertainty",
+    "auto-splicer",
+    "seismic-frequency-enhancer",
+    "production-intelligence",
+    "ccus-screening",
+    "geothermal-screening",
+    "drake-slm-gpt",
+    "drake-ocr",
+]
+
+
+def ensure_access_schema():
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("users")}
+    if "access_modules" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE users ADD COLUMN access_modules JSON DEFAULT '[]'"))
+
+
+def ensure_admin_user(db):
+    admin = db.query(User).filter(User.email == ADMIN_USERNAME).first()
+    if not admin:
+        admin = User(
+            email=ADMIN_USERNAME,
+            full_name=ADMIN_FULL_NAME,
+            hashed_password=hash_password(ADMIN_PASSWORD),
+            role=UserRole.admin,
+            avatar_initials="A",
+            is_active=True,
+            access_modules=ALL_ACCESS_MODULES,
+        )
+        db.add(admin)
+    else:
+        admin.full_name = ADMIN_FULL_NAME
+        admin.hashed_password = hash_password(ADMIN_PASSWORD)
+        admin.role = UserRole.admin
+        admin.avatar_initials = "A"
+        admin.is_active = True
+        admin.access_modules = ALL_ACCESS_MODULES
+    db.commit()
+    db.refresh(admin)
+    return admin
+
 
 def seed_db():
     Base.metadata.create_all(bind=engine)
+    ensure_access_schema()
     db = SessionLocal()
     try:
+        ensure_admin_user(db)
+        print(f"[OK] Admin user ready: {ADMIN_USERNAME}")
+
         # ── Admin user ──────────────────────────────────────────────────────
         if not db.query(User).filter(User.email == "admin@drakeai.com").first():
             admin = User(
@@ -19,6 +80,7 @@ def seed_db():
                 role=UserRole.admin,
                 avatar_initials="MY",
                 is_active=True,
+                access_modules=ALL_ACCESS_MODULES,
             )
             db.add(admin)
             db.commit()

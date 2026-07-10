@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useStore } from '../store'
 import { getCurrentLocalProjectFromFolder, getSavedModuleViewState, readProjectResultPayload, saveModuleViewStateToLocalProject, uploadFilesToLocalProject } from '../utils/localProjectStorage'
+import { accessDeniedMessage, canAccessPath } from '../utils/accessControl'
 
 const MODULES = [
   { label: 'Log Visualization', path: '/petrophysics/log-visualization' },
@@ -22,7 +23,7 @@ const MODULES = [
 export default function DashboardPage() {
   const navigate = useNavigate()
   const inputRef = useRef<HTMLInputElement>(null)
-  const { enterpriseProject, setEnterpriseProject, theme } = useStore()
+  const { enterpriseProject, setEnterpriseProject, theme, user } = useStore()
   const isLight = theme === 'light'
   const palette = dashboardPalette(isLight)
 
@@ -39,6 +40,9 @@ export default function DashboardPage() {
     exports: project?.exported_files?.length || 0,
     lastActivity: project?.module_history?.[0]?.timestamp || project?.updated_at,
   }), [project])
+  const openModule = (module: typeof MODULES[number]) => {
+    navigate(module.path)
+  }
 
   const uploadFiles = async (files: FileList | null) => {
     if (!project || !files?.length) return
@@ -113,7 +117,15 @@ export default function DashboardPage() {
           </div>
         </div>
         <div style={moduleGrid}>
-          {MODULES.map(module => <button key={module.path} style={palette.moduleButton} onClick={() => navigate(module.path)}>{module.label}</button>)}
+          {MODULES.map(module => {
+            const locked = !canAccessPath(user?.role, user?.accessModules, module.path)
+            return (
+              <button key={module.path} title={locked ? accessDeniedMessage(module.label) : module.label} style={locked ? palette.lockedModuleButton : palette.moduleButton} onClick={() => openModule(module)}>
+                {locked && <i className="fas fa-lock" style={{ marginRight: 8, fontSize: 12 }}></i>}
+                {module.label}
+              </button>
+            )
+          })}
         </div>
       </section>
 
@@ -206,6 +218,7 @@ const sectionHead: React.CSSProperties = { display: 'flex', justifyContent: 'spa
 const panelTitle: React.CSSProperties = { margin: '6px 0 18px', fontSize: 28, lineHeight: 1.18 }
 const moduleGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 10 }
 const moduleButton: React.CSSProperties = { borderRadius: 10, border: '1px solid #26364F', background: '#08111F', color: '#F8FAFC', padding: 13, cursor: 'pointer', fontWeight: 900, textAlign: 'left' }
+const lockedModuleButton: React.CSSProperties = { ...moduleButton, color: '#64748B', borderStyle: 'dashed', background: 'rgba(8,17,31,.72)' }
 const twoCol: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(360px,1fr))', gap: 16 }
 const table: React.CSSProperties = { width: '100%', minWidth: 860, borderCollapse: 'collapse', fontSize: 15, tableLayout: 'fixed' }
 const clickableRow: React.CSSProperties = { cursor: 'pointer' }
@@ -225,6 +238,7 @@ function dashboardPalette(isLight: boolean) {
     ghostButton: { ...ghostButton, border: `1px solid ${isLight ? '#CBD5E1' : '#26364F'}`, background: isLight ? '#FFFFFF' : '#08111F', color: text } as React.CSSProperties,
     panel: { ...panel, border: `1px solid ${border}`, background: isLight ? '#FFFFFF' : 'rgba(15,23,42,.82)' } as React.CSSProperties,
     moduleButton: { ...moduleButton, border: `1px solid ${isLight ? '#CBD5E1' : '#26364F'}`, background: isLight ? '#F8FAFC' : '#08111F', color: text } as React.CSSProperties,
+    lockedModuleButton: { ...lockedModuleButton, border: `1px dashed ${isLight ? '#CBD5E1' : '#26364F'}`, background: isLight ? '#F8FAFC' : 'rgba(8,17,31,.72)', color: '#64748B' } as React.CSSProperties,
     stat: { ...stat, border: `1px solid ${border}`, background: isLight ? '#FFFFFF' : 'rgba(15,23,42,.84)' } as React.CSSProperties,
     statLabel: { ...statLabel, color: mutedColor } as React.CSSProperties,
     statValue: { ...statValue, color: text } as React.CSSProperties,

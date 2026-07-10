@@ -2,19 +2,20 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useStore } from '../../store'
-import { saveProjectFile } from '../../utils/drakeProjectFile'
+import { ACCESS_MODULES, accessDeniedMessage, canAccessPath } from '../../utils/accessControl'
+import { authApi } from '../../services/api'
 
 const NAV_ITEMS = [
-  { label: 'Petrophysics', path: '/petrophysics/log-visualization' },
-  { label: 'Seismic', path: '/seismic/frequency-enhancer' },
-  { label: 'Production', path: '/production/intelligence' },
-  { label: 'CCUS', path: '/ccus/ai-preliminary-screening' },
-  { label: 'Geothermal', path: '/geothermal/log-based-screening' },
-  { label: 'Drake AI Digitizer', path: '/digitizer/drake-slm-gpt' },
+  { label: 'Petrophysics', path: '/petrophysics/log-visualization', group: 'Petrophysics' },
+  { label: 'Seismic', path: '/seismic/frequency-enhancer', group: 'Seismic' },
+  { label: 'Production', path: '/production/intelligence', group: 'Production' },
+  { label: 'CCUS', path: '/ccus/ai-preliminary-screening', group: 'CCUS' },
+  { label: 'Geothermal', path: '/geothermal/log-based-screening', group: 'Geothermal' },
+  { label: 'Drake AI Digitizer', path: '/digitizer/drake-slm-gpt', group: 'Drake AI Digitizer' },
 ]
 
 export default function TopBar() {
-  const { user, logout, theme, toggleTheme, activeLocalProject, activeProjectFileHandle, setActiveProjectFileHandle, markProjectSaved, projectDirty, enterpriseProject } = useStore()
+  const { user, logout, theme, toggleTheme, enterpriseProject } = useStore()
   const [profileOpen, setProfileOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -26,31 +27,21 @@ export default function TopBar() {
   const isLight = theme === 'light'
   const displayName = user?.full_name || user?.email?.split('@')[0] || 'User'
   const roleLabel = user?.role ? `Drake AI ${user.role.charAt(0).toUpperCase()}${user.role.slice(1)}` : 'Drake AI User'
+  const visibleNavItems = NAV_ITEMS
+    .map(item => {
+      const firstGroupModule = ACCESS_MODULES.find(module => module.group === item.group && canAccessPath(user?.role, user?.accessModules, module.path))
+      const defaultGroupModule = ACCESS_MODULES.find(module => module.group === item.group)
+      return { ...item, path: firstGroupModule?.path || defaultGroupModule?.path || item.path, locked: !firstGroupModule }
+    })
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await authApi.logout()
+    } catch {
+      undefined
+    }
     logout()
     navigate('/login')
-  }
-
-  const handleSaveProject = async () => {
-    if (enterpriseProject) {
-      toast.success('Project state is saved automatically in project.json')
-      navigate('/dashboard')
-      return
-    }
-    if (!activeLocalProject) {
-      toast.error('Create or open a project first')
-      navigate('/')
-      return
-    }
-    try {
-      const result = await saveProjectFile(activeLocalProject, activeProjectFileHandle)
-      setActiveProjectFileHandle(result.handle, result.fileName)
-      markProjectSaved()
-      toast.success(result.usedFallback ? 'Project downloaded as .drake file' : 'Project saved to local disk')
-    } catch (error: any) {
-      if (error?.name !== 'AbortError') toast.error(error?.message || 'Project save failed')
-    }
   }
 
   const submitSearch = () => {
@@ -98,14 +89,16 @@ export default function TopBar() {
   return (
     <div style={{ height: 42, background: isLight ? '#FFFFFF' : '#0B111A', borderBottom: `1px solid ${isLight ? '#CBD5E1' : '#1F2A3A'}`, display: 'flex', alignItems: 'center', padding: '0 10px', gap: 0, flexShrink: 0, zIndex: 100, overflow: 'visible', boxShadow: isLight ? '0 1px 0 rgba(15,23,42,.06)' : '0 1px 0 rgba(255,255,255,.03)' }}>
       <nav style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 6px', flex: '1 1 auto', minWidth: 0, overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'none' }}>
-        {NAV_ITEMS.map(item => {
+        {visibleNavItems.map(item => {
           const active = isActive(item)
+          const locked = item.locked
           return (
             <button
               key={item.label}
               onClick={() => navigate(item.path)}
               onMouseEnter={() => setHoveredNav(item.label)}
               onMouseLeave={() => setHoveredNav(null)}
+              title={locked ? accessDeniedMessage(item.label) : item.label}
               style={{
                 padding: '10px 13px',
                 fontSize: 15,
@@ -119,13 +112,14 @@ export default function TopBar() {
                   : hoveredNav === item.label
                     ? isLight ? '#EEF2F7' : 'rgba(148,163,184,.12)'
                     : 'transparent',
-                color: active ? (isLight ? '#DA2626' : '#F8FAFC') : isLight ? '#334155' : '#E2E8F0',
+                color: active ? (isLight ? '#DA2626' : '#F8FAFC') : locked ? '#64748B' : isLight ? '#334155' : '#E2E8F0',
                 borderBottom: active ? '3px solid #DA2626' : '3px solid transparent',
                 transition: 'all .15s',
                 whiteSpace: 'nowrap',
                 fontFamily: 'DM Sans,sans-serif',
               }}
             >
+              {locked && <i className="fas fa-lock" style={{ fontSize: 11, marginRight: 7 }}></i>}
               {item.label}
             </button>
           )
@@ -133,16 +127,18 @@ export default function TopBar() {
       </nav>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 8, flexShrink: 0 }}>
+        {user?.role === 'admin' && (
+          <button onClick={() => navigate('/admin')} title="Admin panel" style={{ height: 32, borderRadius: 6, background: location.pathname.startsWith('/admin') ? 'rgba(218,38,38,.24)' : isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${location.pathname.startsWith('/admin') ? '#DA2626' : isLight ? '#CBD5E1' : '#223047'}`, color: isLight ? '#0F172A' : '#F8FAFC', padding: '0 11px', cursor: 'pointer', fontWeight: 900, whiteSpace: 'nowrap', fontSize: 14 }}>
+            <i className="fas fa-user-shield" style={{ fontSize: 13, marginRight: 7 }}></i>
+            Admin Panel
+          </button>
+        )}
         {enterpriseProject && (
           <button onClick={() => navigate('/dashboard')} title={enterpriseProject.project_path} style={{ height: 32, maxWidth: 230, borderRadius: 6, background: isLight ? '#ECFDF5' : 'rgba(16,185,129,.12)', border: '1px solid rgba(16,185,129,.45)', color: isLight ? '#047857' : '#A7F3D0', padding: '0 11px', cursor: 'pointer', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 15, lineHeight: 1.2 }}>
             <i className="fas fa-folder-open" style={{ fontSize: 13, marginRight: 7 }}></i>
             {enterpriseProject.project_name}
           </button>
         )}
-        <button onClick={handleSaveProject} title="Save Project to Local Disk" style={{ height: 32, borderRadius: 6, background: projectDirty ? 'linear-gradient(135deg,#EF4444,#DA2626)' : isLight ? '#F1F5F9' : '#0E1622', border: `1px solid ${projectDirty ? '#EF4444' : isLight ? '#CBD5E1' : '#223047'}`, color: projectDirty ? '#FFFFFF' : isLight ? '#0F172A' : '#F8FAFC', display: 'flex', alignItems: 'center', gap: 7, padding: '0 12px', cursor: 'pointer', fontWeight: 800, whiteSpace: 'nowrap', fontSize: 15, lineHeight: 1.2 }}>
-          <i className="fas fa-save" style={{ fontSize: 13 }}></i>
-          Save Project
-        </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {searchOpen && (
             <input

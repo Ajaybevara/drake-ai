@@ -21,7 +21,7 @@ api.interceptors.response.use(
     if (err.response?.status === 401) {
       localStorage.removeItem('drake_token')
       localStorage.removeItem('drake_user')
-      window.location.href = '/login'
+      window.location.href = window.location.pathname.startsWith('/admin') ? '/admin-login' : '/login'
     }
     return Promise.reject(err)
   }
@@ -30,8 +30,15 @@ api.interceptors.response.use(
 // ── Auth ──────────────────────────────────────────────────────────────────
 export const authApi = {
   login:    (email: string, password: string) => api.post('/auth/login', { email, password }),
+  logout:   () => api.post('/auth/logout'),
   register: (data: any) => api.post('/auth/register', data),
   me:       () => api.get('/auth/me'),
+  listUsers: () => api.get('/auth/admin/users'),
+  listActivity: (userId?: number) => api.get('/auth/admin/activity', { params: userId ? { user_id: userId } : undefined }),
+  createUser: (data: any) => api.post('/auth/admin/users', data),
+  updateUser: (id: number, data: any) => api.put(`/auth/admin/users/${id}`, data),
+  updateUserStatus: (id: number, active: boolean) => api.patch(`/auth/admin/users/${id}/status`, null, { params: { active } }),
+  deleteUser: (id: number) => api.delete(`/auth/admin/users/${id}`),
 }
 
 // ── Projects ──────────────────────────────────────────────────────────────

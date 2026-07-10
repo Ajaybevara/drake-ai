@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rock Physics Guided ML</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">Drake AI</div>
+    <div class="section-title">Petrophysics</div>
+    <div class="nav active">Rock Physics Guided ML</div>
+    <div class="nav">Prediction Results</div>
+    <div class="nav">Zone Summary</div>
+  </aside>
+
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">Petrophysics AI</div>
+        <h1>Rock Physics Guided ML</h1>
+      </div>
+      <div class="actions">
+        <button id="sampleBtn">Load Sample</button>
+        <label class="upload-btn">Upload LAS<input id="lasInput" type="file" accept=".las"></label>
+      </div>
+    </header>
+
+    <section class="grid">
+      <div class="panel config">
+        <h2>Configuration</h2>
+        <label>Target Property
+          <select id="target">
+            <option value="PHIE">Effective Porosity</option>
+            <option value="SW">Water Saturation</option>
+            <option value="VSH">Shale Volume</option>
+            <option value="KLOG">Permeability</option>
+            <option value="FACIES">Facies</option>
+          </select>
+        </label>
+        <label>Zone Count
+          <input id="zoneCount" type="number" min="1" max="8" value="3">
+        </label>
+        <button id="runBtn" class="primary">Run AI/ML Prediction</button>
+        <div id="status" class="status">Load sample data or upload a LAS file.</div>
+      </div>
+
+      <div class="panel chart-panel">
+        <div class="panel-head">
+          <div>
+            <h2>Prediction Track</h2>
+            <p id="chartSubtitle">Waiting for prediction.</p>
+          </div>
+          <div id="badges" class="badges"></div>
+        </div>
+        <canvas id="predictionChart" width="980" height="330"></canvas>
+      </div>
+    </section>
+
+    <section class="grid two">
+      <div class="panel">
+        <h2>Feature Importance</h2>
+        <div id="importance" class="bars"></div>
+      </div>
+      <div class="panel">
+        <h2>Zone Results</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Zone</th><th>Depth From</th><th>Depth To</th><th>Samples</th><th>Result</th><th>Confidence</th></tr></thead>
+            <tbody id="zones"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Prediction Preview</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Depth</th><th>Zone</th><th>Prediction</th><th>Measured</th><th>P10</th><th>P90</th><th>Confidence</th></tr></thead>
+          <tbody id="preview"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

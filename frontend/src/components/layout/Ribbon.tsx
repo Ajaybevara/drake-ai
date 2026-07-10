@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useStore } from '../../store'
 import { uploadFilesToLocalProject } from '../../utils/localProjectStorage'
+import { canAccessPath } from '../../utils/accessControl'
 
 export default function Ribbon() {
-  const { setActiveTab, theme, enterpriseProject, setEnterpriseProject } = useStore()
+  const { setActiveTab, theme, enterpriseProject, setEnterpriseProject, user } = useStore()
   const navigate = useNavigate()
   const isLight = theme === 'light'
-  const [showWellInfo, setShowWellInfo] = useState(false)
+  const canOpenWellLogs = canAccessPath(user?.role, user?.accessModules, '/petrophysics/log-visualization')
 
   const Dropdown = ({ label, items }: any) => {
     const [open, setOpen] = useState(false)
@@ -73,9 +74,18 @@ export default function Ribbon() {
           { label: 'Upload / Import Data', icon: 'fas fa-cloud-arrow-up', onClick: () => document.getElementById('global-file-upload')?.click() },
           { label: 'Export UI Mockup', icon: 'fas fa-file-export', onClick: () => toast.success('Export panel opened') },
         ]} />
-        <Dropdown label="Well" items={[
-          { label: 'Well Logs', icon: 'fas fa-file-lines', onClick: () => { setActiveTab('Log Viewer'); navigate('/petrophysics/log-visualization') } },
-        ]} />
+        {canOpenWellLogs && (
+          <Dropdown label="Well" items={[
+            {
+              label: 'Well Logs',
+              icon: 'fas fa-file-lines',
+              onClick: () => {
+                setActiveTab('Log Viewer')
+                navigate('/petrophysics/log-visualization')
+              },
+            },
+          ]} />
+        )}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', paddingRight: 12 }}>
       </div>
