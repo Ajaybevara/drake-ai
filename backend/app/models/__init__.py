@@ -54,6 +54,7 @@ class User(Base):
     projects = relationship("Project", back_populates="owner")
     ai_jobs = relationship("AIJob", back_populates="created_by_user")
     activities = relationship("UserActivity", back_populates="user", cascade="all, delete-orphan")
+    sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
 
 
 class UserActivity(Base):
@@ -67,6 +68,23 @@ class UserActivity(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     user = relationship("User", back_populates="activities")
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(String(80), unique=True, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    ip_address = Column(String(80))
+    user_agent = Column(String(500))
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    last_seen_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    logged_out_at = Column(DateTime(timezone=True))
+
+    user = relationship("User", back_populates="sessions")
 
 
 # ── Project ──────────────────────────────────────────────────────────────────

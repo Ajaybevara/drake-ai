@@ -1,9 +1,14 @@
+from datetime import datetime, timedelta
+from uuid import uuid4
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
+from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import verify_password, create_access_token, hash_password, get_current_user
-from app.models import User, UserActivity, UserRole
+from app.core.security import bearer_scheme, create_access_token, decode_token, get_current_user, hash_password, verify_password
+from app.models import User, UserActivity, UserRole, UserSession
 
 router = APIRouter()
 
@@ -97,6 +102,47 @@ def log_user_activity(db: Session, user: User, action: str, request: Request) ->
     db.commit()
 
 
+def request_identity(request: Request) -> tuple[str | None, str]:
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    ip_address = forwarded_for.split(",")[0].strip() if forwarded_for else (request.client.host if request.client else None)
+    return ip_address, request.headers.get("user-agent", "")[:500]
+
+
+def deactivate_expired_sessions(db: Session, user_id: int) -> None:
+    now = datetime.utcnow()
+    db.query(UserSession).filter(
+        UserSession.user_id == user_id,
+        UserSession.is_active == True,
+        UserSession.expires_at <= now,
+    ).update(
+        {
+            UserSession.is_active: False,
+            UserSession.logged_out_at: now,
+        },
+        synchronize_session=False,
+    )
+    db.commit()
+
+
+def create_user_session(db: Session, user: User, request: Request) -> UserSession:
+    ip_address, user_agent = request_identity(request)
+    now = datetime.utcnow()
+    session = UserSession(
+        session_id=uuid4().hex,
+        user_id=user.id,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        created_at=now,
+        last_seen_at=now,
+        expires_at=now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        is_active=True,
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return session
+
+
 @router.post("/login", response_model=TokenResponse)
 def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == req.email).first()
@@ -104,8 +150,20 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if not user.is_active:
         raise HTTPException(status_code=401, detail="User account is inactive")
+    deactivate_expired_sessions(db, user.id)
+    active_session = db.query(UserSession).filter(
+        UserSession.user_id == user.id,
+        UserSession.is_active == True,
+    ).order_by(UserSession.created_at.desc()).first()
+    if user.role != UserRole.admin and active_session:
+        log_user_activity(db, user, "login_blocked_active_session", request)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This user is already logged in on another device. Please logout from the previous device and then login on this device.",
+        )
+    session = create_user_session(db, user, request)
     log_user_activity(db, user, "login", request)
-    token = create_access_token({"sub": str(user.id), "role": user.role})
+    token = create_access_token({"sub": str(user.id), "role": user.role, "sid": session.session_id})
     return {
         "access_token": token,
         "token_type": "bearer",
@@ -116,9 +174,23 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
 @router.post("/logout")
 def logout(
     request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    payload = decode_token(credentials.credentials)
+    session_id = payload.get("sid")
+    if session_id:
+        session = db.query(UserSession).filter(
+            UserSession.session_id == session_id,
+            UserSession.user_id == current_user.id,
+            UserSession.is_active == True,
+        ).first()
+        if session:
+            session.is_active = False
+            session.logged_out_at = datetime.utcnow()
+            session.last_seen_at = datetime.utcnow()
+            db.commit()
     log_user_activity(db, current_user, "logout", request)
     return {"message": "Logged out"}
 

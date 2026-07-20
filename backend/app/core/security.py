@@ -38,7 +38,7 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ):
-    from app.models import User
+    from app.models import User, UserSession
     payload = decode_token(credentials.credentials)
     user_id: str = payload.get("sub")
     if not user_id:
@@ -46,4 +46,20 @@ def get_current_user(
     user = db.query(User).filter(User.id == int(user_id)).first()
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
+    session_id: str | None = payload.get("sid")
+    if session_id:
+        session = db.query(UserSession).filter(
+            UserSession.session_id == session_id,
+            UserSession.user_id == user.id,
+            UserSession.is_active == True,
+        ).first()
+        if not session:
+            raise HTTPException(status_code=401, detail="Session expired or logged out")
+        if session.expires_at and session.expires_at < datetime.utcnow():
+            session.is_active = False
+            session.logged_out_at = datetime.utcnow()
+            db.commit()
+            raise HTTPException(status_code=401, detail="Session expired or logged out")
+        session.last_seen_at = datetime.utcnow()
+        db.commit()
     return user

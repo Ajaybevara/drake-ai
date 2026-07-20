@@ -53,6 +53,11 @@ def login_user(email: str):
     return data["access_token"]
 
 
+def logout_user(token: str):
+    response = client.post("/api/auth/logout", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+
+
 def test_health():
     response = client.get("/api/health")
     assert response.status_code == 200
@@ -64,6 +69,23 @@ def test_register_and_login():
     register_user(email)
     token = login_user(email)
     assert token is not None
+
+
+def test_single_active_user_session():
+    email = "single_session@drakeai.com"
+    register_user(email)
+    first_token = login_user(email)
+
+    blocked = client.post("/api/auth/login", json={
+        "email": email,
+        "password": "Test@1234",
+    })
+    assert blocked.status_code == 409
+    assert "logout from the previous device" in blocked.json()["detail"]
+
+    logout_user(first_token)
+    second_token = login_user(email)
+    assert second_token is not None
 
 
 def test_create_project():
