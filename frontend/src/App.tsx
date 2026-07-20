@@ -16,6 +16,8 @@ import FaciesClassificationPage from './pages/FaciesClassificationPage'
 import FormationTopsPage from './pages/FormationTopsPage'
 import GeothermalPage from './pages/GeothermalPage'
 import LockedModulePage from './pages/LockedModulePage'
+import DrakeSlmGptPage from './pages/DrakeSlmGptPage'
+import DrakeOcrPage from './pages/DrakeOcrPage'
 import { useStore } from './store'
 import { canAccessPath } from './utils/accessControl'
 
@@ -93,8 +95,8 @@ const userRoutes = [
       { path: 'ccus/ai-preliminary-screening', element: <AccessRoute><UIOnlyModulePage title="AI Preliminary Screening Using Well Logs" kind="ccus" accent="#10B981" /></AccessRoute> },
       { path: 'geothermal/log-based-screening', element: <AccessRoute><GeothermalPage /></AccessRoute> },
 
-      { path: 'digitizer/drake-slm-gpt', element: <AccessRoute><UIOnlyModulePage title="Drake SLM/GPT" kind="digitizer" accent="#EF4444" /></AccessRoute> },
-      { path: 'digitizer/drake-ocr', element: <AccessRoute><UIOnlyModulePage title="Drake OCR" kind="digitizer" accent="#DA2626" /></AccessRoute> },
+      { path: 'digitizer/drake-slm-gpt', element: <AccessRoute><DrakeSlmGptPage /></AccessRoute> },
+      { path: 'digitizer/drake-ocr', element: <AccessRoute><DrakeOcrPage /></AccessRoute> },
 
       { path: '*', element: <Navigate to="/" replace /> },
     ],

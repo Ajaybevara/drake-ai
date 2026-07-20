@@ -18,10 +18,13 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
+    const status = err.response?.status
+    const requestUrl = String(err.config?.url || '')
+    const isAdminRequest = requestUrl.includes('/auth/admin') || window.location.pathname.startsWith('/admin')
+    if (status === 401 || (status === 403 && isAdminRequest)) {
       localStorage.removeItem('drake_token')
       localStorage.removeItem('drake_user')
-      window.location.href = window.location.pathname.startsWith('/admin') ? '/admin-login' : '/login'
+      window.location.href = isAdminRequest ? '/admin-login' : '/login'
     }
     return Promise.reject(err)
   }
@@ -90,6 +93,44 @@ export const aiApi = {
 export const gptApi = {
   chat: (wellId: number, messages: { role: string; content: string }[]) =>
     api.post('/gpt/chat', { well_id: wellId, messages }),
+  projectChat: (messages: { role: string; content: string }[], context: any) =>
+    api.post('/gpt/project-chat', { messages, context }),
+}
+
+export const slmGptApi = {
+  status: () => api.get('/slm-gpt/status'),
+  listWorkspaces: (projectId: string) => api.get('/slm-gpt/workspaces', { params: { project_id: projectId } }),
+  createWorkspace: (name: string, projectId: string) => api.post('/slm-gpt/workspaces', { name, project_id: projectId }),
+  getWorkspace: (workspaceId: string) => api.get(`/slm-gpt/workspaces/${workspaceId}`),
+  uploadDocument: (workspaceId: string, file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post(`/slm-gpt/workspaces/${workspaceId}/upload`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  chat: (workspaceId: string, question: string, documentIds: string[] = [], mode = 'hybrid') =>
+    api.post('/slm-gpt/chat', { workspace_id: workspaceId, question, document_ids: documentIds, mode }),
+}
+
+export const ocrApi = {
+  status: () => api.get('/ocr/status'),
+  extractImage: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post('/ocr/extract-image', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  extractPdf: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post('/ocr/extract-pdf', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  exportText: (text: string, format: 'docx' | 'pdf') =>
+    api.post('/ocr/export', { text, format }),
 }
 
 // ── Reports ───────────────────────────────────────────────────────────────

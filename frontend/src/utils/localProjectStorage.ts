@@ -35,6 +35,41 @@ type SaveExportRequest = {
   content_base64?: string
 }
 
+function storageUserId() {
+  try {
+    const raw = localStorage.getItem('drake_user')
+    if (!raw) return 'guest'
+    const user = JSON.parse(raw)
+    const id = user?.id ?? user?.email ?? user?.full_name ?? 'guest'
+    return String(id).replace(/[^\w.-]/g, '_') || 'guest'
+  } catch {
+    return 'guest'
+  }
+}
+
+function scopedStorageKey(baseKey: string) {
+  return `${baseKey}_${storageUserId()}`
+}
+
+function readStorageJsonWithLegacy<T>(baseKey: string, fallback: T): T {
+  const key = scopedStorageKey(baseKey)
+  const legacyAllowed = storageUserId() !== 'guest'
+  try {
+    let raw = localStorage.getItem(key)
+    if (!raw && legacyAllowed) {
+      raw = localStorage.getItem(baseKey)
+      if (raw) {
+        localStorage.setItem(key, raw)
+        localStorage.removeItem(baseKey)
+      }
+    }
+    return raw ? JSON.parse(raw) as T : fallback
+  } catch {
+    localStorage.removeItem(key)
+    return fallback
+  }
+}
+
 function getPicker() {
   const picker = (window as any).showDirectoryPicker
   if (!picker) throw new Error('Local folder projects require Chrome or Edge with File System Access API support.')
@@ -206,11 +241,7 @@ async function initProjectTree(root: DirectoryHandle) {
 }
 
 function readRegistry(): EnterpriseProject[] {
-  try {
-    return JSON.parse(localStorage.getItem(REGISTRY_KEY) || '[]')
-  } catch {
-    return []
-  }
+  return readStorageJsonWithLegacy<EnterpriseProject[]>(REGISTRY_KEY, [])
 }
 
 function setStorageJson(key: string, value: any) {
@@ -227,7 +258,7 @@ function setStorageJson(key: string, value: any) {
 }
 
 function writeRegistry(projects: EnterpriseProject[]) {
-  setStorageJson(REGISTRY_KEY, projects.map(compactProjectForStorage))
+  setStorageJson(scopedStorageKey(REGISTRY_KEY), projects.map(compactProjectForStorage))
 }
 
 function dedupeUploadedFiles(files: EnterpriseProjectFile[] = []) {
@@ -278,6 +309,22 @@ function compactDashboardState(project: EnterpriseProject) {
   return { ...dashboardState, module_views: compactViews }
 }
 
+function assistantResultPreview(value: any, depth = 0): any {
+  if (value == null) return value
+  if (typeof value === 'string') return value.length > 280 ? `${value.slice(0, 280)}...` : value
+  if (typeof value === 'number' || typeof value === 'boolean') return value
+  if (Array.isArray(value)) {
+    const items = value.slice(0, 5).map(item => assistantResultPreview(item, depth + 1))
+    return value.length > 5 ? [...items, `...${value.length - 5} more item(s)`] : items
+  }
+  if (typeof value === 'object') {
+    if (depth >= 2) return '[nested result data]'
+    const entries = Object.entries(value).slice(0, 12)
+    return Object.fromEntries(entries.map(([key, item]) => [key, assistantResultPreview(item, depth + 1)]))
+  }
+  return String(value)
+}
+
 export function compactProjectForStorage(project: EnterpriseProject): EnterpriseProject {
   const normalized = normalizeProject(project)
   return {
@@ -296,9 +343,9 @@ function rememberProject(project: EnterpriseProject) {
   const registry = [compact, ...readRegistry().filter(item => item.project_id !== normalized.project_id)]
   writeRegistry(registry)
   try {
-    setStorageJson(CURRENT_PROJECT_KEY, compact)
+    setStorageJson(scopedStorageKey(CURRENT_PROJECT_KEY), compact)
   } catch {
-    setStorageJson(CURRENT_PROJECT_KEY, {
+    setStorageJson(scopedStorageKey(CURRENT_PROJECT_KEY), {
       ...compact,
       uploaded_files: [],
       generated_results: [],
@@ -324,17 +371,24 @@ export function deleteLocalProject(projectId: string) {
   writeRegistry(registry)
   const current = getCurrentLocalProject()
   if (current?.project_id === projectId) {
-    localStorage.removeItem(CURRENT_PROJECT_KEY)
+    localStorage.removeItem(scopedStorageKey(CURRENT_PROJECT_KEY))
   }
 }
 
 export function getCurrentLocalProject() {
-  try {
-    const raw = localStorage.getItem(CURRENT_PROJECT_KEY)
-    return raw ? normalizeProject(JSON.parse(raw) as EnterpriseProject) : null
-  } catch {
-    return null
-  }
+  return normalizeProjectOrNull(readStorageJsonWithLegacy<EnterpriseProject | null>(CURRENT_PROJECT_KEY, null))
+}
+
+export function persistCurrentLocalProject(project: EnterpriseProject) {
+  rememberProject(project)
+}
+
+export function clearCurrentLocalProject() {
+  localStorage.removeItem(scopedStorageKey(CURRENT_PROJECT_KEY))
+}
+
+function normalizeProjectOrNull(project: EnterpriseProject | null) {
+  return project ? normalizeProject(project) : null
 }
 
 export async function getCurrentLocalProjectFromFolder() {
@@ -552,6 +606,7 @@ export async function saveResultToLocalProject(project: EnterpriseProject, reque
     module_name: request.module_name,
     prediction_name: request.prediction_name,
     extension,
+    result_preview: assistantResultPreview(request.result_payload),
     project_path: `${project.project_path}/${relativePath}`,
     relative_path: relativePath,
     created_at: nowIso(),

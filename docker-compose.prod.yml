@@ -7,15 +7,15 @@ services:
     image: postgres:15-alpine
     container_name: drakeai_postgres
     environment:
-      POSTGRES_DB: drakeai
-      POSTGRES_USER: drakeai
+      POSTGRES_DB: ${POSTGRES_DB:-drakeai}
+      POSTGRES_USER: ${POSTGRES_USER:-drakeai}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Drake_AI_Kalpra123}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U drakeai"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-drakeai}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -45,20 +45,30 @@ services:
       dockerfile: Dockerfile
     container_name: drakeai_backend
     environment:
-      DATABASE_URL: postgresql://drakeai:${POSTGRES_PASSWORD:-Drake_AI_Kalpra123}@postgres:5432/drakeai
-      REDIS_URL: redis://redis:6379/0
-      MINIO_ENDPOINT: minio:9000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-drakeai}:${POSTGRES_PASSWORD:-Drake_AI_Kalpra123}@postgres:5432/${POSTGRES_DB:-drakeai}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-drakeai_minio}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-drakeai_minio_secret}
-      MINIO_BUCKET: drakeai-files
+      MINIO_BUCKET: ${MINIO_BUCKET:-drakeai-files}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
       SECRET_KEY: ${SECRET_KEY:-change-in-production}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-Drake6105}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Drake123@}
       ADMIN_FULL_NAME: ${ADMIN_FULL_NAME:-Admin}
-      ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: 1440
+      ALGORITHM: ${ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      CORS_ORIGINS: '["http://localhost","http://localhost:80","https://yourdomain.com"]'
+      VLLM_API_KEY: ${VLLM_API_KEY:-EMPTY}
+      VLLM_CHAT_BASE_URL: ${VLLM_CHAT_BASE_URL:-http://vllm-chat:8000/v1}
+      VLLM_EMBEDDING_BASE_URL: ${VLLM_EMBEDDING_BASE_URL:-http://vllm-embedding:8001/v1}
+      VLLM_OCR_BASE_URL: ${VLLM_OCR_BASE_URL:-http://vllm-ocr:8700/v1}
+      LLM_MODEL: ${LLM_MODEL:-qwen2.5-7b-instruct}
+      VLLM_OCR_MODEL: ${VLLM_OCR_MODEL:-qwen2.5-vl-7b}
+      VLLM_TIMEOUT_SECONDS: ${VLLM_TIMEOUT_SECONDS:-120}
+      CORS_ORIGINS: '${CORS_ORIGINS:-["http://localhost","http://localhost:80","http://localhost:8080"]}'
+      APP_ENV: ${APP_ENV:-production}
+      DEBUG: ${DEBUG:-false}
     volumes:
       - upload_data:/app/uploads
     depends_on:
@@ -77,7 +87,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.prod
       args:
-        VITE_API_URL: /
+        VITE_API_URL: ${VITE_API_URL:-/}
         VITE_PORTAL_MODE: user
     container_name: drakeai_frontend
     depends_on:
@@ -89,7 +99,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.prod
       args:
-        VITE_API_URL: /
+        VITE_API_URL: ${VITE_API_URL:-/}
         VITE_PORTAL_MODE: admin
     container_name: drakeai_admin_frontend
     depends_on:

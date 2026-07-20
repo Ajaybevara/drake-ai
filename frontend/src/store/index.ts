@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { compactProjectForStorage } from '../utils/localProjectStorage'
+import { clearCurrentLocalProject, getCurrentLocalProject, persistCurrentLocalProject } from '../utils/localProjectStorage'
 import type { ModuleId } from '../utils/accessControl'
 
 interface User {
@@ -109,6 +109,17 @@ export interface DrakeProjectDocument {
 const readLocalProjects = (): LocalProject[] => []
 const writeLocalProjects = (_projects: LocalProject[]) => {}
 
+function readStorageJson<T>(key: string, fallback: T): T {
+  const raw = localStorage.getItem(key)
+  if (!raw) return fallback
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    localStorage.removeItem(key)
+    return fallback
+  }
+}
+
 const classifyProjectFile = (file: File): Pick<ProjectFile, 'category' | 'compatibility' | 'status'> => {
   const name = file.name.toLowerCase()
   if (name.endsWith('.las')) return { category: 'las', compatibility: ['Petrophysics', 'CCUS'], status: 'Parsed' }
@@ -184,17 +195,25 @@ interface AppState {
 
 export const useStore = create<AppState>((set) => ({
   // Auth
-  user: localStorage.getItem('drake_user') ? JSON.parse(localStorage.getItem('drake_user')!) : null,
+  user: readStorageJson<User | null>('drake_user', null),
   token: localStorage.getItem('drake_token') || null,
   setAuth: (user, token) => {
     localStorage.setItem('drake_token', token)
     localStorage.setItem('drake_user', JSON.stringify(user))
-    set({ user, token })
+    set({ user, token, enterpriseProject: getCurrentLocalProject() })
   },
   logout: () => {
     localStorage.removeItem('drake_token')
     localStorage.removeItem('drake_user')
-    set({ user: null, token: null, activeProject: null, activeWell: null })
+    set({
+      user: null,
+      token: null,
+      activeProject: null,
+      activeWell: null,
+      enterpriseProject: null,
+      activeProjectFileHandle: null,
+      activeProjectFileName: null,
+    })
   },
 
   // Projects
@@ -391,26 +410,12 @@ export const useStore = create<AppState>((set) => ({
     return { localProjects, activeLocalProject, projectDirty: true }
   }),
 
-  enterpriseProject: localStorage.getItem('drake_enterprise_project')
-    ? JSON.parse(localStorage.getItem('drake_enterprise_project')!)
-    : null,
+  enterpriseProject: getCurrentLocalProject(),
   setEnterpriseProject: (enterpriseProject) => {
     if (enterpriseProject) {
-      const compact = compactProjectForStorage(enterpriseProject)
-      try {
-        localStorage.setItem('drake_enterprise_project', JSON.stringify(compact))
-      } catch {
-        localStorage.removeItem('drake_enterprise_project')
-        localStorage.setItem('drake_enterprise_project', JSON.stringify({
-          ...compact,
-          uploaded_files: [],
-          generated_results: [],
-          exported_files: [],
-          module_history: [],
-        }))
-      }
+      persistCurrentLocalProject(enterpriseProject)
     } else {
-      localStorage.removeItem('drake_enterprise_project')
+      clearCurrentLocalProject()
     }
     set({ enterpriseProject })
   },

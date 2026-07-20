@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     MINIO_USE_SSL: bool = False
 
     ANTHROPIC_API_KEY: str = ""
+    VLLM_API_KEY: str = "EMPTY"
+    VLLM_CHAT_BASE_URL: str = "http://localhost:8000/v1"
+    VLLM_EMBEDDING_BASE_URL: str = "http://localhost:8001/v1"
+    VLLM_OCR_BASE_URL: str = "http://localhost:8700/v1"
+    LLM_MODEL: str = "qwen2.5-7b-instruct"
+    VLLM_OCR_MODEL: str = "qwen2.5-vl-7b"
+    VLLM_TIMEOUT_SECONDS: float = 120.0
 
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
@@ -32,6 +39,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"
 
 
 settings = Settings()
