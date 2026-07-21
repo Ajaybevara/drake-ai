@@ -11,7 +11,7 @@ Both portals use the same backend API and the same PostgreSQL database. Users cr
 
 ### Full Stack With Both Dashboards
 
-Set production secrets in `.env`:
+Set production secrets in `env/deployment/.env.production`:
 
 ```env
 POSTGRES_PASSWORD=change-this-postgres-password
@@ -30,6 +30,12 @@ Start production:
 docker compose -f docker-compose.prod.yml up --build -d
 ```
 
+Or pass the centralized env file explicitly:
+
+```bash
+docker compose --env-file env/deployment/.env.production -f docker-compose.prod.yml up --build -d
+```
+
 Open:
 
 - User dashboard: `http://your-server/`
@@ -39,7 +45,7 @@ Open:
 
 Use this when the backend/database already exists and you want to deploy the admin dashboard separately.
 
-Set `.env.admin`:
+Set `env/frontend/.env.admin`:
 
 ```env
 VITE_API_URL=https://api.your-domain.com
@@ -49,7 +55,7 @@ ADMIN_DASHBOARD_PORT=8080
 Start admin dashboard:
 
 ```bash
-docker compose --env-file .env.admin -f docker-compose.admin.yml up --build -d
+docker compose --env-file env/frontend/.env.admin -f docker-compose.admin.yml up --build -d
 ```
 
 The admin dashboard contains only:
@@ -63,7 +69,7 @@ Every other route redirects to `/admin-login`.
 
 Use this when the backend/database already exists and you want to deploy the user dashboard separately.
 
-Set `.env.user`:
+Set `env/frontend/.env.user`:
 
 ```env
 VITE_API_URL=https://api.your-domain.com
@@ -73,7 +79,7 @@ USER_DASHBOARD_PORT=80
 Start user dashboard:
 
 ```bash
-docker compose --env-file .env.user -f docker-compose.user.yml up --build -d
+docker compose --env-file env/frontend/.env.user -f docker-compose.user.yml up --build -d
 ```
 
 The user dashboard contains user login and assigned module routes only.
@@ -100,6 +106,7 @@ The required production tables include:
 
 - `users`
 - `user_activities`
+- `user_sessions`
 - existing project/well/result tables
 
 ## Build Modes

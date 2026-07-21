@@ -20,7 +20,7 @@ A full-stack petrophysics intelligence platform — Petrel + TechLog + AI Copilo
 ```bash
 git clone <repo>
 cd drake-ai
-cp .env.example .env          # edit secrets
+cp env/deployment/.env.example env/deployment/.env          # edit secrets
 docker compose up --build -d
 # App:      http://localhost:3000
 # API docs: http://localhost:8000/docs
@@ -34,7 +34,7 @@ docker compose up --build -d
 cd backend
 python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env
+cp env/deployment/.env.example env/deployment/.env
 alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
@@ -43,14 +43,14 @@ uvicorn app.main:app --reload --port 8000
 ```bash
 cd frontend
 npm install
-cp .env.example .env
+cp env/deployment/.env.example env/deployment/.env
 npm run dev          # http://localhost:3000
 ```
 
 ### PostgreSQL
 ```bash
 createdb drakeai
-# Update DATABASE_URL in backend/.env
+# Update DATABASE_URL in env/backend/.env
 ```
 
 ## Default Login

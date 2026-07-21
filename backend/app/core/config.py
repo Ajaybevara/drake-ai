@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     class Config:
-        env_file = ".env"
+        env_file = ("env/backend/.env", "../env/backend/.env", ".env")
         case_sensitive = True
         extra = "ignore"
 

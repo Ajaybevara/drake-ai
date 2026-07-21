@@ -34,10 +34,10 @@ Use this when deploying to an AWS EC2 server.
 4. Create the AWS environment file:
 
 ```bash
-cp .env.aws.example .env.aws
+cp env/deployment/.env.aws.example env/deployment/.env.aws
 ```
 
-5. Edit `.env.aws`:
+5. Edit `env/deployment/.env.aws`:
 
 ```text
 POSTGRES_PASSWORD=your-strong-postgres-password
@@ -51,7 +51,7 @@ VITE_API_URL=/
 6. Start AWS deployment:
 
 ```bash
-docker compose --env-file .env.aws -f docker-compose.aws.yml up -d --build
+docker compose --env-file env/deployment/.env.aws -f docker-compose.aws.yml up -d --build
 ```
 
 On Windows PowerShell:
@@ -63,8 +63,8 @@ On Windows PowerShell:
 7. Check status:
 
 ```bash
-docker compose --env-file .env.aws -f docker-compose.aws.yml ps
-docker compose --env-file .env.aws -f docker-compose.aws.yml logs -f backend
+docker compose --env-file env/deployment/.env.aws -f docker-compose.aws.yml ps
+docker compose --env-file env/deployment/.env.aws -f docker-compose.aws.yml logs -f backend
 ```
 
 The app will be available at:
@@ -77,7 +77,7 @@ http://your-ec2-public-dns
 
 By default, `docker-compose.aws.yml` runs PostgreSQL inside Docker on the EC2 host.
 
-If you later use AWS RDS, set `DATABASE_URL` in `.env.aws`:
+If you later use AWS RDS, set `DATABASE_URL` in `env/deployment/.env.aws`:
 
 ```text
 DATABASE_URL=postgresql://drakeai:your-password@your-rds-endpoint:5432/drakeai
@@ -94,10 +94,10 @@ Use this when moving from AWS to an office/local server.
 3. Create the local server environment file:
 
 ```bash
-cp .env.local-server.example .env.local-server
+cp env/deployment/.env.local-server.example env/deployment/.env.local-server
 ```
 
-4. Edit `.env.local-server`:
+4. Edit `env/deployment/.env.local-server`:
 
 ```text
 POSTGRES_PASSWORD=your-local-postgres-password
@@ -111,7 +111,7 @@ VITE_API_URL=/
 5. Start local server deployment:
 
 ```bash
-docker compose --env-file .env.local-server -f docker-compose.local-server.yml up -d --build
+docker compose --env-file env/deployment/.env.local-server -f docker-compose.local-server.yml up -d --build
 ```
 
 On Windows PowerShell:
@@ -144,22 +144,22 @@ This creates/updates tables and ensures the admin user exists.
 AWS:
 
 ```bash
-docker compose --env-file .env.aws -f docker-compose.aws.yml exec postgres pg_dump -U drakeai drakeai > drakeai_backup.sql
+docker compose --env-file env/deployment/.env.aws -f docker-compose.aws.yml exec postgres pg_dump -U drakeai drakeai > drakeai_backup.sql
 ```
 
 Local server:
 
 ```bash
-docker compose --env-file .env.local-server -f docker-compose.local-server.yml exec postgres pg_dump -U drakeai drakeai > drakeai_backup.sql
+docker compose --env-file env/deployment/.env.local-server -f docker-compose.local-server.yml exec postgres pg_dump -U drakeai drakeai > drakeai_backup.sql
 ```
 
 ## Restore PostgreSQL
 
 ```bash
-docker compose --env-file .env.local-server -f docker-compose.local-server.yml exec -T postgres psql -U drakeai drakeai < drakeai_backup.sql
+docker compose --env-file env/deployment/.env.local-server -f docker-compose.local-server.yml exec -T postgres psql -U drakeai drakeai < drakeai_backup.sql
 ```
 
-Use `.env.aws` and `docker-compose.aws.yml` instead when restoring on AWS.
+Use `env/deployment/.env.aws` and `docker-compose.aws.yml` instead when restoring on AWS.
 
 ## Health Checks
 
@@ -186,21 +186,21 @@ http://your-host/docs
 AWS:
 
 ```bash
-docker compose --env-file .env.aws -f docker-compose.aws.yml restart
-docker compose --env-file .env.aws -f docker-compose.aws.yml down
+docker compose --env-file env/deployment/.env.aws -f docker-compose.aws.yml restart
+docker compose --env-file env/deployment/.env.aws -f docker-compose.aws.yml down
 ```
 
 Local server:
 
 ```bash
-docker compose --env-file .env.local-server -f docker-compose.local-server.yml restart
-docker compose --env-file .env.local-server -f docker-compose.local-server.yml down
+docker compose --env-file env/deployment/.env.local-server -f docker-compose.local-server.yml restart
+docker compose --env-file env/deployment/.env.local-server -f docker-compose.local-server.yml down
 ```
 
 ## Production Notes
 
 - Use HTTPS before exposing real users publicly.
-- Keep `.env.aws` and `.env.local-server` private.
-- Commit only `.env.example`, `.env.aws.example`, and `.env.local-server.example`.
+- Keep `env/deployment/.env.aws` and `env/deployment/.env.local-server` private.
+- Commit only `env/deployment/.env.example`, `env/deployment/.env.aws.example`, and `env/deployment/.env.local-server.example`.
 - Use long random values for `SECRET_KEY`, `POSTGRES_PASSWORD`, and `MINIO_SECRET_KEY`.
 - Restrict AWS security group access to only required ports.

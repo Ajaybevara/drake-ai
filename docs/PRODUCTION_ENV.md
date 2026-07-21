@@ -18,6 +18,7 @@ Required database tables are already defined by migrations:
 - `curves`
 - `ai_jobs`
 - `reports`
+- `user_sessions`
 
 Admin module access values stored in `users.access_modules`:
 
@@ -51,11 +52,13 @@ Important API endpoints:
 
 Production env files added:
 
-- `.env.production.example`: root Docker production stack values.
-- `backend/.env.production.example`: backend-only production values.
-- `backend/.env.digitizer.production.example`: Drake SLM/GPT and Drake OCR endpoint values.
-- `frontend/.env.user.production.example`: user dashboard build values.
-- `frontend/.env.admin.production.example`: admin dashboard build values.
+- `env/deployment/.env.production.example`: root Docker production stack values.
+- `env/deployment/.env.aws.example`: AWS Docker deployment values.
+- `env/deployment/.env.local-server.example`: local server Docker deployment values.
+- `env/backend/.env.production.example`: backend-only production values.
+- `env/backend/.env.digitizer.production.example`: Drake SLM/GPT and Drake OCR endpoint values.
+- `env/frontend/.env.user.production.example`: user dashboard build values.
+- `env/frontend/.env.admin.production.example`: admin dashboard build values.
 
 Deployment rule:
 

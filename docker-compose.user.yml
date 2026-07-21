@@ -2,7 +2,7 @@ version: "3.9"
 
 # Deploy only the user dashboard.
 # Set VITE_API_URL to the shared backend URL, for example:
-# VITE_API_URL=https://api.your-domain.com docker compose -f docker-compose.user.yml up --build -d
+# docker compose --env-file env/frontend/.env.user -f docker-compose.user.yml up --build -d
 
 services:
   user_dashboard:

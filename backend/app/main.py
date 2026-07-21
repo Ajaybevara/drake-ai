@@ -13,6 +13,8 @@ from app.services import project_service
 from ccus.router import router as ccus_router
 
 
+os.makedirs("uploads", exist_ok=True)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

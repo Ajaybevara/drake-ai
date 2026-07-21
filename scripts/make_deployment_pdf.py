@@ -215,11 +215,11 @@ def build_pdf():
         make_table(
             [
                 ["File", "Use"],
-                [".env.production.example", "Root Docker production stack env. Copy to .env for docker-compose.prod.yml."],
-                ["backend/.env.production.example", "Backend-only production env. Copy to backend/.env for direct backend deployment."],
-                ["backend/.env.digitizer.production.example", "Digitizer SLM/GPT and OCR model endpoint reference."],
-                ["frontend/.env.user.production.example", "User dashboard build env."],
-                ["frontend/.env.admin.production.example", "Admin dashboard build env."],
+                ["env/deployment/.env.production.example", "Root Docker production stack env. Copy to .env for docker-compose.prod.yml."],
+                ["env/backend/.env.production.example", "Backend-only production env. Copy to env/backend/.env for direct backend deployment."],
+                ["env/backend/.env.digitizer.production.example", "Digitizer SLM/GPT and OCR model endpoint reference."],
+                ["env/frontend/.env.user.production.example", "User dashboard build env."],
+                ["env/frontend/.env.admin.production.example", "Admin dashboard build env."],
                 ["docker-compose.prod.yml", "Full production stack: backend, database, redis, MinIO, user frontend, admin frontend, nginx."],
             ],
             [2.5 * inch, 4.35 * inch],
@@ -230,7 +230,7 @@ def build_pdf():
     story.append(PageBreak())
     story.append(p("3. Backend .env", styles["H1"]))
     story.append(p("Copy this file:", styles["Body"]))
-    story.append(code("backend/.env.production.example  ->  backend/.env", styles))
+    story.append(code("env/backend/.env.production.example  ->  env/backend/.env", styles))
     story.append(p("Required values:", styles["Body"]))
     story.append(
         code(
@@ -245,7 +245,7 @@ CORS_ORIGINS=["https://user.your-domain.com","https://admin.your-domain.com"]"""
     )
 
     story.append(p("4. Digitizer Endpoints", styles["H1"]))
-    story.append(p("Add these values in backend/.env. You can change these later without changing code.", styles["Body"]))
+    story.append(p("Add these values in env/backend/.env. You can change these later without changing code.", styles["Body"]))
     story.append(
         code(
             """VLLM_API_KEY=EMPTY
@@ -286,7 +286,7 @@ VLLM_TIMEOUT_SECONDS=120""",
 
     story.append(PageBreak())
     story.append(p("8. Docker Deployment Option", styles["H1"]))
-    story.append(code("cp .env.production.example .env\ndocker compose -f docker-compose.prod.yml up --build -d", styles))
+    story.append(code("cp env/deployment/.env.production.example env/deployment/.env.production\ndocker compose --env-file env/deployment/.env.production -f docker-compose.prod.yml up --build -d", styles))
     story.append(
         p(
             "Use docker-compose.user.yml and docker-compose.admin.yml only when deploying the frontend dashboards separately from the backend server.",
