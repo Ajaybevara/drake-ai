@@ -8,6 +8,7 @@ import { authApi } from '../services/api'
 export default function AdminLoginPage() {
   const [username, setUsername] = useState(ADMIN_USERNAME)
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const setAuth = useStore(s => s.setAuth)
   const navigate = useNavigate()
 
@@ -31,21 +32,19 @@ export default function AdminLoginPage() {
 
   return (
     <div style={page}>
-      <div style={shell}>
-        <div style={brand}>
-          <img src="/logo.png" alt="Drake AI Logo" style={logo} />
-          <div style={eyebrow}>Admin Credential Center</div>
-          <h1 style={title}>Admin Access</h1>
-          <p style={subtitle}>Sign in here to create user credentials and assign module access.</p>
+      <section style={brandPanel}>
+        <div style={brandContent}>
+          <img src="/logo_light.png" alt="Drake AI Logo" style={logo} />
+          <h1 style={title}>Drake AI Well Log Intelligence</h1>
+          <p style={subtitle}>Secure production workspace for composite well log digitization, structured extraction, and controlled user access.</p>
         </div>
+      </section>
 
+      <section style={formPanel}>
         <form onSubmit={handleLogin} style={form}>
-          <div style={formHead}>
-            <i className="fas fa-user-shield" style={formIcon}></i>
-            <div>
-              <div style={eyebrow}>Admin Login</div>
-              <h2 style={formTitle}>Control Panel</h2>
-            </div>
+          <div>
+            <h2 style={formTitle}>Login</h2>
+            <p style={formSubtitle}>Enter your admin credentials to continue.</p>
           </div>
           <label style={fieldLabel}>
             Username
@@ -53,26 +52,32 @@ export default function AdminLoginPage() {
           </label>
           <label style={fieldLabel}>
             Password
-            <input type="password" value={password} onChange={event => setPassword(event.target.value)} required style={input} />
+            <div style={passwordWrap}>
+              <input type={showPassword ? 'text' : 'password'} value={password} onChange={event => setPassword(event.target.value)} required style={{ ...input, paddingRight: 52 }} />
+              <button type="button" onClick={() => setShowPassword(current => !current)} title={showPassword ? 'Hide password' : 'Show password'} style={eyeButton}>
+                <i className={`fas fa-${showPassword ? 'eye-slash' : 'eye'}`}></i>
+              </button>
+            </div>
           </label>
-          <button type="submit" style={submitButton}>Login as Admin</button>
+          <button type="submit" style={submitButton}>Login</button>
         </form>
-      </div>
+      </section>
     </div>
   )
 }
 
-const page: React.CSSProperties = { minHeight: '100vh', background: 'linear-gradient(135deg,#050B14,#07111F 52%,#0B1628)', display: 'grid', placeItems: 'center', padding: 24, color: '#F8FAFC' }
-const shell: React.CSSProperties = { width: 'min(920px,100%)', display: 'grid', gridTemplateColumns: 'minmax(280px,.9fr) minmax(320px,1fr)', gap: 24, alignItems: 'stretch' }
-const brand: React.CSSProperties = { border: '1px solid #26364F', background: 'rgba(15,23,42,.82)', borderRadius: 16, padding: 30, display: 'flex', flexDirection: 'column', justifyContent: 'center' }
-const logo: React.CSSProperties = { width: 250, maxWidth: '100%', maxHeight: 110, objectFit: 'contain', marginBottom: 26 }
-const eyebrow: React.CSSProperties = { color: '#10B981', letterSpacing: 4, textTransform: 'uppercase', fontSize: 12, fontWeight: 900 }
-const title: React.CSSProperties = { margin: '10px 0', fontSize: 42, lineHeight: 1.05 }
-const subtitle: React.CSSProperties = { margin: 0, color: '#9DB7D8', fontSize: 16, lineHeight: 1.6 }
-const form: React.CSSProperties = { border: '1px solid #26364F', background: 'rgba(8,17,31,.96)', borderRadius: 16, padding: 28, display: 'grid', gap: 18, alignContent: 'center' }
-const formHead: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 14, marginBottom: 4 }
-const formIcon: React.CSSProperties = { color: '#DA2626', fontSize: 30 }
-const formTitle: React.CSSProperties = { margin: '5px 0 0', fontSize: 28 }
-const fieldLabel: React.CSSProperties = { display: 'grid', gap: 7, color: '#9DB7D8', fontSize: 13, fontWeight: 900 }
-const input: React.CSSProperties = { width: '100%', borderRadius: 10, border: '1px solid #26364F', background: '#07111F', color: '#F8FAFC', padding: '13px 14px', outline: 'none', fontSize: 16 }
-const submitButton: React.CSSProperties = { border: '1px solid #10B981', background: '#10B981', color: '#00150E', borderRadius: 12, padding: 14, fontWeight: 900, cursor: 'pointer', fontSize: 16 }
+const page: React.CSSProperties = { minHeight: '100vh', display: 'grid', gridTemplateColumns: 'minmax(0,1.08fr) minmax(460px,.92fr)', background: '#F4F7FB', color: '#07111F', overflow: 'hidden' }
+const brandPanel: React.CSSProperties = { position: 'relative', minHeight: '100vh', background: 'linear-gradient(135deg,#11183A 0%,#121C33 58%,#0E1729 100%)', color: '#FFFFFF', display: 'flex', alignItems: 'center', padding: 'clamp(28px,5vw,72px)', clipPath: 'polygon(0 0, 100% 0, 70% 100%, 0 100%)' }
+const brandContent: React.CSSProperties = { width: 'min(760px,82%)', display: 'grid', gap: 24 }
+const logo: React.CSSProperties = { width: 292, maxWidth: '100%', background: '#FFFFFF', border: '1px solid #E3E8F2', borderRadius: 14, padding: '18px 20px', objectFit: 'contain', boxShadow: '0 18px 42px rgba(0,0,0,.26)' }
+const title: React.CSSProperties = { margin: '8px 0 0', fontSize: 'clamp(38px,4.4vw,62px)', lineHeight: 1.08, fontWeight: 900, letterSpacing: 0 }
+const subtitle: React.CSSProperties = { margin: 0, width: 'min(760px,88%)', color: '#DCE7FF', fontSize: 'clamp(18px,1.4vw,22px)', lineHeight: 1.55, fontWeight: 500 }
+const formPanel: React.CSSProperties = { minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 'clamp(24px,5vw,72px)' }
+const form: React.CSSProperties = { width: 'min(524px,100%)', background: '#FFFFFF', border: '1px solid #E3E8F2', borderRadius: 14, padding: 'clamp(28px,3vw,36px)', display: 'grid', gap: 22, boxShadow: '0 30px 80px rgba(15,23,42,.18)' }
+const formTitle: React.CSSProperties = { margin: 0, color: '#07111F', fontSize: 30, lineHeight: 1.15, fontWeight: 900 }
+const formSubtitle: React.CSSProperties = { margin: '10px 0 0', color: '#41547A', fontSize: 16, lineHeight: 1.45 }
+const fieldLabel: React.CSSProperties = { display: 'grid', gap: 9, color: '#405073', fontSize: 14, fontWeight: 900 }
+const input: React.CSSProperties = { width: '100%', borderRadius: 10, border: '1px solid #D6DFEF', background: '#EAF1FC', color: '#07111F', padding: '15px 17px', outline: 'none', fontSize: 16, fontWeight: 600 }
+const passwordWrap: React.CSSProperties = { position: 'relative', display: 'flex', alignItems: 'center' }
+const eyeButton: React.CSSProperties = { position: 'absolute', right: 13, width: 34, height: 34, border: 'none', borderRadius: 8, background: 'transparent', color: '#405073', cursor: 'pointer', display: 'grid', placeItems: 'center', fontSize: 16 }
+const submitButton: React.CSSProperties = { border: 'none', background: 'linear-gradient(135deg,#8F87EA,#B78AEF)', color: '#FFFFFF', borderRadius: 10, padding: '16px 18px', fontWeight: 900, cursor: 'pointer', fontSize: 16, boxShadow: '0 12px 26px rgba(143,135,234,.28)' }
