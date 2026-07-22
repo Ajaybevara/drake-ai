@@ -7,6 +7,8 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+let redirectingForAuth = false
+
 // Attach JWT token from localStorage
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('drake_token')
@@ -21,7 +23,8 @@ api.interceptors.response.use(
     const status = err.response?.status
     const requestUrl = String(err.config?.url || '')
     const isAdminRequest = requestUrl.includes('/auth/admin') || window.location.pathname.startsWith('/admin')
-    if (status === 401 || (status === 403 && isAdminRequest)) {
+    if (!redirectingForAuth && (status === 401 || (status === 403 && isAdminRequest))) {
+      redirectingForAuth = true
       localStorage.removeItem('drake_token')
       localStorage.removeItem('drake_user')
       window.location.href = isAdminRequest ? '/admin-login' : '/login'

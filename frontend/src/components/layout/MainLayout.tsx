@@ -2,7 +2,6 @@ import { useEffect } from 'react'
 import { useStore } from '../../store'
 import TopBar from './TopBar'
 import Ribbon from './Ribbon'
-import Sidebar from './Sidebar'
 import Workspace from './Workspace'
 import FloatingChatbot from './FloatingChatbot'
 
@@ -33,7 +32,6 @@ export default function MainLayout() {
 
   return (
     <div data-theme={theme} style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: isLight ? '#EEF2F7' : '#070B12' }}>
-      <Sidebar />
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <TopBar />
         <Ribbon />

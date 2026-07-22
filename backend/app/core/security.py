@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -12,6 +12,16 @@ pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 bearer_scheme = HTTPBearer()
 
 
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
@@ -22,7 +32,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = utc_now() + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
@@ -55,11 +65,12 @@ def get_current_user(
         ).first()
         if not session:
             raise HTTPException(status_code=401, detail="Session expired or logged out")
-        if session.expires_at and session.expires_at < datetime.utcnow():
+        now = utc_now()
+        if session.expires_at and as_utc(session.expires_at) < now:
             session.is_active = False
-            session.logged_out_at = datetime.utcnow()
+            session.logged_out_at = now
             db.commit()
             raise HTTPException(status_code=401, detail="Session expired or logged out")
-        session.last_seen_at = datetime.utcnow()
+        session.last_seen_at = now
         db.commit()
     return user

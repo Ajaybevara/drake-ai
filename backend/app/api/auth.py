@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import bearer_scheme, create_access_token, decode_token, get_current_user, hash_password, verify_password
+from app.core.security import bearer_scheme, create_access_token, decode_token, get_current_user, hash_password, utc_now, verify_password
 from app.models import User, UserActivity, UserRole, UserSession
 
 router = APIRouter()
@@ -109,7 +109,7 @@ def request_identity(request: Request) -> tuple[str | None, str]:
 
 
 def deactivate_expired_sessions(db: Session, user_id: int) -> None:
-    now = datetime.utcnow()
+    now = utc_now()
     db.query(UserSession).filter(
         UserSession.user_id == user_id,
         UserSession.is_active == True,
@@ -126,7 +126,7 @@ def deactivate_expired_sessions(db: Session, user_id: int) -> None:
 
 def create_user_session(db: Session, user: User, request: Request) -> UserSession:
     ip_address, user_agent = request_identity(request)
-    now = datetime.utcnow()
+    now = utc_now()
     session = UserSession(
         session_id=uuid4().hex,
         user_id=user.id,
@@ -188,8 +188,9 @@ def logout(
         ).first()
         if session:
             session.is_active = False
-            session.logged_out_at = datetime.utcnow()
-            session.last_seen_at = datetime.utcnow()
+            now = utc_now()
+            session.logged_out_at = now
+            session.last_seen_at = now
             db.commit()
     log_user_activity(db, current_user, "logout", request)
     return {"message": "Logged out"}
