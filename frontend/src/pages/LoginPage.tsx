@@ -35,8 +35,8 @@ export default function LoginPage() {
       <section style={brandPanel}>
         <div style={brandContent}>
           <img src="/logo_light.png" alt="Drake AI Logo" style={logo} />
-          <h1 style={title}>Drake AI Well Log Intelligence</h1>
-          <p style={subtitle}>Secure production workspace for composite well log digitization, structured extraction, and controlled user access.</p>
+          <h1 style={title}>Drake AI Intelligence Platform</h1>
+          <p style={subtitle}>AI-powered oil and gas workspace for petrophysics, production intelligence, CCUS screening, geothermal analysis, and document digitization.</p>
         </div>
       </section>
 
@@ -68,10 +68,10 @@ export default function LoginPage() {
 
 const page: React.CSSProperties = { minHeight: '100vh', display: 'grid', gridTemplateColumns: 'minmax(0,1.08fr) minmax(460px,.92fr)', background: '#F4F7FB', color: '#07111F', overflow: 'hidden' }
 const brandPanel: React.CSSProperties = { position: 'relative', minHeight: '100vh', background: 'linear-gradient(135deg,#11183A 0%,#121C33 58%,#0E1729 100%)', color: '#FFFFFF', display: 'flex', alignItems: 'center', padding: 'clamp(28px,5vw,72px)', clipPath: 'polygon(0 0, 100% 0, 70% 100%, 0 100%)' }
-const brandContent: React.CSSProperties = { width: 'min(760px,82%)', display: 'grid', gap: 24 }
+const brandContent: React.CSSProperties = { width: 'min(760px,84%)', display: 'grid', gap: 26, alignContent: 'center' }
 const logo: React.CSSProperties = { width: 292, maxWidth: '100%', background: '#FFFFFF', border: '1px solid #E3E8F2', borderRadius: 14, padding: '18px 20px', objectFit: 'contain', boxShadow: '0 18px 42px rgba(0,0,0,.26)' }
-const title: React.CSSProperties = { margin: '8px 0 0', fontSize: 'clamp(38px,4.4vw,62px)', lineHeight: 1.08, fontWeight: 900, letterSpacing: 0 }
-const subtitle: React.CSSProperties = { margin: 0, width: 'min(760px,88%)', color: '#DCE7FF', fontSize: 'clamp(18px,1.4vw,22px)', lineHeight: 1.55, fontWeight: 500 }
+const title: React.CSSProperties = { margin: '8px 0 0', maxWidth: 760, fontSize: 'clamp(44px,3.9vw,70px)', lineHeight: 1.05, fontWeight: 900, letterSpacing: 0, textWrap: 'balance' as any }
+const subtitle: React.CSSProperties = { margin: 0, width: 'min(760px,92%)', color: '#DCE7FF', fontSize: 'clamp(18px,1.35vw,22px)', lineHeight: 1.55, fontWeight: 500, textWrap: 'pretty' as any }
 const formPanel: React.CSSProperties = { minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 'clamp(24px,5vw,72px)' }
 const form: React.CSSProperties = { width: 'min(524px,100%)', background: '#FFFFFF', border: '1px solid #E3E8F2', borderRadius: 14, padding: 'clamp(28px,3vw,36px)', display: 'grid', gap: 22, boxShadow: '0 30px 80px rgba(15,23,42,.18)' }
 const formTitle: React.CSSProperties = { margin: 0, color: '#07111F', fontSize: 30, lineHeight: 1.15, fontWeight: 900 }
