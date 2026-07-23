@@ -9,10 +9,21 @@ const api = axios.create({
 
 let redirectingForAuth = false
 
+function getDeviceId() {
+  const storageKey = 'drake_device_id'
+  let deviceId = localStorage.getItem(storageKey)
+  if (!deviceId) {
+    deviceId = crypto.randomUUID()
+    localStorage.setItem(storageKey, deviceId)
+  }
+  return deviceId
+}
+
 // Attach JWT token from localStorage
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('drake_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
+  config.headers['X-Device-ID'] = getDeviceId()
   return config
 })
 
@@ -45,6 +56,13 @@ export const authApi = {
   updateUser: (id: number, data: any) => api.put(`/auth/admin/users/${id}`, data),
   updateUserStatus: (id: number, active: boolean) => api.patch(`/auth/admin/users/${id}/status`, null, { params: { active } }),
   deleteUser: (id: number) => api.delete(`/auth/admin/users/${id}`),
+}
+
+export const supportApi = {
+  requestAccess: (data: { module_id: string; module_label: string; page_path: string }) =>
+    api.post('/support/access-request', data),
+  submitFeedback: (data: { page_path: string; modules: Array<{ module_id: string; module_label: string; rating: number; message: string }> }) =>
+    api.post('/support/feedback', data),
 }
 
 // ── Projects ──────────────────────────────────────────────────────────────
@@ -143,7 +161,6 @@ export const reportsApi = {
 }
 
 export const productionApi = {
-  sample: () => api.get('/production/sample'),
   analyze: (file?: File) => {
     const fd = new FormData()
     if (file) fd.append('file', file)
@@ -157,7 +174,6 @@ export const productionApi = {
 export const petrophysicsApi = {
   predictionBundle: (wellId: number) => api.get(`/petrophysics/well/${wellId}/prediction-bundle`),
   uncertainty: (wellId: number, params?: any) => api.post(`/petrophysics/well/${wellId}/uncertainty`, params || {}),
-  loadCrossplotDemo: () => api.post('/petrophysics/crossplot/load-demo'),
   loadCrossplotFromPetroSession: (sessionId: string) => api.post('/petrophysics/crossplot/load-petro-session', { session_id: sessionId }),
   uploadCrossplotLas: (file: File) => {
     const fd = new FormData()
@@ -167,7 +183,6 @@ export const petrophysicsApi = {
     })
   },
   generateCrossplot: (params: any) => api.post('/petrophysics/crossplot/generate', params),
-  loadHistogramDemo: () => api.post('/petrophysics/histogram/load-demo'),
   loadHistogramFromPetroSession: (sessionId: string) => api.post('/petrophysics/histogram/load-petro-session', { session_id: sessionId }),
   uploadHistogramLas: (file: File) => {
     const fd = new FormData()
@@ -177,7 +192,6 @@ export const petrophysicsApi = {
     })
   },
   generateHistogram: (params: any) => api.post('/petrophysics/histogram/generate', params),
-  loadPetroLasDemo: () => api.post('/petrophysics/las/load-demo'),
   uploadPetroLas: (file: File) => {
     const fd = new FormData()
     fd.append('file', file)
@@ -263,7 +277,6 @@ export const seismicApi = {
 }
 
 export const ccusApi = {
-  loadSample: () => api.post('/ccus/load-sample'),
   uploadLas: (file: File) => {
     const fd = new FormData()
     fd.append('file', file)

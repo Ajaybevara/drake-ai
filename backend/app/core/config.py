@@ -25,6 +25,18 @@ class Settings(BaseSettings):
     VLLM_OCR_MODEL: str = "qwen2.5-vl-7b"
     VLLM_TIMEOUT_SECONDS: float = 120.0
 
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_USE_TLS: bool = True
+    SUPPORT_RECIPIENTS: List[str] = [
+        "Sai@thedrake.ai",
+        "Malleswar@thedrake.ai",
+        "rajasekhar.b@kalpratech.com",
+        "Kumar@thedrake.ai",
+    ]
+
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://localhost:5173",

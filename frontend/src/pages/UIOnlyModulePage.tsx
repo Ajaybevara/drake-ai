@@ -91,7 +91,7 @@ export default function UIOnlyModulePage({ title, subtitle = DEFAULT_SUBTITLE, a
       </section>
 
       {isSeismicEnhancer ? (
-        <SeismicEnhancerPanel accent={accent} isLight={isLight} />
+        <SeismicEnhancerPanel isLight={isLight} />
       ) : isCcusScreening ? (
         <CcusScreeningPanel accent={accent} isLight={isLight} />
       ) : isCrossplot ? (
@@ -226,18 +226,6 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
     setSelected(defaults.length ? defaults : (data.curve_names || []).slice(0, 5))
     setDepthRange({ min: data.depth_min ? String(Math.round(Number(data.depth_min))) : '', max: data.depth_max ? String(Math.round(Number(data.depth_max))) : '', unit: 'Feet (ft)' })
   }
-  const loadDemo = async () => {
-    setBusy(true)
-    try {
-      const response = await petrophysicsApi.loadPetroLasDemo()
-      hydrate({ ...response.data, is_demo: true })
-      toast.success('Demo LAS loaded')
-    } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Failed to load LAS')
-    } finally {
-      setBusy(false)
-    }
-  }
   const upload = async (file: File) => {
     setBusy(true)
     try {
@@ -280,7 +268,7 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
         <p style={{ margin: '8px 0 0', color: muted, fontSize: 13 }}>Select logs below. Resistivity logs auto-use logarithmic scale.</p>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(310px,430px) minmax(0,1fr)', gap: 18 }}>
-        <LasUploadCard accent={accent} isLight={isLight} busy={busy} session={session} onDemo={loadDemo} onUpload={upload} title="Upload LAS File" />
+        <LasUploadCard accent={accent} isLight={isLight} session={session} onUpload={upload} title="Upload LAS File" />
         <InfoCard accent={accent} isLight={isLight} title={session?.well_name || 'No LAS loaded'} label="Well Details" items={[
           ['File', session?.file_name || 'N/A'],
           ['Company', session?.company || 'N/A'],
@@ -345,7 +333,7 @@ function PetrophysicsLogVisualizationPanel({ accent, isLight }: { accent: string
       )}
       <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
         <h2 style={{ margin: '0 0 14px', color: text, fontSize: 22 }}>AI Assisted Log Interpretation</h2>
-        <LogInterpretation curves={curves} selected={activeCurves} muted={muted} text={text} />
+        <LogInterpretation curves={curves} selected={activeCurves} text={text} />
       </div>
     </section>
   )
@@ -746,7 +734,7 @@ function styleMissingLogPreviewFigure(figure: any, isLight: boolean) {
   return styled
 }
 
-function LogInterpretation({ curves, selected, muted, text }: { curves: string[]; selected: string[]; muted: string; text: string }) {
+function LogInterpretation({ curves, selected, text }: { curves: string[]; selected: string[]; text: string }) {
   const has = (pattern: RegExp) => curves.some(curve => pattern.test(curve))
   const notes = [
     has(/^(GR|CGR|SGR|GAM)/i) ? '✅ Gamma Ray logs detected. Suitable for Vsh calculation and shale volume estimation.' : '⚠️ Gamma Ray log missing from uploaded LAS.',
@@ -923,7 +911,7 @@ function MissingLogPredictionPanel({ accent, isLight }: { accent: string; isLigh
 
   return (
     <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
-      <ActionHeader accent={accent} isLight={isLight} label="Missing Log Prediction" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? `${sessions.length > 1 ? `${sessions.length} LAS files ready. Active setup: ` : ''}${session.file_name} - select a target log and run prediction.` : 'Select a project LAS file or upload one or multiple LAS files, then run prediction.'} actions={<><SharedLasActions isLight={isLight} busy={busy} setBusy={setBusy} onSession={replaceSession} onSessions={replaceSessions} /><button onClick={run} disabled={busy || !hasUserSession} style={{ ...primaryButton(accent), width: 210 }}>{busy ? 'Running...' : sessions.length > 1 ? 'Run Multi Prediction' : 'Run Prediction'}</button></>} />
+      <ActionHeader accent={accent} isLight={isLight} label="Missing Log Prediction" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? `${sessions.length > 1 ? `${sessions.length} LAS files ready. Active setup: ` : ''}${session.file_name} - select a target log and run prediction.` : 'Select a project LAS file or upload one or multiple LAS files, then run prediction.'} actions={<><SharedLasActions busy={busy} setBusy={setBusy} onSession={replaceSession} onSessions={replaceSessions} /><button onClick={run} disabled={busy || !hasUserSession} style={{ ...primaryButton(accent), width: 210 }}>{busy ? 'Running...' : sessions.length > 1 ? 'Run Multi Prediction' : 'Run Prediction'}</button></>} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px,430px) minmax(0,1fr)', gap: 18 }}>
         <div style={{ padding: 18, borderRadius: 16, border: `1px solid ${border}`, background: panelBg }}>
@@ -1075,13 +1063,11 @@ function InfoPair({ label, value, muted }: { label: string; value: any; muted: s
 }
 
 function SharedLasActions({
-  isLight,
   busy,
   setBusy,
   onSession,
   onSessions,
 }: {
-  isLight: boolean
   busy: boolean
   setBusy: (value: boolean) => void
   onSession: (session: any) => void
@@ -1307,7 +1293,7 @@ function PetrophysicsPredictionPanel({ accent, isLight }: { accent: string; isLi
   const depthMax = records[records.length - 1]?.DEPTH ?? session?.depth_max
   return (
     <section style={{ marginTop: 22, display: 'grid', gap: 18 }}>
-      <ActionHeader accent={accent} isLight={isLight} label="AI Parameter Prediction" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? `${session.file_name} - ${session.rows?.toLocaleString?.()} samples` : 'Prediction uses only the user uploaded LAS from Log Visualization. Demo data is not used here.'} actions={<SharedLasActions isLight={isLight} busy={busy} setBusy={setBusy} onSession={replaceSession} />} />
+      <ActionHeader accent={accent} isLight={isLight} label="AI Parameter Prediction" title={hasUserSession ? session?.well_name : 'Upload User LAS First'} subtitle={hasUserSession ? `${session.file_name} - ${session.rows?.toLocaleString?.()} samples` : 'Prediction uses only the user uploaded LAS from Log Visualization. Demo data is not used here.'} actions={<SharedLasActions busy={busy} setBusy={setBusy} onSession={replaceSession} />} />
       {result ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 14 }}>
         <Metric label="Avg AI PHIE" value={cards.avg_phi_p50 ?? '--'} />
         <Metric label="Avg AI SW" value={cards.avg_sw_p50 ?? '--'} />
@@ -1395,7 +1381,6 @@ function PetrophysicsUncertaintyPanel({ accent, isLight }: { accent: string; isL
   })
   const border = isLight ? '#E2E8F0' : '#1E293B'
   const muted = isLight ? '#64748B' : '#94A3B8'
-  const text = isLight ? '#0F172A' : '#F8FAFC'
   const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
   const hasUserSession = isUserUploadedPetroSession(session)
   const curves: string[] = session?.curve_names || []
@@ -1417,16 +1402,6 @@ function PetrophysicsUncertaintyPanel({ accent, isLight }: { accent: string; isL
       sw_curve: prev.sw_curve || groups.saturation[0] || groups.resistivity[0] || curves[0] || '',
     }))
   }, [session?.session_id])
-  const loadPredictionLas = () => {
-    const prediction = getProjectModuleState('prediction')
-    const nextSession = prediction.session || readPetroSession()
-    if (!nextSession?.session_id || !isUserUploadedPetroSession(nextSession)) {
-      toast.error('Run AI Parameter Prediction or load a real LAS from Log Visualization first')
-      return
-    }
-    setSession(nextSession)
-    toast.success(`Loaded LAS for uncertainty: ${nextSession.file_name}`)
-  }
   const run = async (target: 'porosity' | 'saturation') => {
     if (!hasUserSession) return toast.error('Upload a real LAS file in Log Visualization first')
     setBusy(target)
@@ -1787,36 +1762,6 @@ function predictionStatsForTab(result: any, tab: string) {
   return [stat('PHIE', 'PHIE'), stat('SW', 'SW'), stat('PERM', 'PERMEABILITY_MD')]
 }
 
-function predictionFigureForTab(result: any, tab: string, isLight: boolean): any {
-  const records = result?.all_records || []
-  if (!records.length) return null
-  const depth = records.map((row: any) => row.DEPTH)
-  const paper = 'rgba(0,0,0,0)'
-  const plot = isLight ? '#FFFFFF' : '#06111F'
-  const grid = isLight ? '#E2E8F0' : '#1E293B'
-  const font = isLight ? '#0F172A' : '#BBD7FF'
-  const baseLayout = {
-    paper_bgcolor: paper,
-    plot_bgcolor: plot,
-    height: 520,
-    margin: { l: 70, r: 30, t: 35, b: 55 },
-    yaxis: { title: 'Depth (ft)', autorange: 'reversed', gridcolor: grid, color: font },
-    xaxis: { gridcolor: grid, color: font },
-    legend: { orientation: 'h', x: 0, y: 1.1 },
-    hovermode: 'closest',
-  }
-  const line = (key: string, name: string, color: string, dash = 'solid') => ({ x: records.map((row: any) => row[key]), y: depth, type: 'scatter', mode: 'lines', name, line: { color, width: 3, dash }, hovertemplate: `Depth: %{y:.2f}<br>${name}: %{x}<extra></extra>` })
-  if (tab === 'Vsh') return { data: [line('VSH', 'VSH', '#22C55E')], layout: { ...baseLayout, xaxis: { ...baseLayout.xaxis, title: 'VSH' } } }
-  if (tab === 'Porosity') return { data: [line('PHI_P10', 'P10', '#F97316', 'dot'), line('PHI_P50', 'P50', '#2563EB'), line('PHI_P90', 'P90', '#16A34A', 'dash')], layout: { ...baseLayout, xaxis: { ...baseLayout.xaxis, title: 'Porosity' } } }
-  if (tab === 'Saturation') return { data: [line('SW_P10', 'P10', '#F97316', 'dot'), line('SW_P50', 'P50', '#2563EB'), line('SW_P90', 'P90', '#16A34A', 'dash')], layout: { ...baseLayout, xaxis: { ...baseLayout.xaxis, title: 'Water Saturation' } } }
-  if (tab === 'Permeability') return { data: [line('PERM_P10', 'P10', '#F97316', 'dot'), line('PERM_P50', 'P50', '#2563EB'), line('PERM_P90', 'P90', '#16A34A', 'dash')], layout: { ...baseLayout, xaxis: { ...baseLayout.xaxis, title: 'Permeability (mD)', type: 'log' } } }
-  if (tab === 'Lithology') {
-    const labels = Array.from(new Set(records.map((row: any) => row.LITHOLOGY || 'Unknown')))
-    return { data: [{ x: records.map((row: any) => labels.indexOf(row.LITHOLOGY || 'Unknown')), y: depth, text: records.map((row: any) => row.LITHOLOGY), type: 'scattergl', mode: 'markers', name: 'Lithology', marker: { color: records.map((row: any) => labels.indexOf(row.LITHOLOGY || 'Unknown')), colorscale: 'Turbo', size: 7 }, hovertemplate: 'Depth: %{y:.2f}<br>%{text}<extra></extra>' }], layout: { ...baseLayout, xaxis: { ...baseLayout.xaxis, title: 'Lithology', tickmode: 'array', tickvals: labels.map((_, i) => i), ticktext: labels } } }
-  }
-  return { data: [line('PHI_P50', 'PHI P50', '#2563EB'), line('SW_P50', 'SW P50', '#D97706')], layout: { ...baseLayout, xaxis: { ...baseLayout.xaxis, title: 'Export Curves' } } }
-}
-
 function filterDepthRecords(records: any[], depthFrom: any, depthTo: any) {
   const from = depthFrom === '' || depthFrom == null ? null : Number(depthFrom)
   const to = depthTo === '' || depthTo == null ? null : Number(depthTo)
@@ -1987,7 +1932,7 @@ function AutoSplicerPanel({ accent, isLight }: { accent: string; isLight: boolea
   )
 }
 
-function LasUploadCard({ accent, isLight, busy, session, onDemo, onUpload, title }: { accent: string; isLight: boolean; busy: boolean; session: any; onDemo: () => void; onUpload: (file: File) => void; title: string }) {
+function LasUploadCard({ accent, isLight, session, onUpload, title }: { accent: string; isLight: boolean; session: any; onUpload: (file: File) => void; title: string }) {
   const border = isLight ? '#E2E8F0' : '#1E293B'
   const text = isLight ? '#0F172A' : '#F8FAFC'
   const muted = isLight ? '#64748B' : '#94A3B8'
@@ -2183,19 +2128,6 @@ function ProductionIntelligencePanel({ accent, isLight }: { accent: string; isLi
   useEffect(() => {
     persistProjectModuleState('production', { result, selectedModule })
   }, [result, selectedModule])
-  const runSample = async () => {
-    setBusy(true)
-    try {
-      const response = await productionApi.sample()
-      setResult(response.data)
-      await saveProjectResultCopy('Production', 'production_sample_analysis', response.data)
-      toast.success('Production sample analyzed')
-    } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Production analysis failed')
-    } finally {
-      setBusy(false)
-    }
-  }
   const uploadAndAnalyze = async (file?: File) => {
     if (!file) return
     setBusy(true)
@@ -2357,7 +2289,6 @@ function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLig
   })
   const [plotData, setPlotData] = useState<any>(() => saved.plotData || null)
   const [loading, setLoading] = useState(false)
-  const [uploading, setUploading] = useState(false)
 
   const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
   const border = isLight ? '#E2E8F0' : '#1E293B'
@@ -2382,21 +2313,7 @@ function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLig
     }))
   }
 
-  const loadDemo = async () => {
-    setUploading(true)
-    try {
-      const response = await petrophysicsApi.loadCrossplotDemo()
-      hydrateSession(response.data)
-      toast.success('Petrophysics demo LAS loaded')
-    } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Failed to load demo LAS')
-    } finally {
-      setUploading(false)
-    }
-  }
-
   const uploadLas = async (file: File) => {
-    setUploading(true)
     try {
       await uploadFileToActiveProject(file)
       const response = await petrophysicsApi.uploadCrossplotLas(file)
@@ -2404,8 +2321,6 @@ function PetrophysicsCrossplotPanel({ accent, isLight }: { accent: string; isLig
       toast.success(`LAS "${file.name}" loaded`)
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'LAS upload failed')
-    } finally {
-      setUploading(false)
     }
   }
 
@@ -2626,7 +2541,6 @@ function PetrophysicsHistogramPanel({ accent, isLight }: { accent: string; isLig
     showPercentiles: true,
   })
   const [result, setResult] = useState<any>(() => saved.result || null)
-  const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
@@ -2648,21 +2562,7 @@ function PetrophysicsHistogramPanel({ accent, isLight }: { accent: string; isLig
     }))
   }
 
-  const loadDemo = async () => {
-    setUploading(true)
-    try {
-      const response = await petrophysicsApi.loadHistogramDemo()
-      hydrateMetadata(response.data)
-      toast.success('Histogram demo LAS loaded')
-    } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Failed to load histogram demo')
-    } finally {
-      setUploading(false)
-    }
-  }
-
   const uploadLas = async (file: File) => {
-    setUploading(true)
     try {
       await uploadFileToActiveProject(file)
       const response = await petrophysicsApi.uploadHistogramLas(file)
@@ -2670,8 +2570,6 @@ function PetrophysicsHistogramPanel({ accent, isLight }: { accent: string; isLig
       toast.success(`LAS "${file.name}" loaded`)
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'LAS upload failed')
-    } finally {
-      setUploading(false)
     }
   }
 
@@ -2882,7 +2780,6 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
   const [selectedCurves, setSelectedCurves] = useState<string[]>(() => saved.selectedCurves || ['GR', 'VSH', 'PHIE', 'PERM_MD'])
   const [result, setResult] = useState<any>(() => saved.result || null)
   const [loading, setLoading] = useState(false)
-  const [uploading, setUploading] = useState(false)
 
   const panelBg = isLight ? '#FFFFFF' : 'linear-gradient(180deg,rgba(15,23,42,.9),rgba(7,17,31,.96))'
   const border = isLight ? '#E2E8F0' : '#1E293B'
@@ -2905,21 +2802,7 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
     })
   }
 
-  const loadSample = async () => {
-    setUploading(true)
-    try {
-      const response = await ccusApi.loadSample()
-      hydrateSession(response.data)
-      toast.success('CCUS demo LAS loaded')
-    } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Failed to load CCUS sample')
-    } finally {
-      setUploading(false)
-    }
-  }
-
   const uploadLas = async (file: File) => {
-    setUploading(true)
     try {
       await uploadFileToActiveProject(file)
       const response = await ccusApi.uploadLas(file)
@@ -2927,8 +2810,6 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
       toast.success(`LAS "${file.name}" loaded`)
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'LAS upload failed')
-    } finally {
-      setUploading(false)
     }
   }
 
@@ -3220,7 +3101,7 @@ function CcusScreeningPanel({ accent, isLight }: { accent: string; isLight: bool
   )
 }
 
-function SeismicEnhancerPanel({ accent, isLight }: { accent: string; isLight: boolean }) {
+function SeismicEnhancerPanel({ isLight }: { isLight: boolean }) {
   const saved = getProjectModuleState('seismicEnhancer')
   const [result, setResult] = useState<any>(() => saved.result || null)
   const [loading, setLoading] = useState(false)

@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { createBrowserRouter, Navigate, RouterProvider, useLocation } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -16,8 +17,6 @@ import FaciesClassificationPage from './pages/FaciesClassificationPage'
 import FormationTopsPage from './pages/FormationTopsPage'
 import GeothermalPage from './pages/GeothermalPage'
 import LockedModulePage from './pages/LockedModulePage'
-import DrakeSlmGptPage from './pages/DrakeSlmGptPage'
-import DrakeOcrPage from './pages/DrakeOcrPage'
 import { useStore } from './store'
 import { canAccessPath } from './utils/accessControl'
 
@@ -47,6 +46,15 @@ function AccessRoute({ children }: { children: React.ReactNode }) {
   if (user.role === 'admin') return <Navigate to="/admin" replace />
   if (!canAccessPath(user.role, user.accessModules, location.pathname)) return <LockedModulePage />
   return <>{children}</>
+}
+
+function ExternalRedirect({ url }: { url: string }) {
+  useEffect(() => {
+    sessionStorage.setItem('drake_allow_external_navigation', 'true')
+    window.location.replace(url)
+  }, [url])
+
+  return null
 }
 
 const userRoutes = [
@@ -86,7 +94,7 @@ const userRoutes = [
       { path: 'petrophysics/crossplot', element: <AccessRoute><UIOnlyModulePage title="Crossplot" kind="logs" accent="#A78BFA" /></AccessRoute> },
       { path: 'petrophysics/histogram', element: <AccessRoute><UIOnlyModulePage title="Histogram" kind="logs" accent="#F59E0B" /></AccessRoute> },
 
-      { path: 'seismic/frequency-enhancer', element: <AccessRoute><UIOnlyModulePage title="Seismic Frequency Enhancer" kind="seismic" accent="#8B5CF6" /></AccessRoute> },
+      { path: 'seismic/frequency-enhancer', element: <AccessRoute><ExternalRedirect url="https://seismic.thedrake.ai/" /></AccessRoute> },
 
       { path: 'production/intelligence', element: <AccessRoute><UIOnlyModulePage title="Production Intelligence" kind="production" accent="#10B981" /></AccessRoute> },
       { path: 'production/optimization', element: <Navigate to="/production/intelligence" replace /> },
@@ -95,8 +103,9 @@ const userRoutes = [
       { path: 'ccus/ai-preliminary-screening', element: <AccessRoute><UIOnlyModulePage title="AI Preliminary Screening Using Well Logs" kind="ccus" accent="#10B981" /></AccessRoute> },
       { path: 'geothermal/log-based-screening', element: <AccessRoute><GeothermalPage /></AccessRoute> },
 
-      { path: 'digitizer/drake-slm-gpt', element: <AccessRoute><DrakeSlmGptPage /></AccessRoute> },
-      { path: 'digitizer/drake-ocr', element: <AccessRoute><DrakeOcrPage /></AccessRoute> },
+      { path: 'digitizer/well-log-digitizer', element: <AccessRoute><ExternalRedirect url="https://logdigitizer.thedrake.ai/dashboard" /></AccessRoute> },
+      { path: 'digitizer/drake-slm-gpt', element: <AccessRoute><ExternalRedirect url="https://drakeslm.thedrake.ai" /></AccessRoute> },
+      { path: 'digitizer/drake-ocr', element: <AccessRoute><ExternalRedirect url="https://drakeocr.thedrake.ai" /></AccessRoute> },
 
       { path: '*', element: <Navigate to="/" replace /> },
     ],

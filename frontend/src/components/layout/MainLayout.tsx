@@ -3,7 +3,7 @@ import { useStore } from '../../store'
 import TopBar from './TopBar'
 import Ribbon from './Ribbon'
 import Workspace from './Workspace'
-import FloatingChatbot from './FloatingChatbot'
+import FeedbackWidget from './FeedbackWidget'
 
 export default function MainLayout() {
   const { setProjects, setActiveProject, setWells, setActiveWell, setCurves, setFiles, setAIJobs, theme } = useStore()
@@ -39,7 +39,7 @@ export default function MainLayout() {
           <Workspace />
         </div>
       </div>
-      <FloatingChatbot />
+      <FeedbackWidget />
     </div>
   )
 }

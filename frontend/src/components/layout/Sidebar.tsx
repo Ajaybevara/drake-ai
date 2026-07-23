@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useStore } from '../../store'
 import { accessDeniedMessage, canAccessPath } from '../../utils/accessControl'
+import { openExternalModule } from '../../utils/externalDigitizer'
 
 const NAV_ITEMS = [
   { label: 'Dashboard', path: '/dashboard', icon: 'fas fa-gauge-high' },
@@ -35,6 +36,7 @@ const GEOTHERMAL_ITEMS = [
 ]
 
 const DRAKE_AI_ITEMS = [
+  { label: 'Well Log Digitizer', path: '/digitizer/well-log-digitizer', icon: 'fas fa-chart-column', sub: true },
   { label: 'Drake SLM/GPT', path: '/digitizer/drake-slm-gpt', icon: 'fas fa-robot', sub: true },
   { label: 'Drake OCR', path: '/digitizer/drake-ocr', icon: 'fas fa-file-lines', sub: true },
 ]
@@ -70,6 +72,7 @@ export default function Sidebar() {
     const active = location.pathname === resolvedPath || location.pathname.startsWith(resolvedPath + '/')
     const locked = !canAccessPath(user?.role, user?.accessModules, resolvedPath)
     const openItem = () => {
+      if (!locked && openExternalModule(resolvedPath)) return
       navigate(resolvedPath)
     }
     return (
@@ -93,7 +96,7 @@ export default function Sidebar() {
     )
   }
 
-  const resolvePath = (label: string, path: string) => {
+  const resolvePath = (_label: string, path: string) => {
     return path
   }
 

@@ -10,6 +10,7 @@ export type ModuleId =
   | 'production-intelligence'
   | 'ccus-screening'
   | 'geothermal-screening'
+  | 'well-log-digitizer'
   | 'drake-slm-gpt'
   | 'drake-ocr'
 
@@ -34,6 +35,7 @@ export const ACCESS_MODULES: AccessModule[] = [
   { id: 'production-intelligence', label: 'Production Intelligence', group: 'Production', path: '/production/intelligence' },
   { id: 'ccus-screening', label: 'AI Preliminary Screening Using Well Logs', group: 'CCUS', path: '/ccus/ai-preliminary-screening' },
   { id: 'geothermal-screening', label: 'Geothermal Log-Based Screening', group: 'Geothermal', path: '/geothermal/log-based-screening' },
+  { id: 'well-log-digitizer', label: 'Well Log Digitizer', group: 'Drake AI Digitizer', path: '/digitizer/well-log-digitizer' },
   { id: 'drake-slm-gpt', label: 'Drake SLM/GPT', group: 'Drake AI Digitizer', path: '/digitizer/drake-slm-gpt' },
   { id: 'drake-ocr', label: 'Drake OCR', group: 'Drake AI Digitizer', path: '/digitizer/drake-ocr' },
 ]
@@ -54,6 +56,7 @@ export function moduleForPath(pathname: string): ModuleId | null {
   if (pathname.startsWith('/production')) return 'production-intelligence'
   if (pathname.startsWith('/ccus/ai-preliminary-screening')) return 'ccus-screening'
   if (pathname.startsWith('/geothermal/log-based-screening')) return 'geothermal-screening'
+  if (pathname.startsWith('/digitizer/well-log-digitizer')) return 'well-log-digitizer'
   if (pathname.startsWith('/digitizer/drake-slm-gpt')) return 'drake-slm-gpt'
   if (pathname.startsWith('/digitizer/drake-ocr')) return 'drake-ocr'
   return null

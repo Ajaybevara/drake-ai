@@ -107,7 +107,6 @@ export interface DrakeProjectDocument {
 }
 
 const readLocalProjects = (): LocalProject[] => []
-const writeLocalProjects = (_projects: LocalProject[]) => {}
 
 function readStorageJson<T>(key: string, fallback: T): T {
   const raw = localStorage.getItem(key)
@@ -200,6 +199,7 @@ export const useStore = create<AppState>((set) => ({
   setAuth: (user, token) => {
     localStorage.setItem('drake_token', token)
     localStorage.setItem('drake_user', JSON.stringify(user))
+    sessionStorage.removeItem('drake_exit_feedback_submitted')
     set({ user, token, enterpriseProject: getCurrentLocalProject() })
   },
   logout: () => {

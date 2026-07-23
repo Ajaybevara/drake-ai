@@ -55,13 +55,6 @@ export default function Ribbon() {
     )
   }
 
-  const RibbonBtn = ({ icon, label, onClick }: any) => (
-    <button onClick={onClick} title={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 12px', borderRadius: 5, border: '1px solid transparent', cursor: 'pointer', fontSize: 14, minWidth: 54, fontFamily: 'DM Sans,sans-serif', background: 'transparent', color: isLight ? '#334155' : '#CBD5E1' }}>
-      <i className={icon} style={{ fontSize: 14, color: isLight ? '#475569' : '#94A3B8' }}></i>
-      {label}
-    </button>
-  )
-
   return (
     <div style={{ height: 68, background: isLight ? '#FFFFFF' : '#0B111A', borderBottom: `1px solid ${isLight ? '#CBD5E1' : '#1F2A3A'}`, display: 'flex', alignItems: 'center', flexShrink: 0, overflowX: 'auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 10 }}>

@@ -76,6 +76,7 @@ class UserSession(Base):
     id = Column(Integer, primary_key=True, index=True)
     session_id = Column(String(80), unique=True, nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    device_id = Column(String(128), index=True)
     is_active = Column(Boolean, default=True, nullable=False, index=True)
     ip_address = Column(String(80))
     user_agent = Column(String(500))

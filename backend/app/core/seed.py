@@ -7,9 +7,16 @@ from app.core.security import hash_password
 from app.models import User, Project, Well, Curve, FormationTop, UserRole
 import random
 
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "Drake6105")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "Drake123@")
-ADMIN_FULL_NAME = os.getenv("ADMIN_FULL_NAME", "Admin")
+TEAM_ADMIN_PASSWORD = os.getenv("TEAM_ADMIN_PASSWORD", "Drakeadmin987@")
+TEAM_ADMIN_USERS = [
+    ("Sai@thedrake.ai", "Sai"),
+    ("Kumar@thedrake.ai", "Kumar"),
+    ("Malleswar@thedrake.ai", "Malleswar"),
+    ("Sravan@thedrake.ai", "Sravan"),
+    ("Chary@thedrake.ai", "Chary"),
+    ("Archana@thedrake.ai", "Archana"),
+    ("rajasekhar@thedrake.ai", "Rajasekhar"),
+]
 
 ALL_ACCESS_MODULES = [
     "log-visualization",
@@ -23,6 +30,7 @@ ALL_ACCESS_MODULES = [
     "production-intelligence",
     "ccus-screening",
     "geothermal-screening",
+    "well-log-digitizer",
     "drake-slm-gpt",
     "drake-ocr",
 ]
@@ -36,31 +44,30 @@ def ensure_access_schema():
     if "access_modules" not in columns:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE users ADD COLUMN access_modules JSON DEFAULT '[]'"))
+    if "user_sessions" in inspector.get_table_names():
+        session_columns = {column["name"] for column in inspector.get_columns("user_sessions")}
+        if "device_id" not in session_columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE user_sessions ADD COLUMN device_id VARCHAR(128)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_sessions_device_id ON user_sessions (device_id)"))
 
 
-def ensure_admin_user(db):
-    admin = db.query(User).filter(User.email == ADMIN_USERNAME).first()
-    if not admin:
-        admin = User(
-            email=ADMIN_USERNAME,
-            full_name=ADMIN_FULL_NAME,
-            hashed_password=hash_password(ADMIN_PASSWORD),
-            role=UserRole.admin,
-            avatar_initials="A",
-            is_active=True,
-            access_modules=ALL_ACCESS_MODULES,
-        )
-        db.add(admin)
-    else:
-        admin.full_name = ADMIN_FULL_NAME
-        admin.hashed_password = hash_password(ADMIN_PASSWORD)
+def ensure_team_admin_users(db):
+    admins = []
+    for username, full_name in TEAM_ADMIN_USERS:
+        admin = db.query(User).filter(User.email == username).first()
+        if not admin:
+            admin = User(email=username)
+            db.add(admin)
+        admin.full_name = full_name
+        admin.hashed_password = hash_password(TEAM_ADMIN_PASSWORD)
         admin.role = UserRole.admin
-        admin.avatar_initials = "A"
+        admin.avatar_initials = full_name[:2].upper()
         admin.is_active = True
         admin.access_modules = ALL_ACCESS_MODULES
+        admins.append(admin)
     db.commit()
-    db.refresh(admin)
-    return admin
+    return admins
 
 
 def seed_db():
@@ -68,8 +75,8 @@ def seed_db():
     ensure_access_schema()
     db = SessionLocal()
     try:
-        ensure_admin_user(db)
-        print(f"[OK] Admin user ready: {ADMIN_USERNAME}")
+        team_admins = ensure_team_admin_users(db)
+        print(f"[OK] Team admin users ready: {len(team_admins)}")
 
         # ── Admin user ──────────────────────────────────────────────────────
         if not db.query(User).filter(User.email == "admin@drakeai.com").first():

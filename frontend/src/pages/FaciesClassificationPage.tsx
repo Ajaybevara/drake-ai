@@ -5,8 +5,6 @@ import { useStore } from '../store'
 import ProjectFileSelector from '../components/project/ProjectFileSelector'
 import { getCurrentLocalProjectFromFolder, getSavedModuleViewState, saveExportToLocalProject, saveModuleViewStateToLocalProject, saveResultToLocalProject, uploadFilesToLocalProject } from '../utils/localProjectStorage'
 
-const PETRO_SESSION_KEY = 'drake_active_petro_las_session'
-
 const faciesState: {
   meta: any
   depthCol: string
@@ -149,15 +147,6 @@ function downloadCsv(csv: string, name: string) {
   }
 }
 
-function readPetroSession() {
-  try {
-    const raw = localStorage.getItem(PETRO_SESSION_KEY)
-    return raw ? JSON.parse(raw) : null
-  } catch {
-    return null
-  }
-}
-
 async function uploadFileToActiveProject(file: File) {
   try {
     const activeProject = useStore.getState().enterpriseProject
@@ -240,23 +229,6 @@ function FaciesClassificationWorkspace() {
       toast.success('Well log loaded')
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Unable to load file')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function loadActiveLas() {
-    const active = readPetroSession()
-    if (!active?.session_id) return toast.error('Upload LAS in Log Visualization first')
-    setBusy(true)
-    try {
-      const { data } = await petrophysicsApi.loadToolboxFromPetroSession(active.session_id)
-      setMeta(data)
-      setDepthCol(data.depth_guess)
-      setFeatures((data.numeric_columns || []).filter((c: string) => c !== data.depth_guess).slice(0, 5))
-      toast.success(`Loaded active LAS: ${data.file_name}`)
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Unable to load active LAS')
     } finally {
       setBusy(false)
     }
@@ -395,12 +367,10 @@ function FaciesClassificationWorkspace() {
   )
 }
 
-const card: React.CSSProperties = { padding: 18, background: 'linear-gradient(180deg,rgba(15,23,42,.92),rgba(7,17,31,.96))', borderRadius: 14, border: '1px solid #1E293B', color: '#CBD5E1' }
 const eyebrow: React.CSSProperties = { color: '#EF4444', letterSpacing: 3, textTransform: 'uppercase', fontSize: 11, fontWeight: 900 }
 const pageTitle: React.CSSProperties = { margin: '8px 0 8px', color: '#F8FAFC', fontSize: 38, fontWeight: 500 }
 const pageSubtitle: React.CSSProperties = { margin: 0, color: '#9FC5F8', fontSize: 18, lineHeight: 1.45 }
 const cardTitle: React.CSSProperties = { margin: '6px 0 14px', color: '#F8FAFC', fontSize: 24, fontWeight: 700 }
-const accentTile: React.CSSProperties = { width: 72, height: 72, borderRadius: 18, border: '1px solid rgba(239,68,68,.45)', background: 'linear-gradient(135deg,rgba(239,68,68,.18),rgba(2,8,23,.45))', flex: '0 0 auto' }
 const label: React.CSSProperties = { display: 'block', margin: '14px 0 6px', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: '#94A3B8' }
 const control: React.CSSProperties = { width: '100%', padding: '10px 12px', border: '1px solid #26364D', borderRadius: 8, background: '#08111F', color: '#F8FAFC' }
 const button: React.CSSProperties = { width: '100%', marginTop: 18, padding: '12px 14px', border: 0, borderRadius: 8, background: '#10B981', color: '#052E16', fontWeight: 900, cursor: 'pointer' }

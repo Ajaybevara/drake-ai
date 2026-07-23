@@ -1,15 +1,34 @@
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import { useLocation } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import { ACCESS_MODULES, accessDeniedMessage, moduleForPath } from '../utils/accessControl'
 import { useStore } from '../store'
+import { supportApi } from '../services/api'
 
 export default function LockedModulePage() {
   const location = useLocation()
-  const navigate = useNavigate()
   const theme = useStore(s => s.theme)
+  const [sending, setSending] = useState(false)
   const isLight = theme === 'light'
   const moduleId = moduleForPath(location.pathname)
   const moduleLabel = ACCESS_MODULES.find(module => module.id === moduleId)?.label || 'This module'
   const palette = lockedPalette(isLight)
+  const contactAdmin = async () => {
+    if (!moduleId) return
+    setSending(true)
+    try {
+      const { data } = await supportApi.requestAccess({
+        module_id: moduleId,
+        module_label: moduleLabel,
+        page_path: location.pathname,
+      })
+      toast.success(data.message)
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'Unable to contact admin')
+    } finally {
+      setSending(false)
+    }
+  }
 
   return (
     <div style={palette.page}>
@@ -18,7 +37,9 @@ export default function LockedModulePage() {
         <div style={eyebrow}>Module Restricted</div>
         <h1 style={{ ...title, color: palette.text }}>{moduleLabel}</h1>
         <p style={palette.muted}>{accessDeniedMessage(moduleLabel)}</p>
-        <button type="button" onClick={() => navigate('/dashboard')} style={primaryButton}>Back to Dashboard</button>
+        <button type="button" onClick={contactAdmin} disabled={sending} style={{ ...primaryButton, opacity: sending ? .7 : 1, cursor: sending ? 'wait' : 'pointer' }}>
+          {sending ? 'Sending Request...' : 'Contact Admin'}
+        </button>
       </section>
     </div>
   )

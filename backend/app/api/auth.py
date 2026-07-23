@@ -24,6 +24,7 @@ ACCESS_MODULES = {
     "production-intelligence",
     "ccus-screening",
     "geothermal-screening",
+    "well-log-digitizer",
     "drake-slm-gpt",
     "drake-ocr",
 }
@@ -107,6 +108,13 @@ def request_identity(request: Request) -> tuple[str | None, str]:
     ip_address = forwarded_for.split(",")[0].strip() if forwarded_for else (request.client.host if request.client else None)
     return ip_address, request.headers.get("user-agent", "")[:500]
 
+def request_device_id(request: Request) -> str:
+    device_id = request.headers.get("x-device-id", "").strip()
+    if device_id:
+        return device_id[:128]
+    ip_address, user_agent = request_identity(request)
+    return f"legacy:{ip_address or 'unknown'}:{user_agent}"[:128]
+
 
 def deactivate_expired_sessions(db: Session, user_id: int) -> None:
     now = utc_now()
@@ -130,6 +138,7 @@ def create_user_session(db: Session, user: User, request: Request) -> UserSessio
     session = UserSession(
         session_id=uuid4().hex,
         user_id=user.id,
+        device_id=request_device_id(request),
         ip_address=ip_address,
         user_agent=user_agent,
         created_at=now,
@@ -154,13 +163,29 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     active_session = db.query(UserSession).filter(
         UserSession.user_id == user.id,
         UserSession.is_active == True,
-    ).order_by(UserSession.created_at.desc()).first()
-    if user.role != UserRole.admin and active_session:
+    ).order_by(UserSession.created_at.desc()).all()
+    device_id = request_device_id(request)
+    ip_address, user_agent = request_identity(request)
+    for session in active_session:
+        if not session.device_id and session.ip_address == ip_address and session.user_agent == user_agent:
+            session.device_id = device_id
+    db.commit()
+    other_device_session = next(
+        (session for session in active_session if session.device_id != device_id),
+        None,
+    )
+    if user.role != UserRole.admin and other_device_session:
         log_user_activity(db, user, "login_blocked_active_session", request)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="This user is already logged in on another device. Please logout from the previous device and then login on this device.",
         )
+    if user.role != UserRole.admin:
+        now = utc_now()
+        for session in active_session:
+            session.is_active = False
+            session.logged_out_at = now
+        db.commit()
     session = create_user_session(db, user, request)
     log_user_activity(db, user, "login", request)
     token = create_access_token({"sub": str(user.id), "role": user.role, "sid": session.session_id})

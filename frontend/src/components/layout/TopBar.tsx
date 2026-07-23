@@ -5,13 +5,14 @@ import toast from 'react-hot-toast'
 import { useStore } from '../../store'
 import { ACCESS_MODULES, accessDeniedMessage, canAccessPath } from '../../utils/accessControl'
 import { authApi } from '../../services/api'
+import { openExternalModule } from '../../utils/externalDigitizer'
 
 const PLATFORM_ITEMS = [
   { label: 'Dashboard', path: '/dashboard', icon: 'fas fa-gauge-high' },
   { label: 'Projects', path: '/projects', icon: 'fas fa-folder' },
 ]
 
-const GROUP_ORDER = ['Petrophysics', 'Seismic', 'Production', 'CCUS', 'Geothermal', 'Drake AI Digitizer']
+const GROUP_ORDER = ['Petrophysics', 'Seismic', 'CCUS', 'Geothermal', 'Drake AI Digitizer', 'Production']
 
 function useWindowWidth() {
   const [width, setWidth] = useState(() => window.innerWidth)
@@ -100,6 +101,11 @@ export default function TopBar() {
   }, [])
 
   const handleLogout = async () => {
+    setProfileOpen(false)
+    await new Promise<void>(resolve => {
+      window.addEventListener('drake:logout-feedback-complete', () => resolve(), { once: true })
+      window.dispatchEvent(new Event('drake:require-logout-feedback'))
+    })
     try {
       await authApi.logout()
     } catch {
@@ -133,10 +139,12 @@ export default function TopBar() {
 
   const openItem = (item: { label: string; path: string; locked: boolean }) => {
     if (item.locked) {
-      toast.error(accessDeniedMessage(item.label))
+      setOpenMenu(null)
+      navigate(item.path)
       return
     }
     setOpenMenu(null)
+    if (openExternalModule(item.path)) return
     navigate(item.path)
   }
 
@@ -184,7 +192,7 @@ export default function TopBar() {
                   transform: hovered ? 'translateY(-1px)' : 'translateY(0)',
                 }}
               >
-                <span>{tight ? 'Modules' : compact || crowded ? shortLabel(group.label) : group.label}</span>
+                <span>{tight ? 'Modules' : group.label}</span>
                 {availableCount === 0 && <i className="fas fa-lock" style={{ fontSize: 11, color: '#64748B' }} />}
                 <i className={`fas fa-chevron-${open ? 'up' : 'down'}`} style={{ fontSize: 10, color: active ? '#FCA5A5' : palette.muted }} />
               </button>
@@ -310,15 +318,12 @@ function iconForPath(path: string) {
   if (path.includes('production')) return 'fas fa-chart-line'
   if (path.includes('ccus')) return 'fas fa-leaf'
   if (path.includes('geothermal')) return 'fas fa-temperature-high'
+  if (path.includes('well-log-digitizer')) return 'fas fa-chart-column'
   if (path.includes('slm-gpt')) return 'fas fa-robot'
   if (path.includes('ocr')) return 'fas fa-file-lines'
   return 'fas fa-chart-line'
 }
 
-function shortLabel(label: string) {
-  if (label === 'Drake AI Digitizer') return 'Digitizer'
-  return label
-}
 
 const topbar: CSSProperties = { display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0, zIndex: 200, overflow: 'visible', boxShadow: '0 1px 0 rgba(255,255,255,.03)' }
 const logoButton: CSSProperties = { border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto' }
